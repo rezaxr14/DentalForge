@@ -1,0 +1,217 @@
+{
+  "normalize_diagnosis": {
+    "Impacted": "Impacted",
+    "Impacted Tooth": "Impacted",
+    "impacted tooth": "Impacted",
+    "IMPACTED": "Impacted",
+    "Caries": "Caries",
+    "caries lesion": "Caries",
+    "carious lesion": "Caries",
+    "Deep Caries": "Deep Caries",
+    "deep carious": "Deep Caries",
+    "Periapical Lesion": "Periapical Lesion",
+    "periapical": "Periapical Lesion",
+    "abscess": "Periapical Lesion",
+    "Non-Odontogenic Lesion": "Periapical Lesion",
+    "Pericoronal Lesion": "Periapical Lesion",
+    "Inter-Radicular Lesion": "Periapical Lesion",
+    "unerupted": "Impacted",
+    "None": "Unknown",
+    "": ""
+  },
+  "closeness": [
+    {
+      "pred": {
+        "quadrant": 4,
+        "tooth_position": 8,
+        "diagnosis": "Impacted Tooth"
+      },
+      "out": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "pred": {
+        "quadrant": 4,
+        "tooth_position": 7,
+        "diagnosis": "Caries"
+      },
+      "out": [
+        0.375,
+        0.75,
+        0.0
+      ]
+    },
+    {
+      "pred": {
+        "quadrant": 3,
+        "tooth_position": 8,
+        "diagnosis": "Impacted"
+      },
+      "out": [
+        0.65,
+        0.3,
+        1.0
+      ]
+    },
+    {
+      "pred": {
+        "quadrant": 1,
+        "tooth_position": 1,
+        "diagnosis": "Caries"
+      },
+      "out": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "pred": {
+        "quadrant": 4,
+        "tooth_position": 8,
+        "diagnosis": "Deep Caries"
+      },
+      "out": [
+        0.5,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "pred": {
+        "quadrant": 2,
+        "tooth_position": 6,
+        "diagnosis": "Periapical Lesion"
+      },
+      "out": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "match_multi": {
+    "gt_count": 3,
+    "pred_count": 3,
+    "fdi_tp": 2,
+    "fdi_fp": 1,
+    "fdi_fn": 1,
+    "fdi_precision": 0.6666666666666666,
+    "fdi_recall": 0.6666666666666666,
+    "fdi_f1": 0.6666666666666666,
+    "exact_tp": 1,
+    "exact_fp": 2,
+    "exact_fn": 2,
+    "exact_precision": 0.3333333333333333,
+    "exact_recall": 0.3333333333333333,
+    "exact_f1": 0.3333333333333333,
+    "closeness_score": 0.8159013605442177,
+    "recall_closeness": 0.8416666666666667,
+    "precision_closeness": 0.7916666666666666,
+    "spatial_proximity": 0.7666666666666666,
+    "diagnostic_similarity": 0.9166666666666666,
+    "matched_pairs": [
+      {
+        "gt": {
+          "quadrant": 4,
+          "tooth_position": 8,
+          "diagnosis": "Impacted"
+        },
+        "pred": {
+          "quadrant": 4,
+          "tooth_position": 8,
+          "diagnosis": "Impacted Tooth",
+          "confidence": 0.95
+        },
+        "fdi_match": true,
+        "exact_match": true,
+        "closeness": 1.0,
+        "spatial": 1.0,
+        "diag_sim": 1.0
+      },
+      {
+        "gt": {
+          "quadrant": 4,
+          "tooth_position": 7,
+          "diagnosis": "Caries"
+        },
+        "pred": {
+          "quadrant": 4,
+          "tooth_position": 7,
+          "diagnosis": "Deep Caries",
+          "confidence": 0.85
+        },
+        "fdi_match": true,
+        "exact_match": false,
+        "closeness": 0.875,
+        "spatial": 1.0,
+        "diag_sim": 0.75
+      },
+      {
+        "gt": {
+          "quadrant": 3,
+          "tooth_position": 8,
+          "diagnosis": "Impacted"
+        },
+        "pred": {
+          "quadrant": 1,
+          "tooth_position": 1,
+          "diagnosis": "Caries",
+          "confidence": 0.5
+        },
+        "fdi_match": false,
+        "exact_match": false,
+        "closeness": 0.0,
+        "spatial": 0.0,
+        "diag_sim": 0.0
+      }
+    ]
+  },
+  "ece": {
+    "perfect": 0.10000001266598701,
+    "overconfident": 0.6499999761581421,
+    "empty": 0.0
+  },
+  "bootstrap_ci": [
+    0.6,
+    0.36,
+    0.8400000000000001
+  ],
+  "bootstrap_paired": {
+    "mean": 0.09999999999999998,
+    "lo": 0.09999999999999998,
+    "hi": 0.09999999999999998
+  },
+  "rewards": {
+    "with_tools": {
+      "total": 1.25,
+      "components": {
+        "accuracy": 0.75,
+        "format": 1.0,
+        "tool_validity": 1.0,
+        "efficiency": 1.0
+      }
+    },
+    "no_tools": {
+      "total": 1.1666666666666667,
+      "components": {
+        "accuracy": 0.6666666666666666,
+        "format": 1.0,
+        "tool_validity": 1.0,
+        "efficiency": 1.0
+      }
+    },
+    "empty": {
+      "total": 0.30000000000000004,
+      "components": {
+        "accuracy": 0.0,
+        "format": 0.0,
+        "tool_validity": 1.0,
+        "efficiency": 1.0
+      }
+    }
+  }
+}
