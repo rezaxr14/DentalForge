@@ -51,3 +51,56 @@ export function classIdxToFdi(classIdx: number): Fdi {
   }
   return { quadrant: Math.floor(classIdx / 8) + 1, position: (classIdx % 8) + 1 };
 }
+
+// --- Tool-facing helpers (M4 port of dental_agent/tools/fdi.py) ---
+
+export const QUADRANT_NAMES: Record<number, string> = {
+  1: "Maxillary Right (Upper Right)",
+  2: "Maxillary Left (Upper Left)",
+  3: "Mandibular Left (Lower Left)",
+  4: "Mandibular Right (Lower Right)",
+};
+
+export const TOOTH_NAMES: Record<number, string> = {
+  1: "Central Incisor",
+  2: "Lateral Incisor",
+  3: "Canine",
+  4: "First Premolar",
+  5: "Second Premolar",
+  6: "First Molar",
+  7: "Second Molar",
+  8: "Third Molar (Wisdom Tooth)",
+};
+
+/** Port of tool_fdi_label: two-digit string ("36") or null if invalid. */
+export function fdiLabel(quadrant: number, position: number): string | null {
+  if ([1, 2, 3, 4].includes(quadrant) && position >= 1 && position <= 8) {
+    return `${quadrant}${position}`;
+  }
+  return null;
+}
+
+/** Port of get_anatomical_name (accepts FDI int or quadrant+position args). */
+export function anatomicalName(quadrantOrFdi: number | string, position?: number): string {
+  let quadrant: number, pos: number;
+  if (position === undefined) {
+    const parts = fdiToParts(Number(quadrantOrFdi));
+    quadrant = parts.quadrant;
+    pos = parts.position;
+  } else {
+    quadrant = Number(quadrantOrFdi);
+    pos = position;
+  }
+  const qName = QUADRANT_NAMES[quadrant] ?? `Quadrant ${quadrant}`;
+  const tName = TOOTH_NAMES[pos] ?? `Tooth ${pos}`;
+  const label = fdiLabel(quadrant, pos) ?? "??";
+  return `${qName} ${tName} (FDI #${label})`;
+}
+
+/** Port of flip_quadrant: swap anatomical left/right under horizontal flip. */
+export function flipQuadrant(quadrant: number): number {
+  const mapping: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
+  const flipped = mapping[quadrant];
+  if (flipped === undefined) throw new RangeError(`Invalid quadrant: ${quadrant}`);
+  return flipped;
+}
