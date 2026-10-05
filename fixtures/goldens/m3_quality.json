@@ -1,0 +1,264 @@
+{
+  "n_files": 12,
+  "n_traces": 5454,
+  "overall_tools": {
+    "window_level": 3111,
+    "locate_tooth": 20442,
+    "zoom_crop": 26325,
+    "denoise": 2488,
+    "nudge_crop": 4172,
+    "contralateral_compare": 4289,
+    "enhance_contrast": 2249,
+    "fdi_label": 1948,
+    "final_answer": 74,
+    "localize_tooth": 2,
+    "localize": 1,
+    "localize tooth 13": 1
+  },
+  "overall_statuses": {
+    "tool_executed": 31089,
+    "final_answer": 2727,
+    "rejected_final_answer": 69,
+    "unparseable_retry": 313,
+    "invalid_tool_format": 177,
+    "tool_all_failed": 75,
+    "unparseable_recovery_attempt": 23,
+    "<none>": 2727
+  },
+  "overall_unknown_tools": {
+    "final_answer": 74,
+    "localize_tooth": 2,
+    "localize": 1,
+    "localize tooth 13": 1
+  },
+  "perturb_tiers": {
+    "small": 3978,
+    "big": 4597
+  },
+  "per_file": {
+    "train_cot_traces.jsonl": {
+      "n": 880,
+      "directive_leak": 880,
+      "statuses": {
+        "tool_executed": 10097,
+        "final_answer": 880,
+        "rejected_final_answer": 29,
+        "unparseable_retry": 90,
+        "invalid_tool_format": 67,
+        "tool_all_failed": 30,
+        "unparseable_recovery_attempt": 5
+      },
+      "tools": {
+        "window_level": 969,
+        "locate_tooth": 4779,
+        "zoom_crop": 9033,
+        "denoise": 878,
+        "nudge_crop": 1880,
+        "contralateral_compare": 1559,
+        "enhance_contrast": 793,
+        "fdi_label": 831,
+        "final_answer": 30
+      },
+      "unknown_tools": {
+        "final_answer": 30
+      },
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_dentex.jsonl": {
+      "n": 678,
+      "directive_leak": 678,
+      "statuses": {
+        "tool_executed": 7931,
+        "final_answer": 678,
+        "rejected_final_answer": 29,
+        "unparseable_retry": 61,
+        "invalid_tool_format": 55,
+        "tool_all_failed": 21,
+        "unparseable_recovery_attempt": 5
+      },
+      "tools": {
+        "window_level": 718,
+        "locate_tooth": 3894,
+        "zoom_crop": 7616,
+        "denoise": 681,
+        "nudge_crop": 1719,
+        "contralateral_compare": 1191,
+        "enhance_contrast": 644,
+        "fdi_label": 631,
+        "final_answer": 21
+      },
+      "unknown_tools": {
+        "final_answer": 21
+      },
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_dentex_no_tools.jsonl": {
+      "n": 678,
+      "directive_leak": 678,
+      "statuses": {
+        "<none>": 678
+      },
+      "tools": {},
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_healthy_dentex.jsonl": {
+      "n": 27,
+      "directive_leak": 27,
+      "statuses": {
+        "tool_executed": 334,
+        "final_answer": 27,
+        "invalid_tool_format": 1,
+        "unparseable_retry": 1
+      },
+      "tools": {
+        "locate_tooth": 383,
+        "enhance_contrast": 19,
+        "window_level": 30,
+        "zoom_crop": 294,
+        "contralateral_compare": 31,
+        "denoise": 23,
+        "nudge_crop": 18,
+        "fdi_label": 8
+      },
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_healthy_dentex_no_tools.jsonl": {
+      "n": 27,
+      "directive_leak": 27,
+      "statuses": {
+        "<none>": 27
+      },
+      "tools": {},
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_healthy_tufts.jsonl": {
+      "n": 660,
+      "directive_leak": 660,
+      "statuses": {
+        "tool_executed": 7632,
+        "final_answer": 660,
+        "unparseable_retry": 108,
+        "invalid_tool_format": 29,
+        "tool_all_failed": 2,
+        "unparseable_recovery_attempt": 13
+      },
+      "tools": {
+        "window_level": 794,
+        "locate_tooth": 9172,
+        "zoom_crop": 6046,
+        "enhance_contrast": 460,
+        "denoise": 438,
+        "contralateral_compare": 678,
+        "nudge_crop": 179,
+        "fdi_label": 48,
+        "localize_tooth": 2,
+        "final_answer": 1,
+        "localize": 1,
+        "localize tooth 13": 1
+      },
+      "unknown_tools": {
+        "localize_tooth": 2,
+        "final_answer": 1,
+        "localize": 1,
+        "localize tooth 13": 1
+      },
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_healthy_tufts_no_tools.jsonl": {
+      "n": 660,
+      "directive_leak": 660,
+      "statuses": {
+        "<none>": 660
+      },
+      "tools": {},
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_no_tools.jsonl": {
+      "n": 880,
+      "directive_leak": 880,
+      "statuses": {
+        "<none>": 880
+      },
+      "tools": {},
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_tufts.jsonl": {
+      "n": 202,
+      "directive_leak": 202,
+      "statuses": {
+        "tool_executed": 2166,
+        "final_answer": 202,
+        "tool_all_failed": 9,
+        "invalid_tool_format": 12,
+        "unparseable_retry": 29
+      },
+      "tools": {
+        "fdi_label": 200,
+        "locate_tooth": 885,
+        "window_level": 251,
+        "zoom_crop": 1417,
+        "enhance_contrast": 149,
+        "nudge_crop": 161,
+        "contralateral_compare": 368,
+        "denoise": 197,
+        "final_answer": 9
+      },
+      "unknown_tools": {
+        "final_answer": 9
+      },
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_tufts_all.jsonl": {
+      "n": 280,
+      "directive_leak": 280,
+      "statuses": {
+        "tool_executed": 2929,
+        "final_answer": 280,
+        "tool_all_failed": 13,
+        "unparseable_retry": 24,
+        "invalid_tool_format": 13,
+        "rejected_final_answer": 11
+      },
+      "tools": {
+        "window_level": 349,
+        "locate_tooth": 1329,
+        "zoom_crop": 1919,
+        "contralateral_compare": 462,
+        "denoise": 271,
+        "enhance_contrast": 184,
+        "nudge_crop": 215,
+        "fdi_label": 230,
+        "final_answer": 13
+      },
+      "unknown_tools": {
+        "final_answer": 13
+      },
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_tufts_all_no_tools.jsonl": {
+      "n": 280,
+      "directive_leak": 280,
+      "statuses": {
+        "<none>": 280
+      },
+      "tools": {},
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    },
+    "train_cot_traces_tufts_no_tools.jsonl": {
+      "n": 202,
+      "directive_leak": 202,
+      "statuses": {
+        "<none>": 202
+      },
+      "tools": {},
+      "unknown_tools": {},
+      "healthy_false_positives": 0
+    }
+  }
+}
