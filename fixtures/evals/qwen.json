@@ -1,0 +1,271 @@
+{
+  "image_id": 1,
+  "dataset": "dentex",
+  "split": "test",
+  "provider": "transformers",
+  "model": "Qwen/Qwen3.5-9B",
+  "ground_truth": [
+    {
+      "quadrant": 4,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    }
+  ],
+  "predictions": [
+    {
+      "quadrant": 1,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries",
+      "confidence": 0.8
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.95
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries",
+      "confidence": 0.8
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.95
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries",
+      "confidence": 0.8
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.95
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.95
+    }
+  ],
+  "matched_pairs": [
+    {
+      "gt": {
+        "quadrant": 4,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 4,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.95
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 3,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 3,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.95
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 1,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 1,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.95
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 4,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries"
+      },
+      "pred": {
+        "quadrant": 2,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries",
+        "confidence": 0.8
+      },
+      "fdi_match": false,
+      "exact_match": false,
+      "closeness": 0.5,
+      "spatial": 0.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 1,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries"
+      },
+      "pred": {
+        "quadrant": 1,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries",
+        "confidence": 0.8
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 3,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries"
+      },
+      "pred": {
+        "quadrant": 3,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries",
+        "confidence": 0.8
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 2,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 2,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.95
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    }
+  ],
+  "fdi_precision": 0.8571428571428571,
+  "fdi_recall": 0.8571428571428571,
+  "fdi_f1": 0.8571428571428571,
+  "exact_precision": 0.8571428571428571,
+  "exact_recall": 0.8571428571428571,
+  "exact_f1": 0.8571428571428571,
+  "closeness_score": 0.9500000000000001,
+  "spatial_proximity": 0.9,
+  "diagnostic_similarity": 1.0,
+  "fdi_correct": true,
+  "quadrant_correct": true,
+  "tooth_position_correct": true,
+  "diagnosis_correct": true,
+  "exact_match": true,
+  "all_exact_match": false,
+  "final_answer": {
+    "quadrant": 4,
+    "tooth_position": 8,
+    "diagnosis": "Impacted",
+    "raw_diagnosis": "Impacted Tooth",
+    "confidence": 0.95
+  },
+  "raw_output": "The user wants me to analyze a panoramic dental radiograph (OPG).\nI need to identify abnormal teeth across all four quadrants.\nI need to use FDI notation (Quadrant 1-4, Tooth 1-8).\nI need to provide a diagnosis from a specific list: \"Caries\", \"Deep Caries\", \"Periapical Lesion\", \"Impacted Tooth\".\nI need to provide a confidence score.\nFinally, I need to output a JSON object.\n\n**Image Analysis:**\n\n*   **Quadrant 1 (Upper Right):**\n    *   Teeth 1-6 look relatively normal.\n    *   Tooth 7 (Second Mo",
+  "format_ok": true,
+  "finish_reason": "stop",
+  "confidence": 0.95,
+  "timestamp": 1788611868.2779787
+}

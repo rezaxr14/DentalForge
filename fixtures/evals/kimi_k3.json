@@ -1,0 +1,190 @@
+{
+  "image_id": 1,
+  "dataset": "dentex",
+  "split": "test",
+  "provider": "nvidia_nim",
+  "model": "moonshotai/kimi-k3",
+  "ground_truth": [
+    {
+      "quadrant": 4,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    }
+  ],
+  "predictions": [
+    {
+      "quadrant": 1,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.78
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.78
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.9
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.88
+    }
+  ],
+  "matched_pairs": [
+    {
+      "gt": {
+        "quadrant": 4,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 4,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.88
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 3,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 3,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.9
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 1,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 1,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.78
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 2,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 2,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.78
+      },
+      "fdi_match": true,
+      "exact_match": true,
+      "closeness": 1.0,
+      "spatial": 1.0,
+      "diag_sim": 1.0
+    }
+  ],
+  "fdi_precision": 1.0,
+  "fdi_recall": 0.5714285714285714,
+  "fdi_f1": 0.7272727272727273,
+  "exact_precision": 1.0,
+  "exact_recall": 0.5714285714285714,
+  "exact_f1": 0.7272727272727273,
+  "closeness_score": 0.7931034482758621,
+  "spatial_proximity": 0.7428571428571429,
+  "diagnostic_similarity": 0.5714285714285714,
+  "fdi_correct": true,
+  "quadrant_correct": true,
+  "tooth_position_correct": true,
+  "diagnosis_correct": true,
+  "exact_match": true,
+  "all_exact_match": false,
+  "final_answer": {
+    "quadrant": 4,
+    "tooth_position": 8,
+    "diagnosis": "Impacted",
+    "raw_diagnosis": "Impacted Tooth",
+    "confidence": 0.88
+  },
+  "raw_output": "The user wants me to analyze a panoramic dental radiograph and identify abnormal teeth. Let me examine the image carefully.\n\nLooking at the OPG:\n- R marker is on the left side of image (patient's right), L marker on right side (patient's left)\n- Quadrant 1 (Upper Right): patient's right upper - appears on left side of image\n- Quadrant 2 (Upper Left): patient's left upper - appears on right side of image\n- Quadrant 3 (Lower Left): patient's left lower - appears on right side of image\n- Quadrant 4",
+  "format_ok": true,
+  "finish_reason": "stop",
+  "confidence": 0.88,
+  "timestamp": 1788418771.4109485
+}

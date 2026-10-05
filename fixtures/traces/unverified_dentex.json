@@ -1,0 +1,230 @@
+{
+  "image_id": 4,
+  "image_path": "<SANITIZED>/4.png",
+  "ground_truth": [
+    {
+      "quadrant": 4,
+      "tooth_position": 7,
+      "diagnosis": "Caries",
+      "bbox": [
+        843.0,
+        838.0,
+        190.0,
+        325.0
+      ]
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 6,
+      "diagnosis": "Periapical Lesion",
+      "bbox": [
+        1006.0,
+        826.0,
+        177.0,
+        345.0
+      ]
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 5,
+      "diagnosis": "Caries",
+      "bbox": [
+        1142.0,
+        816.0,
+        114.0,
+        333.0
+      ]
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 4,
+      "diagnosis": "Periapical Lesion",
+      "bbox": [
+        1215.0,
+        815.0,
+        132.0,
+        338.0
+      ]
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 4,
+      "diagnosis": "Caries",
+      "bbox": [
+        1649.0,
+        791.0,
+        104.0,
+        329.0
+      ]
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 7,
+      "diagnosis": "Caries",
+      "bbox": [
+        1900.0,
+        786.0,
+        243.0,
+        333.0
+      ]
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 8,
+      "diagnosis": "Caries",
+      "bbox": [
+        716.0,
+        562.0,
+        189.0,
+        308.0
+      ]
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 7,
+      "diagnosis": "Caries",
+      "bbox": [
+        847.0,
+        530.0,
+        197.0,
+        330.0
+      ]
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 2,
+      "diagnosis": "Caries",
+      "bbox": [
+        1576.0,
+        471.0,
+        84.0,
+        329.0
+      ]
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 5,
+      "diagnosis": "Caries",
+      "bbox": [
+        1784.0,
+        460.0,
+        118.0,
+        348.0
+      ]
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "bbox": [
+        1867.0,
+        467.0,
+        176.0,
+        345.0
+      ]
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 5,
+      "diagnosis": "Deep Caries",
+      "bbox": [
+        1727.0,
+        795.0,
+        102.0,
+        341.0
+      ]
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 8,
+      "diagnosis": "Deep Caries",
+      "bbox": [
+        2151.6153846153848,
+        515.6923076923076,
+        134.6153846153843,
+        271.1538461538462
+      ]
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 7,
+      "diagnosis": "Caries",
+      "bbox": [
+        2022.5806451612902,
+        444.83870967741933,
+        137.0967741935483,
+        345.16129032258067
+      ]
+    }
+  ],
+  "status": "unverified",
+  "trajectory": {
+    "sanitized": true,
+    "n_turns": 14,
+    "n_messages": 29,
+    "turns": [
+      {
+        "turn": 0,
+        "tool_calls_this_turn": [
+          {
+            "tool_name": "window_level",
+            "tool_args": {
+              "preset": "bone"
+            },
+            "tool_ok": true
+          }
+        ],
+        "status": "tool_executed"
+      },
+      {
+        "turn": 1,
+        "tool_calls_this_turn": [
+          {
+            "tool_name": "locate_tooth",
+            "tool_args": {
+              "tooth": 47
+            },
+            "tool_ok": true
+          },
+          {
+            "tool_name": "locate_tooth",
+            "tool_args": {
+              "tooth": 46
+            },
+            "true_bbox": [
+              1006.0,
+              826.0,
+              177.0,
+              345.0
+            ],
+            "perturb_tier": "big",
+            "tool_ok": true
+          },
+          {
+            "tool_name": "locate_tooth",
+            "tool_args": {
+              "tooth": 45
+            },
+            "true_bbox": [
+              1142.0,
+              816.0,
+              114.0,
+              333.0
+            ],
+            "perturb_tier": "big",
+            "tool_ok": true
+          },
+          {
+            "tool_name": "locate_tooth",
+            "tool_args": {
+              "tooth": 44
+            },
+            "tool_ok": true
+          }
+        ],
+        "status": "tool_executed"
+      }
+    ]
+  },
+  "dataset": "dentex"
+}
