@@ -1,0 +1,190 @@
+{
+  "image_id": 1,
+  "dataset": "dentex",
+  "split": "test",
+  "provider": "nvidia_nim",
+  "model": "meta/llama-3.2-11b-vision-instruct",
+  "ground_truth": [
+    {
+      "quadrant": 4,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 1,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 6,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries"
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 8,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted"
+    }
+  ],
+  "predictions": [
+    {
+      "quadrant": 1,
+      "tooth_position": 2,
+      "diagnosis": "Deep Caries",
+      "raw_diagnosis": "Deep Caries",
+      "confidence": 0.8
+    },
+    {
+      "quadrant": 2,
+      "tooth_position": 3,
+      "diagnosis": "Impacted",
+      "raw_diagnosis": "Impacted Tooth",
+      "confidence": 0.9
+    },
+    {
+      "quadrant": 3,
+      "tooth_position": 6,
+      "diagnosis": "Periapical Lesion",
+      "raw_diagnosis": "Periapical Lesion",
+      "confidence": 0.7
+    },
+    {
+      "quadrant": 4,
+      "tooth_position": 7,
+      "diagnosis": "Caries",
+      "raw_diagnosis": "Caries",
+      "confidence": 0.6
+    }
+  ],
+  "matched_pairs": [
+    {
+      "gt": {
+        "quadrant": 4,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries"
+      },
+      "pred": {
+        "quadrant": 4,
+        "tooth_position": 7,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries",
+        "confidence": 0.6
+      },
+      "fdi_match": false,
+      "exact_match": false,
+      "closeness": 0.875,
+      "spatial": 0.75,
+      "diag_sim": 1.0
+    },
+    {
+      "gt": {
+        "quadrant": 1,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries"
+      },
+      "pred": {
+        "quadrant": 1,
+        "tooth_position": 2,
+        "diagnosis": "Deep Caries",
+        "raw_diagnosis": "Deep Caries",
+        "confidence": 0.8
+      },
+      "fdi_match": false,
+      "exact_match": false,
+      "closeness": 0.575,
+      "spatial": 0.4,
+      "diag_sim": 0.75
+    },
+    {
+      "gt": {
+        "quadrant": 3,
+        "tooth_position": 6,
+        "diagnosis": "Caries",
+        "raw_diagnosis": "Caries"
+      },
+      "pred": {
+        "quadrant": 3,
+        "tooth_position": 6,
+        "diagnosis": "Periapical Lesion",
+        "raw_diagnosis": "Periapical Lesion",
+        "confidence": 0.7
+      },
+      "fdi_match": true,
+      "exact_match": false,
+      "closeness": 0.7,
+      "spatial": 1.0,
+      "diag_sim": 0.4
+    },
+    {
+      "gt": {
+        "quadrant": 2,
+        "tooth_position": 8,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted"
+      },
+      "pred": {
+        "quadrant": 2,
+        "tooth_position": 3,
+        "diagnosis": "Impacted",
+        "raw_diagnosis": "Impacted Tooth",
+        "confidence": 0.9
+      },
+      "fdi_match": false,
+      "exact_match": false,
+      "closeness": 0.7,
+      "spatial": 0.4,
+      "diag_sim": 1.0
+    }
+  ],
+  "fdi_precision": 0.25,
+  "fdi_recall": 0.14285714285714285,
+  "fdi_f1": 0.18181818181818182,
+  "exact_precision": 0.0,
+  "exact_recall": 0.0,
+  "exact_f1": 0.0,
+  "closeness_score": 0.6638554216867468,
+  "spatial_proximity": 0.36428571428571427,
+  "diagnostic_similarity": 0.8785714285714287,
+  "fdi_correct": true,
+  "quadrant_correct": true,
+  "tooth_position_correct": true,
+  "diagnosis_correct": false,
+  "exact_match": false,
+  "all_exact_match": false,
+  "final_answer": {
+    "quadrant": 4,
+    "tooth_position": 7,
+    "diagnosis": "Caries",
+    "raw_diagnosis": "Caries",
+    "confidence": 0.6
+  },
+  "raw_output": "Based on the panoramic dental radiograph, I have identified several abnormal teeth across all quadrants. \n\nIn Quadrant 1 (Upper Right), I notice a deep caries lesion on tooth 2.1, indicating a significant decay affecting the enamel and dentin. The confidence level for this finding is 0.8, as the radiograph clearly shows the extent of the lesion but may not capture all details due to the panoramic view.\n\nIn Quadrant 2 (Upper Left), I observe an impacted tooth 3.4, which is not fully erupted and m",
+  "format_ok": true,
+  "finish_reason": "stop",
+  "confidence": 0.6,
+  "timestamp": 1788433859.6077726
+}

@@ -1,0 +1,42 @@
+{
+  "traces": {
+    "verified_with_tools": {
+      "source": "data/traces/train_cot_traces.jsonl",
+      "sanitized": true
+    },
+    "verified_no_tools": {
+      "source": "data/traces/train_cot_traces_no_tools.jsonl",
+      "sanitized": true
+    },
+    "verified_healthy": {
+      "source": "data/traces/train_cot_traces_healthy_dentex.jsonl",
+      "sanitized": true
+    },
+    "verified_tufts_all": {
+      "source": "data/traces/train_cot_traces_tufts_all.jsonl",
+      "sanitized": true
+    },
+    "unverified_dentex": {
+      "source": "data/traces/train_cot_traces_unverified_dentex.jsonl",
+      "sanitized": true
+    }
+  },
+  "evals": {
+    "kimi_k3": {
+      "source": "data/evaluations/zero_shot_dentex_test_nvidia_nim_moonshotai--kimi-k3.jsonl",
+      "sanitized": true
+    },
+    "gemini_flash": {
+      "source": "data/evaluations/zero_shot_dentex_test_gemini_gemini-3.5-flash.jsonl",
+      "sanitized": true
+    },
+    "qwen": {
+      "source": "data/evaluations/zero_shot_dentex_test_transformers_Qwen--Qwen3.5-9B.jsonl",
+      "sanitized": true
+    },
+    "llama11b": {
+      "source": "data/evaluations/zero_shot_dentex_test_nvidia_nim_meta--llama-3.2-11b-vision-instruct.jsonl",
+      "sanitized": true
+    }
+  }
+}
