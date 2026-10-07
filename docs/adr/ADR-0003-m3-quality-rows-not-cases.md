@@ -20,7 +20,10 @@ stats in Postgres.
 
 ## Findings worth keeping
 
-- Directive leak is 100% systemic (every file, both modes, both datasets).
+- ~~Directive leak is 100% systemic (every file, both modes, both datasets).~~
+  **Withdrawn by ADR-0006:** that counted the teacher scaffold in stored user
+  messages. Assistant-text leak under the real `LEAK_PATTERNS` definition is
+  0/5,454; scaffold is present in 5,454/5,454 (expected generation setup).
 - New status states vs M0 sample: `tool_all_failed` (75),
   `unparseable_recovery_attempt` (23), no-tools turns carry `<none>` (2727).
 - Unknown tool names: `final_answer` as a tool call (74), `localize_tooth` /

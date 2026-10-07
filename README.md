@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TraceForge
 
-## Getting Started
+Research-prototype workbench over real Dental-Agent artifacts (agent traces,
+zero-shot evals, YOLO pre-labels, annotations). **Research prototype, not for
+clinical use.**
 
-First, run the development server:
+Plan: `TRACEFORGE_IMPLEMENTATION_PLAN.md` (M0–M4 done; M5 in progress).
+Decisions: `docs/adr/` (ADR-0001 through ADR-0006).
+
+## Quickstart
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Quality gates (also run in CI):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm typecheck   # tsc --noEmit
+pnpm lint        # eslint
+pnpm test        # vitest run
+pnpm ci          # all three
+pnpm build       # production build (self-hosted Geist, no Google Fonts fetch)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Learn More (TraceForge docs)
 
-## Learn More
+To learn more about TraceForge, start with the plan and ADRs:
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [`TRACEFORGE_IMPLEMENTATION_PLAN.md`](./TRACEFORGE_IMPLEMENTATION_PLAN.md) — milestones M0–M13 (M0–M4 done; M5 in progress)
+- [`docs/adr/`](./docs/adr/) — ADR-0001 through ADR-0006 (schemas, parity, leak-definition fix)
+- Data honesty: directive leak = assistant text matching VLM-DENTAL `LEAK_PATTERNS` (**0 / 5,454**); teacher scaffold in stored user messages is expected setup (5,454 / 5,454) — see ADR-0006.
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Standard Next.js deploy. Builds are self-hosted (Geist via the `geist`
+package, no Google Fonts fetch). `WORKER_MODE` defaults to `off`; never set
+`HF_TOKEN` on Vercel (local import scripts only).

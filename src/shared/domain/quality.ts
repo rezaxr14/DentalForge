@@ -1,6 +1,13 @@
 /**
  * M3 quality-signal scanner — pure TS port of scripts/generate_m3_quality.py.
  * Operates on validated trace records; powers the Data-Quality dashboard.
+ *
+ * Leak definition (R1 / plan section 11.5): a *directive leak* is the
+ * ASSISTANT's text matching LEAK_PATTERNS from VLM-DENTAL
+ * `scripts/patch_and_regenerate_traces.py::check_for_leaks` (assistant role
+ * only, first matching pattern per message). The string `TEACHER DIRECTIVE`
+ * inside the stored *user* message is the generation scaffold — reported
+ * separately as `teacherScaffold` (expected, not a leak).
  */
 import type { TurnT, VerifiedTraceT } from "../contracts/traces";
 
@@ -9,9 +16,39 @@ export const KNOWN_TOOLS = new Set([
   "denoise", "contralateral_compare", "enhance_contrast", "nudge_crop",
 ]);
 
+/**
+ * Port of VLM-DENTAL LEAK_PATTERNS (scripts/patch_and_regenerate_traces.py).
+ * Order preserved; semantics: case-insensitive regex search.
+ */
+export const LEAK_PATTERNS: RegExp[] = [
+  /\bteacher('s)? directive\b/i,
+  /\bsystem directive\b/i,
+  /\btask directive\b/i,
+  /\bthe directives?\b/i,
+  /\bper directive\b/i,
+  /\bper the directive\b/i,
+  /\bdirectives?\s+(says?|states?|mentions?|points?|identifies?|specifies?|suggests?|indicates?|listed)\b/i,
+  /\bground truth\b/i,
+  /\bteacher('s)? hint\b/i,
+  /\buser('s)? hint\b/i,
+  /\bmentioned in the (hint|directive)\b/i,
+  /\bin the hint\b/i,
+  /\bgiven to me\b/i,
+  /\binstruction told me\b/i,
+  /\btold to find\b/i,
+];
+
+export interface LeakHit {
+  turnIdx: number;
+  pattern: string;
+}
+
 export interface QualityReport {
   nTraces: number;
+  /** Assistant-text leak (real VLM-DENTAL definition). */
   directiveLeak: number;
+  /** Generation scaffold present in stored user messages (expected). */
+  teacherScaffold: number;
   statuses: Record<string, number>;
   tools: Record<string, number>;
   unknownTools: Record<string, number>;
@@ -37,9 +74,60 @@ function messageText(m: unknown): string {
   return "";
 }
 
-function hasDirectiveLeak(messages: unknown): boolean {
+function messageRole(m: unknown): string | null {
+  if (typeof m !== "object" || m === null) return null;
+  const role = (m as { role?: unknown }).role;
+  return typeof role === "string" ? role : null;
+}
+
+/**
+ * Assistant-only leak scan (mirrors `check_for_leaks`): for each assistant
+ * message, record the first matching pattern. Returns one hit per message.
+ */
+export function scanAssistantLeaks(messages: unknown): LeakHit[] {
+  if (!Array.isArray(messages)) return [];
+  const hits: LeakHit[] = [];
+  messages.forEach((m, turnIdx) => {
+    if (messageRole(m) !== "assistant") return;
+    const text = messageText(m);
+    for (const pat of LEAK_PATTERNS) {
+      pat.lastIndex = 0;
+      const found = pat.exec(text);
+      if (found) {
+        const first = found[0];
+        if (first !== undefined) hits.push({ turnIdx, pattern: first });
+        break;
+      }
+    }
+  });
+  return hits;
+}
+
+/** Assistant `parsed.thought` leak scan (turn-level, same patterns). */
+export function scanThoughtLeaks(turns: TurnT[]): { turn: number; pattern: string }[] {
+  const hits: { turn: number; pattern: string }[] = [];
+  for (const t of turns) {
+    const thought = t.parsed && typeof t.parsed === "object" ? t.parsed.thought : undefined;
+    if (typeof thought !== "string") continue;
+    for (const pat of LEAK_PATTERNS) {
+      pat.lastIndex = 0;
+      const found = pat.exec(thought);
+      if (found) {
+        const first = found[0];
+        if (first !== undefined) hits.push({ turn: t.turn, pattern: first });
+        break;
+      }
+    }
+  }
+  return hits;
+}
+
+/** Generation scaffold: stored non-assistant message with the marker. */
+export function hasTeacherScaffold(messages: unknown): boolean {
   if (!Array.isArray(messages)) return false;
-  return messages.some((m) => messageText(m).includes("TEACHER DIRECTIVE"));
+  return messages.some(
+    (m) => messageRole(m) !== "assistant" && messageText(m).includes("TEACHER DIRECTIVE"),
+  );
 }
 
 /** Scan one trace's turns/messages; messages may be the sanitized fixture shape. */
@@ -59,8 +147,11 @@ export function scanTrace(
     }
   }
   const healthyFp = trace.ground_truth.length === 0 && (trace.final_answer?.length ?? 0) > 0 ? 1 : 0;
+  const leakHits = scanAssistantLeaks(trace.messages);
+  const thoughtHits = scanThoughtLeaks(trace.turns as TurnT[]);
   return {
-    directiveLeak: hasDirectiveLeak(trace.messages) ? 1 : 0,
+    directiveLeak: leakHits.length + thoughtHits.length > 0 ? 1 : 0,
+    teacherScaffold: hasTeacherScaffold(trace.messages) ? 1 : 0,
     statuses, tools, unknownTools, healthyFalsePositives: healthyFp, perturbTiers,
   };
 }
@@ -70,11 +161,12 @@ export function mergeReports(
   scans: Omit<QualityReport, "nTraces">[],
 ): QualityReport {
   const report: QualityReport = {
-    nTraces: scans.length, directiveLeak: 0, statuses: {}, tools: {},
+    nTraces: scans.length, directiveLeak: 0, teacherScaffold: 0, statuses: {}, tools: {},
     unknownTools: {}, healthyFalsePositives: 0, perturbTiers: {},
   };
   for (const s of scans) {
     report.directiveLeak += s.directiveLeak;
+    report.teacherScaffold += s.teacherScaffold;
     report.healthyFalsePositives += s.healthyFalsePositives;
     for (const [k, v] of Object.entries(s.statuses)) bump(report.statuses, k, v);
     for (const [k, v] of Object.entries(s.tools)) bump(report.tools, k, v);

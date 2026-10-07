@@ -4,8 +4,8 @@ M0 fixture builder — sanitizes REAL VLM-DENTAL lines into committed fixtures.
 Reads from the read-only VLM-DENTAL checkout, writes sanitized JSON into
 DentalForge/fixtures/. Sanitization:
 - image_path: machine-specific local path -> basename placeholder
-- messages: full chat transcript (contains TEACHER DIRECTIVE leaks + system
-  prompt) -> replaced with a structural summary {n_messages, roles[]}.
+- messages: full chat transcript (the teacher scaffold in stored user
+  messages + system prompt) -> replaced with a structural summary {n_messages, roles[]}.
   Fixtures keep turns[] (the replayable agent behavior) verbatim, truncated
   to the first few turns for size.
 - eval raw_output: free text kept only in truncated form (first 500 chars).
