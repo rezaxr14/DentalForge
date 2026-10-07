@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: traceforge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: traceforge
+      POSTGRES_PASSWORD: traceforge
+      POSTGRES_DB: traceforge
+    ports:
+      - "5433:5432"
+    volumes:
+      - traceforge-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traceforge -d traceforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  traceforge-pgdata:
