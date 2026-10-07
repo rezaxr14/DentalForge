@@ -1,6 +1,6 @@
 # ADR-0004: M4 Tool Lab — browser-tier parity strategy
 
-Date: 2026-05-10
+Date: 2026-10-05
 Status: Accepted
 
 ## Context

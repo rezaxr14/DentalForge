@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { VerifiedTrace } from "../src/shared/contracts/traces";
-import { mergeReports, scanTrace } from "../src/shared/domain/quality";
+import {
+  LEAK_PATTERNS,
+  hasTeacherScaffold,
+  mergeReports,
+  scanAssistantLeaks,
+  scanThoughtLeaks,
+  scanTrace,
+} from "../src/shared/domain/quality";
 
 const goldens = JSON.parse(
   readFileSync(join(__dirname, "..", "fixtures", "goldens", "m3_quality.json"), "utf-8"),
@@ -12,7 +19,10 @@ const goldens = JSON.parse(
   overall_statuses: Record<string, number>;
   overall_unknown_tools: Record<string, number>;
   perturb_tiers: Record<string, number>;
-  per_file: Record<string, { n: number; directive_leak: number; healthy_false_positives: number }>;
+  per_file: Record<string, {
+    n: number; directive_leak: number; teacher_scaffold: number;
+    healthy_false_positives: number;
+  }>;
 };
 
 describe("M3: quality stats shape", () => {
@@ -20,9 +30,14 @@ describe("M3: quality stats shape", () => {
     expect(goldens.n_traces).toBe(5454);
     expect(Object.keys(goldens.per_file)).toHaveLength(12);
   });
-  it("directive leak is systemic (100% of files)", () => {
+  it("assistant-text directive leak is zero (R1: scaffold is not a leak)", () => {
     for (const [file, s] of Object.entries(goldens.per_file)) {
-      expect(s.directive_leak, file).toBe(s.n);
+      expect(s.directive_leak, file).toBe(0);
+    }
+  });
+  it("teacher scaffold is present in every stored trace (expected generation setup)", () => {
+    for (const [file, s] of Object.entries(goldens.per_file)) {
+      expect(s.teacher_scaffold, file).toBe(s.n);
     }
   });
   it("status taxonomy matches M0 observations + recovery/tool-failed states", () => {
@@ -48,8 +63,39 @@ describe("M3: quality stats shape", () => {
   });
 });
 
-describe("M3: TS scanner parity on committed fixtures", () => {
-  it("scanner reproduces tool/status counts of each fixture trace", () => {
+describe("M5/R1: LEAK_PATTERNS port parity (15 patterns, assistant-only)", () => {
+  it("ports all 15 VLM-DENTAL patterns in order", () => {
+    expect(LEAK_PATTERNS).toHaveLength(15);
+    expect(LEAK_PATTERNS[0]?.source).toBe("\\bteacher('s)? directive\\b");
+    expect(LEAK_PATTERNS[7]?.source).toBe("\\bground truth\\b");
+    expect(LEAK_PATTERNS[14]?.source).toBe("\\btold to find\\b");
+    for (const p of LEAK_PATTERNS) expect(p.ignoreCase).toBe(true);
+  });
+  it("flags assistant leaks but never user scaffold", () => {
+    const msgs = [
+      { role: "system", content: "You are a radiologist." },
+      { role: "user", content: "TEACHER DIRECTIVE: this image has 3 findings" },
+      { role: "assistant", content: '{"thought": "clean reasoning", "tool_calls": []}' },
+    ];
+    expect(scanAssistantLeaks(msgs)).toEqual([]);
+    expect(hasTeacherScaffold(msgs)).toBe(true);
+    const leaky = [
+      ...msgs,
+      { role: "assistant", content: "Per the directive, 46 is a lesion" },
+      { role: "assistant", content: "The ground truth indicates tooth 44" },
+    ];
+    expect(scanAssistantLeaks(leaky)).toHaveLength(2);
+    expect(scanAssistantLeaks(leaky)[0]).toMatchObject({ turnIdx: 3 });
+  });
+  it("scans parsed.thought with the same patterns", () => {
+    const turns = [
+      { turn: 0, status: "final_answer", parsed: { thought: "Wait, the directive mentions Q3T7" } },
+      { turn: 1, status: "final_answer", parsed: { thought: "clean thought" } },
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(scanThoughtLeaks(turns as any)).toHaveLength(1);
+  });
+  it("sanitized fixtures have no assistant leak and no visible scaffold", () => {
     const dir = join(__dirname, "..", "fixtures", "traces");
     const scans = readdirSync(dir)
       .filter((f) => f.endsWith(".json") && !f.startsWith("unverified"))
@@ -58,9 +104,10 @@ describe("M3: TS scanner parity on committed fixtures", () => {
         return scanTrace({ ...t, messages: t.messages });
       });
     const report = mergeReports(scans);
+    // Fixture messages are sanitized placeholders: neither leak nor scaffold survives.
+    expect(report.directiveLeak).toBe(0);
+    expect(report.teacherScaffold).toBe(0);
     expect(report.nTraces).toBe(scans.length);
-    // every fixture tool name must be known except none — fixtures are clean samples
-    expect(report.unknownTools).toEqual({});
     expect(Object.values(report.tools).reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
   });
 });

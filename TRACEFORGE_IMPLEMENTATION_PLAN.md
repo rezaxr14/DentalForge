@@ -426,3 +426,148 @@ A separate TypeScript process that speaks the **real HTTP contract** and answers
 
 ### 10.4 Reference Python worker (ships in `examples/python-worker`, stubs only)
 A small `httpx` loop: register → heartbeat thread → long-poll claim → handler registry keyed by job type → events → presigned upload → complete/fail. Handlers import nothing from VLM-DENTAL by default (clear `NotImplementedError` stubs with docstrings naming the VLM-DENTAL function each handler should call, e.g. `tool.execute` → `ToolRegistry.create_default()`, `yolo.prelabel` → `tool_locate_tooth`/Ultralytics, `agent.run` → `dental_agent/agent/loop.py::run_agent`). Config via `TRACEFORGE_URL` and `TRACEFORGE_TOKEN`. README sections: run locally, run on Colab, run on Kaggle. The owner will wire real handlers later; that is a separate task.
+
+---
+
+## 11. Module specifications (remaining and upgraded work)
+
+Every module must: (a) render with `WORKER_MODE=off`, (b) read data through a `DataSource` interface so the fixture/replay source and the Postgres source are interchangeable, (c) label provenance on computed or rendered results, (d) ship with unit tests and one Playwright flow.
+
+### 11.1 Trace Explorer (upgrade of the M1 version)
+- **List** (`/org/:slug/traces`): virtualized (TanStack Virtual), URL-state filters (dataset, cohort, mode, verified, final status, perturbation tier, tool used, n_turns range), server-side pagination and sorting, saved views. Streams the first page, then hydrates filters.
+- **Detail** (`/traces/:id`): three panes. *Timeline* (turns, status chips, tool-call pills), *image canvas* (native image with overlays: shown `locate_tooth` bbox, `true_bbox` ghost box and offset arrow when a perturbation fired, final-answer boxes with FDI + diagnosis + confidence, ground-truth boxes toggle), *inspector* (thought text, raw JSON, verifier reason, ground truth vs final answer table using the ported matcher, per-trace reward breakdown).
+- **Replay mode**: step or autoplay through turns (1x/2x, keyboard `←/→/space`), tool images appear as each turn completes. This is also the offline fallback of the Live Agent view.
+- **Compare**: with-tools vs no-tools trace of the same `(dataset, image_id)` side by side (the corpus is 1:1 paired).
+- **Tool images** follow the §9 ladder (stored artifact → browser re-render via the Tool Lab ports → placeholder).
+- **Done when:** a 1,800+ row list scrolls at 60 fps, filters round-trip through the URL, and the trace-255 case study replays end to end from stored assets with the worker off.
+
+### 11.2 Eval Hub
+- Leaderboard computed from `eval_cases` (acceptance values in §4.5), sortable, with 95% bootstrap CIs computed in a Web Worker (progressive: point estimate first, CI streams in). Show the PRNG caveat from ADR-0002 in a tooltip.
+- Reliability diagram and ECE (visx), per-case drill-down with matched pairs overlaid on the image, error taxonomy (FDI wrong / diagnosis wrong / hallucinated / missed).
+- **Run diff**: choose two runs; paired bootstrap CI of the difference on shared cases; case-level "who won" table.
+- YOLO results table with the **protocol label** for every number (raw `model.val()`, target-filtered CV, held-out benchmark). Never merge protocols into one column.
+
+### 11.3 LabelForge
+**Editor (`/labels/:imageId`)**
+- Engine: framework-agnostic `EditorEngine` (Canvas2D; image layer + overlay layer + HTML label layer; pan/zoom with wheel and pinch; `requestAnimationFrame` render loop that redraws only dirty rects). React renders only the chrome.
+- Tools: draw box, select/move/resize (8 handles), delete, duplicate-to-mirror (copies a box to the contralateral tooth), pan. Boxes stay inside image bounds. Coordinates are native pixels.
+- Labeling: FDI quick entry (type two digits `4` `6` to set tooth 46; `Tab` cycles boxes), pathology hotkeys (1–4), an odontogram widget showing which of the 32 FDI slots are labeled/conflicting, duplicate/conflict warnings.
+- History: event-sourced command stack (Create/Update/Delete/SetLabel/Batch) with drag coalescing; unlimited undo/redo within a session.
+- Persistence: debounced batches of ops with `baseVersion`; server applies atomically and returns the new version; on `409` the client rebases and shows a non-blocking conflict toast. `useOptimistic` for label edits in the side panel, `useTransition` for image switching, prefetch and decode of the next queue image.
+- Soft lock: one annotator per image task (`annotation_sets.assignee_id`); presence shown when Redis exists.
+- Accessibility: complete keyboard operation, plus an accessible table view of all boxes with editable cells (the canvas alone is not accessible).
+- Performance budget: 64 boxes at 60 fps; stress test with 500 boxes stays above 30 fps; input-to-paint under 16 ms for drag.
+
+**Review workflow**: annotator submits a set; reviewer sees a diff against model/GT suggestions, approves/rejects boxes with reasons; two-annotator mode computes box matching (IoU ≥ 0.5, greedy by IoU) and **Cohen's κ** on pathology and FDI labels plus % agreement; disagreements enter an adjudication queue. Approving your own work is forbidden by `can()`.
+
+**Pre-labeling (ladder in §9.2)**: "Suggest boxes" resolves worker → ONNX in browser → stored predictions. Suggestions are `source=model`, `status=draft`, and carry confidence; the UI visually distinguishes them from human boxes.
+
+**Active-learning queue**: score = weighted blend of `1 - meanConf`, box-count deficit vs expected, and inter-annotator disagreement; worker `al.score` when available else the heuristic (badge *heuristic*). A chart tracks labeled-count vs detector mAP when training metrics exist.
+
+**Export**: YOLO (`class_idx = (q-1)*8 + (p-1)`, normalized xywh) and COCO, as a server-side streaming zip, filterable by status (`approved` only by default). Round-trip test: import the export back and compare.
+
+### 11.4 Tool Lab (extend M4)
+Done in M4: browser ports for 7 of 8 tools with bit-exact goldens. Remaining: wire the §9 ladder (worker exact → browser → stored `val_*` outputs), add a provenance badge, add `locate_tooth` through ONNX/worker/replay, history panel of tool calls with bbox overlays, and ingest the 154 parity renders in `docs/images/` as replay assets.
+
+### 11.5 Data-Quality dashboards
+- **Fix required (see §15 R1):** a *directive leak* is defined by VLM-DENTAL as the **assistant's** text matching `LEAK_PATTERNS` in `scripts/patch_and_regenerate_traces.py` (teacher directive, ground truth, "per directive", "in the hint", "told to find", …). Port those patterns and scan **assistant** messages and `parsed.thought` only. The string `TEACHER DIRECTIVE` inside the stored *user* message is the generation scaffold, not a leak; report it separately as "teacher scaffold present in stored messages (expected)".
+- Panels: leak scan (by cohort, file, pattern), verifier rejections (taxonomy: hallucinated pathology on healthy scans, GT contradiction, bbox drift; seeded from the audit table in `docs/PAPER_MILESTONES.md` and labeled `docs_seed` until real rejection logs are imported), status distribution, unknown/invalid tool names, perturbation tiers, healthy false positives, turn and tool-call histograms.
+- All counts are unique cases after dedupe (ADR-0003 follow-up) with the raw-row count shown beside them.
+
+### 11.6 Reward Inspector
+Trace picker or live rollout → four components + weighted total (ported, golden-tested). Editable weights (sliders) recompute instantly; matched-pair visualization on the image; efficiency budget meter (6 calls per located tooth). Compare two trajectories of the same image.
+
+### 11.7 Live Agent view (clinical UI)
+Pick an image (library or upload) → `agent.run` job → stream turns over SSE → show each tool image, thought text, final structured report and overlay boxes with FDI/diagnosis/confidence. Persistent research-use banner. Offline: replay of a stored trace with a clear "worker offline, replaying a recorded run" banner. "Save as trace" ingests the run into the library.
+
+### 11.8 Training Hub
+Checkpoint registry read from the HF model repo (server-side, cached, revalidated), run pages with loss/reward/KL charts from `training_metrics`. SFT and GRPO have not been run, so default to honest empty states ("No runs yet") instead of invented numbers.
+
+### 11.9 Admin
+Members, roles, invite links (signed, expiring, use-limited), worker tokens (shown once), worker status, dataset import history, audit log, demo-org reset.
+
+---
+
+## 12. Non-functional requirements
+
+### 12.1 Performance budgets (measured and recorded in `docs/performance.md`)
+LCP < 2.0 s and INP < 200 ms on dashboards (throttled mid-tier mobile profile); route JS budgets enforced in CI (shell < 120 kB gz; editor route loaded on demand); no layout shift from skeletons; images use the right variant; bootstrap and ECE never block the main thread; ONNX model loads lazily with progress and caches in Cache Storage.
+
+### 12.2 Accessibility
+WCAG 2.2 AA. axe in Playwright on every route in light and dark mode; focus-visible styles; reduced-motion respected; live regions announce streamed turns politely; color is never the only signal (box status uses shape/label too).
+
+### 12.3 Security
+Security headers and a strict CSP; CSRF protections on server actions; origin checks; rate limits on auth, invites, worker endpoints (Upstash if present, in-memory otherwise); worker tokens stored hashed; presigned URLs short-lived and scoped; upload validation (type, size, dimensions, decode test); audit log for privileged actions; dependency audit in CI; automated cross-tenant isolation tests (§5.2).
+
+### 12.4 Data, licensing and privacy
+- Treat radiographs as sensitive: private buckets, no public image URLs, no PHI, no EXIF/metadata retained.
+- **Before any image is shown to non-members (including the Demo Org), confirm the license terms of the DENTEX and Tufts datasets and of each repo asset.** If redistribution is not allowed, the Demo Org ships derived data only (annotations, metrics, traces without images) plus stored replay assets that are clearly permitted.
+- The committed `fixtures/` must stay free of images and of any private identifiers; keep sanitization checks in CI.
+
+### 12.5 Testing
+Vitest unit tests for domain code; **golden-file parity tests against the Python implementation are the project's signature** (keep regenerating goldens through the existing `scripts/generate_*_goldens.py`, and make CI fail if a golden changes without an ADR); MSW for HTTP; contract tests for the worker API against the mock worker; Playwright for core flows, degradation, multi-tenant isolation and a11y; k6 for ingestion and SSE load; mutation testing optional on `shared/domain`.
+
+### 12.6 Observability
+`@vercel/otel` spans around server actions, DB calls and job lifecycle; request ids propagated to job events; structured logs; a `/api/health` endpoint reporting DB/Redis/storage/worker state (no secrets); a runbook in `docs/runbook.md`.
+
+---
+
+## 13. Milestones and status (supersedes any earlier numbering)
+
+Status as of commit `c9f5402` (2026-10-05). M0–M4 were built ahead of this section, in a fixture-first order that is **accepted** because it delivers verified domain logic before infrastructure.
+
+| # | Milestone | Status | Definition of Done (summary) |
+|---|---|---|---|
+| M0 | Validate schemas against real VLM-DENTAL files; sanitized fixtures | **Done** | zod schemas match real data; deviations in ADR-0001; fixtures + tests |
+| M1 | Fixture-backed Trace Explorer + Eval Hub | **Done (basic)** | list/detail/leaderboard render from fixtures; upgraded in M10/M11 |
+| M2 | TS ports of metrics + rewards with golden parity | **Done** | FDI/class-index, matching, ECE, rewards exact; bootstrap statistical |
+| M3 | Data-quality dashboard from a full trace scan | **Done, needs fix** | see R1: leak definition is wrong |
+| M4 | Tool Lab with Python-parity goldens | **Done** | 7/8 tools bit-exact; `locate_tooth` deferred |
+| M5 | Correctness and repo hygiene pass | Next | R1 fixed; README replaced; `test`/`typecheck`/`ci` scripts; GitHub Actions; self-host fonts; ADR dates fixed; fold ADR-0001 deviations back into §4 |
+| M6 | Platform foundation | Planned | Neon + Drizzle migrations; Better Auth with orgs, roles, invites; env validation with optional services; repository layer; design system + light/dark theme; cross-tenant isolation tests green |
+| M7 | Importer + DataSource switch | Planned | `pnpm import:local|hf` idempotent; counts match source (1,847 images, 3,694 trace rows after dedupe, 8 eval runs); pages read Postgres in prod and fixtures in demo/offline mode; dedupe stats replace the row-count caveat |
+| M8 | Jobs, worker contract, capability ladder | Planned | §9 and §10 implemented; mock worker; SSE with polling fallback; `degradation.spec.ts` passes with worker/Redis/storage off |
+| M9 | LabelForge editor core | Planned | §11.3 editor with perf budget and accessible table view; autosave with versioning |
+| M10 | Review, agreement, queue, export | Planned | κ and agreement tested on fixtures; YOLO/COCO round-trip test; audit log |
+| M11 | Pre-label ladder + Trace Explorer/Eval Hub upgrades | Planned | worker/ONNX/replay YOLO; virtualized lists; replay mode; run diff; reliability diagram |
+| M12 | Live Agent, Reward Inspector completion, Training Hub | Planned | §11.6–11.8 |
+| M13 | Polish and launch | Planned | perf/a11y budgets in CI; Lighthouse CI; README with architecture diagram, GIFs, ADR index; Vercel production deploy with Demo Org; optional Persian/RTL |
+
+Each milestone ends with: typecheck, lint, unit, e2e green in CI; docs updated; ADRs for deviations; a short demo note in `docs/changelog.md`.
+
+---
+
+## 14. Deployment and environment
+
+**Platforms:** Vercel (app), Neon (Postgres, branch per preview), Cloudflare R2 (images/artifacts/ONNX), Upstash Redis (optional). Self-host fonts (`geist` package or `next/font/local`) so builds never depend on Google Fonts reachability.
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | Neon pooled URL |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | yes | |
+| `GITHUB_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET` | yes (at least one provider) | |
+| `INVITE_SIGNING_SECRET` | yes | signs invite links |
+| `STORAGE_PROVIDER` | no | `r2` \| `blob` \| `local` (default `local`) |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | when `r2` | |
+| `UPSTASH_REDIS_REST_URL/TOKEN` | no | missing → polling mode |
+| `WORKER_MODE` | no | `off` (default on Vercel) \| `mock` \| `live` |
+| `DEMO_ORG_SLUG` | no | enables the demo-org invite flow and daily reset |
+| `HF_TOKEN` | **never on Vercel** | local import scripts only |
+
+Operational notes: run migrations in the deploy pipeline (not at runtime); one daily Vercel Cron (demo-org reset) is the only scheduled job; keep SSE routes inside `maxDuration`; never proxy large uploads through functions; `/api/health` is the uptime probe.
+
+---
+
+## 15. Risks and open items
+
+| ID | Item | Action |
+|---|---|---|
+| **R1** | **Quality dashboard mislabels the generation scaffold as "Directive leaks"** (counts every trace containing `TEACHER DIRECTIVE` in `messages`, producing ~100% "leak"). VLM-DENTAL's own definition scans *assistant* text with `LEAK_PATTERNS` and reports 0 leaks. | Fix in M5 per §11.5; fix ADR-0003's "100% systemic" conclusion. |
+| **R2** | **Possible real contamination in the SFT input path (verify, do not assume).** `dental_agent/training/sft.py::__getitem__` (about lines 685–704) rebuilds the first user turn from the *stored* user text and removes only "[Earlier tool result omitted" items. If the stored first user message really contains the teacher directive with ground-truth findings, SFT would train on a prompt that includes the answer, and inference would not have it. | Owner/agent: inspect real records (which message index holds `TEACHER DIRECTIVE`) and confirm the SFT path strips it. If not, fix `sft.py` and add a regression test **in VLM-DENTAL**; surface the result in the Quality dashboard. |
+| R3 | Image licensing for the Demo Org (§12.4) | Verify DENTEX/Tufts terms before any non-member sees images. |
+| R4 | ONNX export parity (letterbox size, NMS, class mapping) | Parity test vs Python predictions on `val_18/32/44`; label results `browser_approx`. |
+| R5 | Colab/Kaggle session lifetimes | Lease/requeue design (§10.1); idempotent results. |
+| R6 | Deferred ports: `extract_predicted_findings`, `compute_evaluation_metrics`, `compute_diagnostic_metrics` | Add goldens, then port; until then the leaderboard must not display columns that depend on them. |
+| R7 | `nudge_crop` rounding ties (half-even vs half-away) | Add a golden with a `.05` tie and align. |
+| R8 | Bootstrap CIs differ from numpy (PRNG) by up to 0.06 | Keep the tooltip; consider a seeded PCG port if exact reproduction is wanted. |
+| R9 | Next.js 16 API churn and security releases | Pin, track releases, record API lookups in ADRs. |

@@ -38,7 +38,9 @@
   "per_file": {
     "train_cot_traces.jsonl": {
       "n": 880,
-      "directive_leak": 880,
+      "directive_leak": 0,
+      "teacher_scaffold": 880,
+      "leak_details": {},
       "statuses": {
         "tool_executed": 10097,
         "final_answer": 880,
@@ -66,7 +68,9 @@
     },
     "train_cot_traces_dentex.jsonl": {
       "n": 678,
-      "directive_leak": 678,
+      "directive_leak": 0,
+      "teacher_scaffold": 678,
+      "leak_details": {},
       "statuses": {
         "tool_executed": 7931,
         "final_answer": 678,
@@ -94,7 +98,9 @@
     },
     "train_cot_traces_dentex_no_tools.jsonl": {
       "n": 678,
-      "directive_leak": 678,
+      "directive_leak": 0,
+      "teacher_scaffold": 678,
+      "leak_details": {},
       "statuses": {
         "<none>": 678
       },
@@ -104,7 +110,9 @@
     },
     "train_cot_traces_healthy_dentex.jsonl": {
       "n": 27,
-      "directive_leak": 27,
+      "directive_leak": 0,
+      "teacher_scaffold": 27,
+      "leak_details": {},
       "statuses": {
         "tool_executed": 334,
         "final_answer": 27,
@@ -126,7 +134,9 @@
     },
     "train_cot_traces_healthy_dentex_no_tools.jsonl": {
       "n": 27,
-      "directive_leak": 27,
+      "directive_leak": 0,
+      "teacher_scaffold": 27,
+      "leak_details": {},
       "statuses": {
         "<none>": 27
       },
@@ -136,7 +146,9 @@
     },
     "train_cot_traces_healthy_tufts.jsonl": {
       "n": 660,
-      "directive_leak": 660,
+      "directive_leak": 0,
+      "teacher_scaffold": 660,
+      "leak_details": {},
       "statuses": {
         "tool_executed": 7632,
         "final_answer": 660,
@@ -169,7 +181,9 @@
     },
     "train_cot_traces_healthy_tufts_no_tools.jsonl": {
       "n": 660,
-      "directive_leak": 660,
+      "directive_leak": 0,
+      "teacher_scaffold": 660,
+      "leak_details": {},
       "statuses": {
         "<none>": 660
       },
@@ -179,7 +193,9 @@
     },
     "train_cot_traces_no_tools.jsonl": {
       "n": 880,
-      "directive_leak": 880,
+      "directive_leak": 0,
+      "teacher_scaffold": 880,
+      "leak_details": {},
       "statuses": {
         "<none>": 880
       },
@@ -189,7 +205,9 @@
     },
     "train_cot_traces_tufts.jsonl": {
       "n": 202,
-      "directive_leak": 202,
+      "directive_leak": 0,
+      "teacher_scaffold": 202,
+      "leak_details": {},
       "statuses": {
         "tool_executed": 2166,
         "final_answer": 202,
@@ -215,7 +233,9 @@
     },
     "train_cot_traces_tufts_all.jsonl": {
       "n": 280,
-      "directive_leak": 280,
+      "directive_leak": 0,
+      "teacher_scaffold": 280,
+      "leak_details": {},
       "statuses": {
         "tool_executed": 2929,
         "final_answer": 280,
@@ -242,7 +262,9 @@
     },
     "train_cot_traces_tufts_all_no_tools.jsonl": {
       "n": 280,
-      "directive_leak": 280,
+      "directive_leak": 0,
+      "teacher_scaffold": 280,
+      "leak_details": {},
       "statuses": {
         "<none>": 280
       },
@@ -252,7 +274,9 @@
     },
     "train_cot_traces_tufts_no_tools.jsonl": {
       "n": 202,
-      "directive_leak": 202,
+      "directive_leak": 0,
+      "teacher_scaffold": 202,
+      "leak_details": {},
       "statuses": {
         "<none>": 202
       },
