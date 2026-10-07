@@ -57,6 +57,8 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  // Better Auth organization plugin: session's active org (plan §5.2).
+  activeOrganizationId: text("active_organization_id"),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -67,7 +69,7 @@ export const accounts = pgTable("accounts", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   providerId: text("provider_id").notNull(),
-  providerAccountId: text("provider_account_id").notNull(),
+  accountId: text("account_id").notNull(),
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   idToken: text("id_token"),
@@ -94,7 +96,10 @@ export const organizations = pgTable(
     id: pk(),
     slug: text("slug").notNull().unique(),
     name: text("name").notNull(),
+    logo: text("logo"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("organizations_slug_idx").on(t.slug)],
 );
@@ -102,18 +107,20 @@ export const organizations = pgTable(
 export const memberships = pgTable(
   "memberships",
   {
+    id: pk(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    orgId: uuid("org_id")
+    // Better Auth member model field is organizationId (plan §7: org_id).
+    organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["admin", "annotator", "reviewer"] }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.orgId] }),
-    index("memberships_org_idx").on(t.orgId),
+    uniqueIndex("memberships_user_org_uniq").on(t.userId, t.organizationId),
+    index("memberships_org_idx").on(t.organizationId),
   ],
 );
 
@@ -121,19 +128,25 @@ export const invites = pgTable(
   "invites",
   {
     id: pk(),
-    orgId: uuid("org_id")
+    // Better Auth invitation model (plan §7 invites); token_hash/max_uses/uses
+    // are our signed-link extension on top of BA email invites.
+    organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    email: text("email"),
+    email: text("email").notNull(),
     role: text("role", { enum: ["admin", "annotator", "reviewer"] }).notNull(),
-    tokenHash: text("token_hash").notNull().unique(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    status: text("status", { enum: ["pending", "accepted", "rejected", "canceled"] })
+      .notNull()
+      .default("pending"),
+    tokenHash: text("token_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     maxUses: integer("max_uses").notNull().default(1),
     uses: integer("uses").notNull().default(0),
-    invitedBy: text("invited_by"),
+    inviterId: text("inviter_id"),
     createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("invites_org_idx").on(t.orgId)],
+  (t) => [index("invites_org_idx").on(t.organizationId)],
 );
 
 export const auditLog = pgTable(
