@@ -1,0 +1,621 @@
+{
+  "id": "1",
+  "dataset": "dentex",
+  "image_path": "/labels/1.jpg",
+  "width": 2744,
+  "height": 1316,
+  "variant_width": 1600,
+  "variant_height": 767,
+  "source_file": "train_673.png",
+  "license": "DENTEX (CC-BY-NC-SA-4.0); redistributed as downscaled derivative for research use",
+  "gt": [
+    {
+      "id": "gt_1_0",
+      "bbox": [
+        542.0,
+        698.0,
+        220.0,
+        271.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 8,
+      "pathology": "Impacted",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_1",
+      "bbox": [
+        675.0,
+        708.0,
+        243.0,
+        300.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_2",
+      "bbox": [
+        779.0,
+        376.0,
+        132.0,
+        317.0
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_3",
+      "bbox": [
+        1288.3116883116884,
+        723.3766233766233,
+        62.33766233766232,
+        387.0129870129871
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 1,
+      "pathology": "Periapical Lesion",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_4",
+      "bbox": [
+        1344.155844155844,
+        720.7792207792207,
+        77.92207792207796,
+        385.71428571428567
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 1,
+      "pathology": "Periapical Lesion",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_5",
+      "bbox": [
+        1405.1948051948052,
+        724.6753246753246,
+        75.32467532467535,
+        353.2467532467533
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 2,
+      "pathology": "Periapical Lesion",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_6",
+      "bbox": [
+        1463.0,
+        725.0,
+        98.0,
+        425.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 3,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_7",
+      "bbox": [
+        1536.0,
+        753.0,
+        103.0,
+        381.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 4,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_8",
+      "bbox": [
+        1600.0,
+        762.0,
+        122.0,
+        337.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 5,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_9",
+      "bbox": [
+        1667.0,
+        723.0,
+        237.0,
+        356.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 6,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_10",
+      "bbox": [
+        1701.0,
+        371.0,
+        145.0,
+        290.0
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 6,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_11",
+      "bbox": [
+        1806.0,
+        696.0,
+        237.0,
+        308.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_1_12",
+      "bbox": [
+        1952.0,
+        693.0,
+        177.0,
+        270.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 8,
+      "pathology": "Impacted",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    }
+  ],
+  "predictions": [
+    {
+      "bbox": [
+        2043.8797936439514,
+        841.1010365486145,
+        184.248060464859,
+        257.74744379520416
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 8,
+      "confidence": 0.796145,
+      "class_idx": 23
+    },
+    {
+      "bbox": [
+        846.9446415901184,
+        527.153382062912,
+        135.38098260760307,
+        340.86055517196655
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 7,
+      "confidence": 0.717885,
+      "class_idx": 6
+    },
+    {
+      "bbox": [
+        646.0484255552292,
+        845.979829788208,
+        216.53161770105362,
+        256.58716356754303
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 8,
+      "confidence": 0.702909,
+      "class_idx": 31
+    },
+    {
+      "bbox": [
+        1799.0359420776367,
+        918.374428987503,
+        247.64003121852875,
+        356.1890869140625
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 6,
+      "confidence": 0.666499,
+      "class_idx": 21
+    },
+    {
+      "bbox": [
+        915.3228771686554,
+        928.2557148933411,
+        252.9431228041649,
+        366.96144795417786
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 6,
+      "confidence": 0.653449,
+      "class_idx": 29
+    },
+    {
+      "bbox": [
+        1926.5592346191406,
+        869.0203971862793,
+        242.58595234155655,
+        311.9314597249031
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 7,
+      "confidence": 0.620032,
+      "class_idx": 22
+    },
+    {
+      "bbox": [
+        1663.876259803772,
+        950.4223854541779,
+        129.48376673460007,
+        356.5046890974045
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 5,
+      "confidence": 0.610688,
+      "class_idx": 20
+    },
+    {
+      "bbox": [
+        790.5231866836548,
+        875.570426940918,
+        250.87239199876785,
+        321.37201249599457
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 7,
+      "confidence": 0.610622,
+      "class_idx": 30
+    },
+    {
+      "bbox": [
+        1768.8008108139038,
+        497.5352133512497,
+        133.47767093777657,
+        327.5651023387909
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 6,
+      "confidence": 0.593584,
+      "class_idx": 13
+    },
+    {
+      "bbox": [
+        946.4039974212646,
+        512.14284491539,
+        196.14105463027954,
+        356.4260140657425
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 6,
+      "confidence": 0.569866,
+      "class_idx": 5
+    },
+    {
+      "bbox": [
+        1316.8816707134247,
+        897.9370403289795,
+        74.81250521540642,
+        347.41313421726227
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 1,
+      "confidence": 0.525114,
+      "class_idx": 24
+    },
+    {
+      "bbox": [
+        1044.4989762306213,
+        949.1286792755127,
+        142.7871173620224,
+        377.76294934749603
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 5,
+      "confidence": 0.519366,
+      "class_idx": 28
+    },
+    {
+      "bbox": [
+        1879.2864003181458,
+        485.4145128726959,
+        113.98120251297951,
+        327.68554651737213
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 7,
+      "confidence": 0.511202,
+      "class_idx": 14
+    },
+    {
+      "bbox": [
+        1672.4861297607422,
+        486.30174446105957,
+        113.03881821036339,
+        367.45055878162384
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 5,
+      "confidence": 0.496122,
+      "class_idx": 12
+    },
+    {
+      "bbox": [
+        1377.9646925926208,
+        892.3399746417999,
+        76.30981679260731,
+        324.60821932554245
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 1,
+      "confidence": 0.492709,
+      "class_idx": 16
+    },
+    {
+      "bbox": [
+        1208.0853605270386,
+        920.7454261779785,
+        90.02808126807213,
+        404.8458288908005
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 3,
+      "confidence": 0.477746,
+      "class_idx": 26
+    },
+    {
+      "bbox": [
+        1257.4580793380737,
+        909.9219224452972,
+        83.906743735075,
+        377.1176258325577
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 2,
+      "confidence": 0.476914,
+      "class_idx": 25
+    },
+    {
+      "bbox": [
+        1974.7713661193848,
+        469.59090888500214,
+        126.36743810772896,
+        314.62505984306335
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 8,
+      "confidence": 0.472288,
+      "class_idx": 15
+    },
+    {
+      "bbox": [
+        1142.3212268352509,
+        942.1597814559937,
+        96.45117804408073,
+        393.9375710487366
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 4,
+      "confidence": 0.470061,
+      "class_idx": 27
+    },
+    {
+      "bbox": [
+        1586.6533708572388,
+        952.8840589523315,
+        102.44592389464378,
+        378.30351662635803
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 4,
+      "confidence": 0.44882,
+      "class_idx": 19
+    },
+    {
+      "bbox": [
+        1399.5098118782043,
+        493.22589242458344,
+        100.3490038216114,
+        422.7679305076599
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 1,
+      "confidence": 0.427759,
+      "class_idx": 8
+    },
+    {
+      "bbox": [
+        1608.1507320404053,
+        482.59315407276154,
+        102.62097901105881,
+        372.53466796875
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 4,
+      "confidence": 0.426539,
+      "class_idx": 11
+    },
+    {
+      "bbox": [
+        1235.9765830039978,
+        480.7345643043518,
+        94.86829134821892,
+        440.0416102409363
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 2,
+      "confidence": 0.417936,
+      "class_idx": 1
+    },
+    {
+      "bbox": [
+        1312.3922455310822,
+        489.06294000148773,
+        101.34741598367691,
+        427.98985826969147
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 1,
+      "confidence": 0.398277,
+      "class_idx": 0
+    },
+    {
+      "bbox": [
+        1441.008822441101,
+        896.9647800922394,
+        76.50354275107384,
+        335.2755299806595
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 2,
+      "confidence": 0.388579,
+      "class_idx": 17
+    },
+    {
+      "bbox": [
+        1548.0782356262207,
+        481.93590772151947,
+        95.36707320809364,
+        415.7378889322281
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 3,
+      "confidence": 0.382908,
+      "class_idx": 10
+    },
+    {
+      "bbox": [
+        752.8548011779785,
+        516.2002567052841,
+        136.92127341032028,
+        321.76989793777466
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 8,
+      "confidence": 0.353152,
+      "class_idx": 7
+    },
+    {
+      "bbox": [
+        1474.4399847984314,
+        487.859792470932,
+        89.0692187845707,
+        419.95527851581573
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 2,
+      "confidence": 0.351941,
+      "class_idx": 9
+    },
+    {
+      "bbox": [
+        1059.527649641037,
+        497.6412638425827,
+        149.15625116229057,
+        389.0393639802933
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 5,
+      "confidence": 0.331524,
+      "class_idx": 4
+    },
+    {
+      "bbox": [
+        1513.7789225578308,
+        948.5313608646393,
+        97.40222054719925,
+        423.81819903850555
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 3,
+      "confidence": 0.320633,
+      "class_idx": 18
+    },
+    {
+      "bbox": [
+        1170.9127924442291,
+        469.22322273254395,
+        120.82837733626366,
+        457.0373388528824
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 3,
+      "confidence": 0.303567,
+      "class_idx": 2
+    },
+    {
+      "bbox": [
+        1113.857970237732,
+        480.5805871486664,
+        137.46558493375778,
+        429.37114238739014
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 4,
+      "confidence": 0.253669,
+      "class_idx": 3
+    }
+  ],
+  "prediction_model": "yolo_cv_best"
+}

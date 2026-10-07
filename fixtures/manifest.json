@@ -38,5 +38,47 @@
       "source": "data/evaluations/zero_shot_dentex_test_nvidia_nim_meta--llama-3.2-11b-vision-instruct.jsonl",
       "sanitized": true
     }
+  },
+  "labels": {
+    "1": {
+      "source": "data/dentex/DENTEX/training_data/quadrant-enumeration-disease/train_quadrant_enumeration_disease.json",
+      "image": "train_673.png",
+      "gt": "dentex_consensus",
+      "predictions": "yolo_cv_best (real inference)",
+      "sanitized": false,
+      "license": "DENTEX (CC-BY-NC-SA-4.0)"
+    },
+    "2": {
+      "source": "data/dentex/DENTEX/training_data/quadrant-enumeration-disease/train_quadrant_enumeration_disease.json",
+      "image": "train_283.png",
+      "gt": "dentex_consensus",
+      "predictions": "yolo_cv_best (real inference)",
+      "sanitized": false,
+      "license": "DENTEX (CC-BY-NC-SA-4.0)"
+    },
+    "3": {
+      "source": "data/dentex/DENTEX/training_data/quadrant-enumeration-disease/train_quadrant_enumeration_disease.json",
+      "image": "train_435.png",
+      "gt": "dentex_consensus (healthy, 0 boxes)",
+      "predictions": "yolo_cv_best (real inference)",
+      "sanitized": false,
+      "license": "DENTEX (CC-BY-NC-SA-4.0)"
+    },
+    "4": {
+      "source": "data/dentex/DENTEX/training_data/quadrant-enumeration-disease/train_quadrant_enumeration_disease.json",
+      "image": "train_95.png",
+      "gt": "dentex_consensus",
+      "predictions": "yolo_cv_best (real inference)",
+      "sanitized": false,
+      "license": "DENTEX (CC-BY-NC-SA-4.0)"
+    },
+    "5": {
+      "source": "data/dentex/DENTEX/training_data/quadrant-enumeration-disease/train_quadrant_enumeration_disease.json",
+      "image": "train_475.png",
+      "gt": "dentex_consensus",
+      "predictions": "yolo_cv_best (real inference)",
+      "sanitized": false,
+      "license": "DENTEX (CC-BY-NC-SA-4.0)"
+    }
   }
 }

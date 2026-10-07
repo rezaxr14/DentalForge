@@ -2,6 +2,7 @@ import { z } from "zod";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { EvalCase, UnverifiedTraceWrapper, VerifiedTrace } from "@/shared/contracts/traces";
+import { LabelFixture } from "@/shared/contracts/labels";
 
 const FIXTURES = join(process.cwd(), "fixtures");
 
@@ -128,4 +129,46 @@ export function listEvals(): EvalSummary[] {
 export function getEval(id: string): unknown {
   const params = z.object({ id: z.string().regex(/^[a-z0-9_]+$/i) }).parse({ id });
   return readJson(`evals/${params.id}.json`);
+}
+
+export interface LabelSummary {
+  id: string;
+  image_path: string;
+  width: number;
+  height: number;
+  source_file: string;
+  license: string;
+  gtCount: number;
+  predCount: number;
+  meanConf: number | null;
+  predictionModel: string | null;
+}
+
+/** M5 label fixtures, validated against the LabelFixture contract. */
+export function listLabels(): LabelSummary[] {
+  const dir = join(FIXTURES, "labels");
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((file) => {
+      const f = LabelFixture.parse(readJson(`labels/${file}`));
+      const confs = (f.predictions ?? []).map((p) => p.confidence);
+      return {
+        id: f.id,
+        image_path: f.image_path,
+        width: f.width,
+        height: f.height,
+        source_file: f.source_file,
+        license: f.license,
+        gtCount: f.gt.length,
+        predCount: confs.length,
+        meanConf: confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : null,
+        predictionModel: f.prediction_model,
+      } satisfies LabelSummary;
+    })
+    .sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+export function getLabel(id: string): LabelFixture {
+  const params = z.object({ id: z.string().regex(/^[a-z0-9_]+$/i) }).parse({ id });
+  return LabelFixture.parse(readJson(`labels/${params.id}.json`));
 }
