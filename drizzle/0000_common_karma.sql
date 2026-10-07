@@ -2,7 +2,7 @@ CREATE TABLE "accounts" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
 	"provider_id" text NOT NULL,
-	"provider_account_id" text NOT NULL,
+	"account_id" text NOT NULL,
 	"access_token" text,
 	"refresh_token" text,
 	"id_token" text,
@@ -161,16 +161,17 @@ CREATE TABLE "images" (
 --> statement-breakpoint
 CREATE TABLE "invites" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"org_id" uuid NOT NULL,
-	"email" text,
+	"organization_id" uuid NOT NULL,
+	"email" text NOT NULL,
 	"role" text NOT NULL,
-	"token_hash" text NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"token_hash" text,
+	"expires_at" timestamp with time zone,
 	"max_uses" integer DEFAULT 1 NOT NULL,
 	"uses" integer DEFAULT 0 NOT NULL,
-	"invited_by" text,
+	"inviter_id" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "invites_token_hash_unique" UNIQUE("token_hash")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "job_events" (
@@ -203,11 +204,11 @@ CREATE TABLE "jobs" (
 );
 --> statement-breakpoint
 CREATE TABLE "memberships" (
+	"id" uuid PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
-	"org_id" uuid NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"role" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "memberships_user_id_org_id_pk" PRIMARY KEY("user_id","org_id")
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "model_registry" (
@@ -226,7 +227,10 @@ CREATE TABLE "organizations" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"slug" text NOT NULL,
 	"name" text NOT NULL,
+	"logo" text,
+	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "organizations_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
@@ -301,6 +305,7 @@ CREATE TABLE "sessions" (
 	"expires_at" timestamp with time zone NOT NULL,
 	"ip_address" text,
 	"user_agent" text,
+	"active_organization_id" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "sessions_token_unique" UNIQUE("token")
@@ -436,11 +441,11 @@ ALTER TABLE "image_variants" ADD CONSTRAINT "image_variants_org_id_organizations
 ALTER TABLE "image_variants" ADD CONSTRAINT "image_variants_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "images" ADD CONSTRAINT "images_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "images" ADD CONSTRAINT "images_dataset_id_datasets_id_fk" FOREIGN KEY ("dataset_id") REFERENCES "public"."datasets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "invites" ADD CONSTRAINT "invites_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "invites" ADD CONSTRAINT "invites_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "job_events" ADD CONSTRAINT "job_events_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "jobs" ADD CONSTRAINT "jobs_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "memberships" ADD CONSTRAINT "memberships_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "model_registry" ADD CONSTRAINT "model_registry_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "predictions" ADD CONSTRAINT "predictions_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "predictions" ADD CONSTRAINT "predictions_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -485,12 +490,13 @@ CREATE INDEX "image_variants_org_idx" ON "image_variants" USING btree ("org_id")
 CREATE UNIQUE INDEX "images_dataset_source_uniq" ON "images" USING btree ("dataset_id","source_image_id");--> statement-breakpoint
 CREATE INDEX "images_org_idx" ON "images" USING btree ("org_id");--> statement-breakpoint
 CREATE INDEX "images_dataset_idx" ON "images" USING btree ("dataset_id");--> statement-breakpoint
-CREATE INDEX "invites_org_idx" ON "invites" USING btree ("org_id");--> statement-breakpoint
+CREATE INDEX "invites_org_idx" ON "invites" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "job_events_job_idx" ON "job_events" USING btree ("job_id");--> statement-breakpoint
 CREATE INDEX "jobs_claim_idx" ON "jobs" USING btree ("status","priority","created_at");--> statement-breakpoint
 CREATE INDEX "jobs_org_idx" ON "jobs" USING btree ("org_id","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "jobs_idem_uniq" ON "jobs" USING btree ("org_id","idempotency_key");--> statement-breakpoint
-CREATE INDEX "memberships_org_idx" ON "memberships" USING btree ("org_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "memberships_user_org_uniq" ON "memberships" USING btree ("user_id","organization_id");--> statement-breakpoint
+CREATE INDEX "memberships_org_idx" ON "memberships" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "model_registry_uniq" ON "model_registry" USING btree ("org_id","name","stage");--> statement-breakpoint
 CREATE INDEX "model_registry_org_idx" ON "model_registry" USING btree ("org_id");--> statement-breakpoint
 CREATE INDEX "organizations_slug_idx" ON "organizations" USING btree ("slug");--> statement-breakpoint
