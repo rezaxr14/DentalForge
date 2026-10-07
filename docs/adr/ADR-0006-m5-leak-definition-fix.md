@@ -51,3 +51,14 @@ reports zero leaks on the current corpus.
 Leak = assistant-text `LEAK_PATTERNS` match (messages + thoughts); scaffold
 = separate expected-setup metric. ADR-0003's systemic-leak conclusion is
 withdrawn; its row-vs-case dedupe note still stands.
+
+## Addendum 2026-10-07: milestone numbering vs the full plan
+
+The LabelForge editor/review/queue/export work already in the tree calls
+itself "M5" (ADR-0005, `tests/m5-labels.test.ts`,
+`scripts/generate_m5_labels.py`). The completed plan file (§13) assigns M5
+to this correctness/hygiene pass and LabelForge core to M9 with review/queue/
+export in M10. Renaming is pure churn with zero behavior change, so the M5
+names stay; mapping: old-M5 editor core ≈ new-plan M9, old-M5 review/queue/
+export ≈ new-plan M10 (minus Canvas2D engine, `useOptimistic`, virtualized
+queue, server zip — those remain M9/M10 work).

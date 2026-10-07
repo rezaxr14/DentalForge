@@ -1,0 +1,122 @@
+{
+  "id": "5",
+  "dataset": "dentex",
+  "image_path": "/labels/5.jpg",
+  "width": 2872,
+  "height": 1504,
+  "variant_width": 1600,
+  "variant_height": 838,
+  "source_file": "train_475.png",
+  "license": "DENTEX (CC-BY-NC-SA-4.0); redistributed as downscaled derivative for research use",
+  "gt": [
+    {
+      "id": "gt_5_0",
+      "bbox": [
+        1082.0,
+        863.0,
+        109.0,
+        301.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 4,
+      "pathology": "Deep Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_5_1",
+      "bbox": [
+        1211.0,
+        891.0,
+        200.0,
+        298.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 2,
+      "pathology": "Periapical Lesion",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    }
+  ],
+  "predictions": [
+    {
+      "bbox": [
+        2103.3357100486755,
+        737.8351774215698,
+        179.65282499790192,
+        288.28239345550537
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 6,
+      "confidence": 0.341902,
+      "class_idx": 13
+    },
+    {
+      "bbox": [
+        2306.174325466156,
+        936.3019485473633,
+        251.54222184419632,
+        270.6999526023865
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 8,
+      "confidence": 0.325537,
+      "class_idx": 23
+    },
+    {
+      "bbox": [
+        761.362498998642,
+        701.2813301086426,
+        150.95355501770973,
+        299.28558015823364
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 8,
+      "confidence": 0.321935,
+      "class_idx": 7
+    },
+    {
+      "bbox": [
+        717.4057328701019,
+        941.0590705871582,
+        272.32708489894867,
+        259.6190209388733
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 7,
+      "confidence": 0.303732,
+      "class_idx": 30
+    },
+    {
+      "bbox": [
+        1991.4084105491638,
+        733.3959827423096,
+        107.65441569685936,
+        313.39287281036377
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 5,
+      "confidence": 0.281226,
+      "class_idx": 12
+    },
+    {
+      "bbox": [
+        1019.5988280773163,
+        1025.3959255218506,
+        167.71673688292503,
+        323.07457447052
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 5,
+      "confidence": 0.27337,
+      "class_idx": 28
+    }
+  ],
+  "prediction_model": "yolo_cv_best"
+}

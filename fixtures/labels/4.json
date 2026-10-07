@@ -1,0 +1,314 @@
+{
+  "id": "4",
+  "dataset": "dentex",
+  "image_path": "/labels/4.jpg",
+  "width": 2872,
+  "height": 1504,
+  "variant_width": 1600,
+  "variant_height": 838,
+  "source_file": "train_95.png",
+  "license": "DENTEX (CC-BY-NC-SA-4.0); redistributed as downscaled derivative for research use",
+  "gt": [
+    {
+      "id": "gt_4_0",
+      "bbox": [
+        716.0,
+        562.0,
+        189.0,
+        308.0
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 8,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_1",
+      "bbox": [
+        843.0,
+        838.0,
+        190.0,
+        325.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_2",
+      "bbox": [
+        847.0,
+        530.0,
+        197.0,
+        330.0
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_3",
+      "bbox": [
+        1006.0,
+        826.0,
+        177.0,
+        345.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 6,
+      "pathology": "Periapical Lesion",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_4",
+      "bbox": [
+        1142.0,
+        816.0,
+        114.0,
+        333.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 5,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_5",
+      "bbox": [
+        1215.0,
+        815.0,
+        132.0,
+        338.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 4,
+      "pathology": "Periapical Lesion",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_6",
+      "bbox": [
+        1576.0,
+        471.0,
+        84.0,
+        329.0
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 2,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_7",
+      "bbox": [
+        1649.0,
+        791.0,
+        104.0,
+        329.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 4,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_8",
+      "bbox": [
+        1727.0,
+        795.0,
+        102.0,
+        341.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 5,
+      "pathology": "Deep Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_9",
+      "bbox": [
+        1784.0,
+        460.0,
+        118.0,
+        348.0
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 5,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_10",
+      "bbox": [
+        1867.0,
+        467.0,
+        176.0,
+        345.0
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 6,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_11",
+      "bbox": [
+        1900.0,
+        786.0,
+        243.0,
+        333.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_12",
+      "bbox": [
+        2022.5806451612902,
+        444.83870967741933,
+        137.0967741935483,
+        345.16129032258067
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_4_13",
+      "bbox": [
+        2151.6153846153848,
+        515.6923076923076,
+        134.6153846153843,
+        271.1538461538462
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 8,
+      "pathology": "Deep Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    }
+  ],
+  "predictions": [
+    {
+      "bbox": [
+        1092.0675776004791,
+        1001.4544219970703,
+        182.9460945725441,
+        349.024582862854
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 6,
+      "confidence": 0.472662,
+      "class_idx": 29
+    },
+    {
+      "bbox": [
+        824.7821769714355,
+        710.2699384689331,
+        180.13434571027756,
+        326.71507358551025
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 8,
+      "confidence": 0.470992,
+      "class_idx": 7
+    },
+    {
+      "bbox": [
+        1958.7909083366394,
+        640.7996501922607,
+        185.8691347837448,
+        325.7315068244934
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 6,
+      "confidence": 0.346167,
+      "class_idx": 5
+    },
+    {
+      "bbox": [
+        936.9410035610199,
+        1006.0287570953369,
+        209.03821331262589,
+        327.46343326568604
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 7,
+      "confidence": 0.319862,
+      "class_idx": 30
+    },
+    {
+      "bbox": [
+        2175.1216044425964,
+        915.4649543762207,
+        220.13330388069153,
+        271.68535709381104
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 8,
+      "confidence": 0.319681,
+      "class_idx": 23
+    }
+  ],
+  "prediction_model": "yolo_cv_best"
+}

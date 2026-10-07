@@ -1,0 +1,144 @@
+{
+  "id": "2",
+  "dataset": "dentex",
+  "image_path": "/labels/2.jpg",
+  "width": 2872,
+  "height": 1504,
+  "variant_width": 1600,
+  "variant_height": 838,
+  "source_file": "train_283.png",
+  "license": "DENTEX (CC-BY-NC-SA-4.0); redistributed as downscaled derivative for research use",
+  "gt": [
+    {
+      "id": "gt_2_0",
+      "bbox": [
+        792.0,
+        980.0,
+        168.0,
+        165.0
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 8,
+      "pathology": "Impacted",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_2_1",
+      "bbox": [
+        1732.0,
+        679.0,
+        140.0,
+        252.0
+      ],
+      "fdi_quadrant": 2,
+      "fdi_position": 6,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_2_2",
+      "bbox": [
+        1824.0,
+        995.0,
+        229.0,
+        255.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 7,
+      "pathology": "Caries",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    },
+    {
+      "id": "gt_2_3",
+      "bbox": [
+        2013.0,
+        1049.0,
+        140.0,
+        135.0
+      ],
+      "fdi_quadrant": 3,
+      "fdi_position": 8,
+      "pathology": "Impacted",
+      "source": "gt_import",
+      "confidence": null,
+      "status": "approved",
+      "version": 1,
+      "author_id": "dentex_consensus"
+    }
+  ],
+  "predictions": [
+    {
+      "bbox": [
+        872.4168429374695,
+        1070.3344402313232,
+        160.31194633245468,
+        159.64727115631104
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 8,
+      "confidence": 0.732395,
+      "class_idx": 31
+    },
+    {
+      "bbox": [
+        2086.7672719955444,
+        1120.9779872894287,
+        166.5797077715397,
+        156.68444633483887
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 8,
+      "confidence": 0.575001,
+      "class_idx": 31
+    },
+    {
+      "bbox": [
+        1194.0725076198578,
+        755.8568134307861,
+        123.27832165360451,
+        281.85217475891113
+      ],
+      "fdi_quadrant": 1,
+      "fdi_position": 6,
+      "confidence": 0.410741,
+      "class_idx": 5
+    },
+    {
+      "bbox": [
+        1948.4053134918213,
+        1132.5636672973633,
+        226.79467207193375,
+        262.25291442871094
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 7,
+      "confidence": 0.39534,
+      "class_idx": 30
+    },
+    {
+      "bbox": [
+        1111.0292611122131,
+        1132.2025756835938,
+        199.09502351284027,
+        283.97618770599365
+      ],
+      "fdi_quadrant": 4,
+      "fdi_position": 6,
+      "confidence": 0.385479,
+      "class_idx": 29
+    }
+  ],
+  "prediction_model": "yolo_cv_best"
+}
