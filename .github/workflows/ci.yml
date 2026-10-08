@@ -6,6 +6,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: traceforge
+          POSTGRES_PASSWORD: traceforge
+          POSTGRES_DB: traceforge
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U traceforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://traceforge:traceforge@localhost:5433/traceforge
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,5 +34,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # Full §5.2 cross-tenant + Better Auth suites need the schema.
+      - run: pnpm exec drizzle-kit push
       - run: pnpm test
       - run: pnpm build
+
