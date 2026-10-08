@@ -12,6 +12,7 @@ import {
   DatasetRecord,
   EvalRunRecord,
   ImageRecord,
+  InviteRecord,
   MembershipRecord,
   OrgRecord,
   OrgStore,
@@ -126,6 +127,32 @@ class ScopedMemory implements ScopedRepos {
   async listAudit(): Promise<AuditRecord[]> {
     return [...this.root.audit.values()].filter((a) => a.orgId === this.orgId);
   }
+
+  async createInvite(input: Omit<InviteRecord, "id">): Promise<InviteRecord> {
+    if (input.orgId !== this.orgId) throw new Error("cross-tenant access blocked");
+    const rec: InviteRecord = { ...input, id: uid() };
+    this.root.invites.set(rec.id, rec);
+    return rec;
+  }
+
+  async getInviteByHash(tokenHash: string): Promise<InviteRecord | null> {
+    for (const inv of this.root.invites.values()) {
+      if (inv.orgId === this.orgId && inv.tokenHash === tokenHash) return inv;
+    }
+    return null;
+  }
+
+  async consumeInvite(tokenHash: string): Promise<InviteRecord | null> {
+    const inv = await this.getInviteByHash(tokenHash);
+    if (!inv) return null;
+    if (inv.status !== "pending") return null;
+    if (inv.uses >= inv.maxUses) return null;
+    if (inv.expiresAt !== null && inv.expiresAt.getTime() <= Date.now()) return null;
+    inv.uses += 1;
+    if (inv.uses >= inv.maxUses) inv.status = "accepted";
+    this.root.invites.set(inv.id, inv);
+    return inv;
+  }
 }
 
 export class MemoryStore implements OrgStore {
@@ -138,6 +165,7 @@ export class MemoryStore implements OrgStore {
   readonly evalRuns = new Map<string, EvalRunRecord>();
   readonly annotations = new Map<string, AnnotationRecord>();
   readonly audit = new Map<string, AuditRecord>();
+  readonly invites = new Map<string, InviteRecord>();
 
   async createOrg(input: { slug: string; name: string }): Promise<OrgRecord> {
     if (this.bySlug.has(input.slug)) throw new Error(`org slug taken: ${input.slug}`);

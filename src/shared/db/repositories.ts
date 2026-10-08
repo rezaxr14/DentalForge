@@ -8,7 +8,7 @@
  *   - tests/m6-platform.test.ts      (memory)
  *   - tests/m6-repos.test.ts         (drizzle, requires Docker Postgres)
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import type { Db } from "./pg";
 import {
   annotations,
@@ -16,6 +16,7 @@ import {
   datasets,
   evalRuns,
   images,
+  invites,
   memberships,
   organizations,
   traces,
@@ -26,12 +27,29 @@ import type {
   DatasetRecord,
   EvalRunRecord,
   ImageRecord,
+  InviteRecord,
   MembershipRecord,
   OrgRecord,
   OrgStore,
   ScopedRepos,
   TraceRecord,
 } from "./repos";
+
+/** Map a raw `invites` row to the InviteRecord contract (org_id alias). */
+function toInvite(row: typeof invites.$inferSelect): InviteRecord {
+  return {
+    id: row.id,
+    orgId: row.organizationId,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    tokenHash: row.tokenHash,
+    expiresAt: row.expiresAt,
+    maxUses: row.maxUses,
+    uses: row.uses,
+    inviterId: row.inviterId,
+  };
+}
 
 class ScopedPg implements ScopedRepos {
   constructor(
@@ -185,6 +203,62 @@ class ScopedPg implements ScopedRepos {
       .from(auditLog)
       .where(eq(auditLog.orgId, this.orgId))
       .orderBy(asc(auditLog.createdAt));
+  }
+
+  async createInvite(input: Omit<InviteRecord, "id">): Promise<InviteRecord> {
+    if (input.orgId !== this.orgId) throw new Error("cross-tenant access blocked");
+    const rows = await this.db
+      .insert(invites)
+      .values({
+        organizationId: this.orgId,
+        email: input.email,
+        role: input.role,
+        status: input.status,
+        tokenHash: input.tokenHash,
+        expiresAt: input.expiresAt,
+        maxUses: input.maxUses,
+        uses: input.uses,
+        inviterId: input.inviterId,
+      })
+      .returning();
+    return toInvite(rows[0]!);
+  }
+
+  async getInviteByHash(tokenHash: string): Promise<InviteRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(invites)
+      .where(and(eq(invites.organizationId, this.orgId), eq(invites.tokenHash, tokenHash)))
+      .limit(1);
+    const row = rows[0];
+    return row ? toInvite(row) : null;
+  }
+
+  /**
+   * Atomic single-statement consume: increments `uses` (and flips to
+   * `accepted` at maxUses) only when the row is still live, then returns it.
+   * Concurrent accept clicks race safely — only live rows match the WHERE.
+   */
+  async consumeInvite(tokenHash: string): Promise<InviteRecord | null> {
+    const rows = await this.db
+      .update(invites)
+      .set({
+        uses: sql`${invites.uses} + 1`,
+        status: sql`CASE WHEN ${invites.uses} + 1 >= ${invites.maxUses} THEN 'accepted'::text ELSE ${invites.status} END` as unknown as InviteRecord["status"],
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(invites.organizationId, this.orgId),
+          eq(invites.tokenHash, tokenHash),
+          eq(invites.status, "pending"),
+          lte(invites.uses, sql`${invites.maxUses} - 1`),
+          gt(invites.expiresAt, new Date()),
+        ),
+      )
+      .returning();
+    const row = rows[0];
+    return row ? toInvite(row) : null;
   }
 }
 
