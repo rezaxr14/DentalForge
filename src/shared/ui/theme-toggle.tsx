@@ -14,7 +14,7 @@ function useMounted(): boolean {
  * dark-mode toggle). Renders nothing until mounted to avoid hydration
  * mismatch between server (no theme class) and client.
  */
-export function ThemeToggle() {
+export function ThemeToggle({ inline = false }: { inline?: boolean }) {
   const { resolvedTheme, setTheme } = useTheme();
   if (!useMounted()) return null;
 
@@ -24,7 +24,11 @@ export function ThemeToggle() {
       type="button"
       aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
       onClick={() => setTheme(dark ? "light" : "dark")}
-      className="fixed top-4 right-4 z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-accent"
+      className={
+        inline
+          ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-accent"
+          : "fixed top-4 right-4 z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-accent"
+      }
     >
       {dark ? (
         // Sun (light mode available)
