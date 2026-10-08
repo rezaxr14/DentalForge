@@ -77,6 +77,59 @@ describe("env + capabilities", () => {
     expect(caps.redis).toBe(false);
     expect(caps.r2).toBe(false);
     expect(caps.workerMode).toBe("off");
+    // The dev-default DATABASE_URL must NOT claim a database exists.
+    expect(env.dbConfigured).toBe(false);
+    expect(caps.db).toBe(false);
+  });
+
+  it("capabilities().db is true only when DATABASE_URL is explicit", () => {
+    expect(capabilities(parseEnv({ DATABASE_URL: "postgresql://db:5432/app" })).db).toBe(true);
+    expect(capabilities(parseEnv({ DATABASE_URL: "" })).db).toBe(false);
+  });
+
+  it("production refuses to boot with missing critical secrets", () => {
+    expect(() => parseEnv({ NODE_ENV: "production" })).toThrow(/DATABASE_URL must be set explicitly/);
+    expect(() => parseEnv({ NODE_ENV: "production" })).toThrow(/BETTER_AUTH_SECRET must be set explicitly/);
+    expect(() => parseEnv({ NODE_ENV: "production" })).toThrow(/INVITE_SIGNING_SECRET must be set explicitly/);
+    expect(() => parseEnv({ NODE_ENV: "production" })).toThrow(/BETTER_AUTH_URL must be set explicitly/);
+  });
+
+  it("production rejects the publicly known defaults committed to this repo", () => {
+    const base = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://prod:5432/app",
+      BETTER_AUTH_URL: "https://traceforge.example",
+      BETTER_AUTH_SECRET: "dev-only-secret-min-32-chars-0123456789ab",
+      INVITE_SIGNING_SECRET: "change-me-invite-secret",
+    };
+    expect(() => parseEnv(base)).toThrow(/publicly known value committed to this repo/);
+    // Even the .env.example placeholder auth secret is rejected.
+    expect(() =>
+      parseEnv({ ...base, BETTER_AUTH_SECRET: "change-me-min-32-characters-please", INVITE_SIGNING_SECRET: "unique-invite-secret-0123456789" }),
+    ).toThrow(/BETTER_AUTH_SECRET is a publicly known value/);
+    // A short (but unique) production secret is also rejected.
+    expect(() =>
+      parseEnv({ ...base, BETTER_AUTH_SECRET: "short", INVITE_SIGNING_SECRET: "unique-invite-secret-0123456789" }),
+    ).toThrow(/at least 32 characters/);
+  });
+
+  it("production boots with explicit, strong, unique secrets", () => {
+    const env = parseEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://prod:5432/app",
+      BETTER_AUTH_URL: "https://traceforge.example",
+      BETTER_AUTH_SECRET: "a-strong-and-unique-production-secret-0123456789",
+      INVITE_SIGNING_SECRET: "a-strong-and-unique-invite-secret-0123456789",
+    });
+    expect(env.NODE_ENV).toBe("production");
+    expect(env.dbConfigured).toBe(true);
+    expect(capabilities(env).db).toBe(true);
+  });
+
+  it("empty env strings behave like unset values", () => {
+    const env = parseEnv({ DATABASE_URL: "", WORKER_MODE: "" });
+    expect(env.dbConfigured).toBe(false);
+    expect(env.WORKER_MODE).toBe("off");
   });
 
   it("derives worker status thresholds (30s / 120s)", () => {
