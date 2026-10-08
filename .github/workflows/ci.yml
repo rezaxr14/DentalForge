@@ -22,6 +22,11 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://traceforge:traceforge@localhost:5433/traceforge
+      # Production-mode build (next build runs with NODE_ENV=production) must
+      # pass the env secrets guard in src/shared/config/env.ts — CI-only values.
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-better-auth-secret-0123456789abcdef0123456789ab
+      INVITE_SIGNING_SECRET: ci-invite-secret-0123456789abcdef
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

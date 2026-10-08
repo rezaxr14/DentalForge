@@ -3,8 +3,9 @@
  * backend — the same assertions as the memory suite in m6-platform.test.ts,
  * proving `scoped(orgId)` holds in SQL (org_id pinned on every read/write).
  *
- * The DB-backed describe skips without Docker Postgres; the selection tests
- * run everywhere via injected probes.
+ * The DB-backed describe skips without Docker Postgres (but FAILS in CI —
+ * see the probe below); the selection tests run everywhere via injected
+ * probes.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
@@ -37,6 +38,14 @@ try {
   dbUp = false;
 }
 await pool.end();
+
+if (!dbUp && process.env.CI) {
+  throw new Error(
+    `[m6-repos] CI requires Postgres but the probe of ${getEnv().DATABASE_URL} failed. ` +
+      "The SQL isolation suite must run on every CI push; failing instead of skipping " +
+      "so cross-tenant coverage can never be silently dropped.",
+  );
+}
 
 const suffix = Date.now().toString(36);
 const slugA = `m6-repos-a-${suffix}`;

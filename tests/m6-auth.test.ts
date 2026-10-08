@@ -3,7 +3,10 @@
  * (table/modelName mapping, column names, role enum) against real Postgres.
  *
  * Skips itself entirely when Docker Postgres is not reachable so `pnpm ci`
- * stays green in environments without the dev database.
+ * stays green in environments without the dev database — EXCEPT in CI
+ * (process.env.CI), where an unreachable database is a hard failure: GitHub
+ * Actions runs a postgres service + `drizzle-kit push`, so a probe miss there
+ * means the pipeline is misconfigured and silently skipping coverage.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
@@ -26,6 +29,14 @@ try {
   dbUp = false;
 }
 await pool.end();
+
+if (!dbUp && process.env.CI) {
+  throw new Error(
+    `[m6-auth] CI requires Postgres but the probe of ${getEnv().DATABASE_URL} failed. ` +
+      "ci.yml must provide the postgres service and run `drizzle-kit push` before `pnpm test`; " +
+      "failing instead of skipping so this suite can never be silently dropped from CI.",
+  );
+}
 
 const suffix = Date.now().toString(36);
 const ownerEmail = `m6-owner-${suffix}@test.local`;
