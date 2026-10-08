@@ -105,6 +105,25 @@ export interface AuditRecord {
   createdAt: Date;
 }
 
+/**
+ * Invite link record (plan §7 `invites` + our signed-link extension).
+ * Custom open links (`tf_inv_…`, shared/lib/invites.ts) persist here with
+ * `email: ""`; Better Auth email invitations share the table with a real
+ * address. `tokenHash` is sha256 so a DB dump cannot mint memberships.
+ */
+export interface InviteRecord {
+  id: string;
+  orgId: string;
+  email: string;
+  role: "admin" | "annotator" | "reviewer";
+  status: "pending" | "accepted" | "rejected" | "canceled";
+  tokenHash: string | null;
+  expiresAt: Date | null;
+  maxUses: number;
+  uses: number;
+  inviterId: string | null;
+}
+
 /** Scoped repository surface — one org's view of the world. */
 export interface ScopedRepos {
   readonly orgId: string;
@@ -120,6 +139,15 @@ export interface ScopedRepos {
   createAnnotation(input: Omit<AnnotationRecord, "id" | "orgId" | "updatedAt">): Promise<AnnotationRecord>;
   appendAudit(input: { actorId: string | null; action: string; resource?: string; meta?: Record<string, unknown> }): Promise<AuditRecord>;
   listAudit(): Promise<AuditRecord[]>;
+  /**
+   * Invite links (custom signed-link flow: `tf_inv_…` + max_uses/uses).
+   * `createInvite` persists the hash; `consumeInvite` atomically increments
+   * `uses` iff the invite is still live (pending, unexpired, uses < maxUses)
+   * and returns the updated record, or null when it cannot be consumed.
+   */
+  createInvite(input: Omit<InviteRecord, "id">): Promise<InviteRecord>;
+  consumeInvite(tokenHash: string): Promise<InviteRecord | null>;
+  getInviteByHash(tokenHash: string): Promise<InviteRecord | null>;
 }
 
 /** Top-level store: orgs, memberships, and the `scoped()` entry point. */

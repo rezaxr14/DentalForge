@@ -202,4 +202,56 @@ describe("cross-tenant isolation (plan §5.2)", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("org A cannot see or consume org B invite links", async () => {
+    const { store, b } = await twoOrgs();
+    const { hashToken } = await import("@/shared/lib/invites");
+    const rb = store.scoped(b.id);
+    const tokenHash = hashToken("link-secret");
+    await rb.createInvite({
+      orgId: b.id, email: "", role: "annotator", status: "pending", tokenHash,
+      expiresAt: new Date(Date.now() + 3_600_000), maxUses: 2, uses: 0, inviterId: null,
+    });
+    const ra = store.scoped((await store.createOrg({ slug: "org-c", name: "C" })).id);
+    expect(await ra.getInviteByHash(tokenHash)).toBeNull();
+    expect(await ra.consumeInvite(tokenHash)).toBeNull();
+  });
+
+  it("invite links consume uses and expire at maxUses", async () => {
+    const { MemoryStore } = await import("@/shared/db/memory");
+    const { hashToken } = await import("@/shared/lib/invites");
+    const store = new MemoryStore();
+    const org = await store.createOrg({ slug: "org-inv", name: "Inv" });
+    const scoped = store.scoped(org.id);
+    const tokenHash = hashToken("multi-use");
+    await scoped.createInvite({
+      orgId: org.id, email: "", role: "reviewer", status: "pending", tokenHash,
+      expiresAt: new Date(Date.now() + 3_600_000), maxUses: 2, uses: 0, inviterId: null,
+    });
+    const first = await scoped.consumeInvite(tokenHash);
+    expect(first?.uses).toBe(1);
+    expect(first?.status).toBe("pending");
+    const second = await scoped.consumeInvite(tokenHash);
+    expect(second?.uses).toBe(2);
+    expect(second?.status).toBe("accepted");
+    expect(await scoped.consumeInvite(tokenHash)).toBeNull();
+  });
+
+  it("expired or canceled invites cannot be consumed", async () => {
+    const { MemoryStore } = await import("@/shared/db/memory");
+    const { hashToken } = await import("@/shared/lib/invites");
+    const store = new MemoryStore();
+    const org = await store.createOrg({ slug: "org-inv2", name: "Inv2" });
+    const scoped = store.scoped(org.id);
+    await scoped.createInvite({
+      orgId: org.id, email: "", role: "annotator", status: "pending", tokenHash: hashToken("stale"),
+      expiresAt: new Date(Date.now() - 1_000), maxUses: 5, uses: 0, inviterId: null,
+    });
+    await scoped.createInvite({
+      orgId: org.id, email: "", role: "annotator", status: "canceled", tokenHash: hashToken("dead"),
+      expiresAt: new Date(Date.now() + 3_600_000), maxUses: 5, uses: 0, inviterId: null,
+    });
+    expect(await scoped.consumeInvite(hashToken("stale"))).toBeNull();
+    expect(await scoped.consumeInvite(hashToken("dead"))).toBeNull();
+  });
 });
