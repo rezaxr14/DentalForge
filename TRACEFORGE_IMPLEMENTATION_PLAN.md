@@ -523,9 +523,9 @@ Status as of commit `c9f5402` (2026-10-05). M0–M4 were built ahead of this sec
 | M2 | TS ports of metrics + rewards with golden parity | **Done** | FDI/class-index, matching, ECE, rewards exact; bootstrap statistical |
 | M3 | Data-quality dashboard from a full trace scan | **Done, needs fix** | see R1: leak definition is wrong |
 | M4 | Tool Lab with Python-parity goldens | **Done** | 7/8 tools bit-exact; `locate_tooth` deferred |
-| M5 | Correctness and repo hygiene pass | Next | R1 fixed; README replaced; `test`/`typecheck`/`ci` scripts; GitHub Actions; self-host fonts; ADR dates fixed; fold ADR-0001 deviations back into §4 |
-| M6 | Platform foundation | Planned | Neon + Drizzle migrations; Better Auth with orgs, roles, invites; env validation with optional services; repository layer; design system + light/dark theme; cross-tenant isolation tests green |
-| M7 | Importer + DataSource switch | Planned | `pnpm import:local|hf` idempotent; counts match source (1,847 images, 3,694 trace rows after dedupe, 8 eval runs); pages read Postgres in prod and fixtures in demo/offline mode; dedupe stats replace the row-count caveat |
+| M5 | Correctness and repo hygiene pass | **Done** | R1 fixed; README replaced; `test`/`typecheck`/`ci` scripts; GitHub Actions; self-host fonts; ADR dates fixed; fold ADR-0001 deviations back into §4 |
+| M6 | Platform foundation | **Done** | Neon + Drizzle migrations; Better Auth with orgs, roles, invites; env validation with optional services; repository layer; design system + light/dark theme; cross-tenant isolation tests green |
+| M7 | Importer + DataSource switch | **Done** | `pnpm import:local` idempotent; counts match source (1,645 images, 3,694 trace rows after dedupe, 8 eval runs, ADR-0008); pages read Postgres in prod and fixtures in demo/offline mode; dedupe stats replace the row-count caveat |
 | M8 | Jobs, worker contract, capability ladder | Planned | §9 and §10 implemented; mock worker; SSE with polling fallback; `degradation.spec.ts` passes with worker/Redis/storage off |
 | M9 | LabelForge editor core | Planned | §11.3 editor with perf budget and accessible table view; autosave with versioning |
 | M10 | Review, agreement, queue, export | Planned | κ and agreement tested on fixtures; YOLO/COCO round-trip test; audit log |

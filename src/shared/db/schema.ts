@@ -465,7 +465,11 @@ export const traces = pgTable(
   },
   (t) => [
     uniqueIndex("traces_unique_uniq").on(t.datasetId, t.imageId, t.cohort, t.mode),
-    uniqueIndex("traces_content_uniq").on(t.contentHash),
+    // Plan §7: identity-unique only. A GLOBAL unique on content_hash was
+    // removed (ADR-0008): (a) 11 cross-cohort rows are byte-identical but
+    // distinct identities — both must load to hit the DoD's 3,694 rows;
+    // (b) it would make org B silently lose rows org A already imported.
+    index("traces_content_idx").on(t.contentHash),
     index("traces_org_idx").on(t.orgId),
     index("traces_org_verified_idx").on(t.orgId, t.verified),
   ],
