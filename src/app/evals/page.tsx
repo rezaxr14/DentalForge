@@ -1,10 +1,20 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { getEval, listEvals } from "@/shared/lib/fixtures";
-import { EvalCase } from "@/shared/contracts/traces";
+import type { EvalCaseT } from "@/shared/contracts/traces";
+import { resolveDataSource } from "@/shared/lib/resolve-source";
 
-export function EvalsTable() {
-  const rows = [...listEvals()].sort((a, b) => b.exactF1 - a.exactF1);
+function ProvenanceBadge({ provenance }: { provenance: string }) {
+  const label = provenance === "postgres" ? "postgres" : "fixture replay";
+  return (
+    <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-normal text-zinc-600">
+      {label}
+    </span>
+  );
+}
+
+export async function EvalsTable() {
+  const { source } = await resolveDataSource();
+  const rows = [...(await source.listEvalRuns())].sort((a, b) => b.exactF1 - a.exactF1);
   return (
     <table className="mt-6 w-full text-sm">
       <thead>
@@ -34,17 +44,29 @@ export function EvalsTable() {
   );
 }
 
-export default function EvalsPage() {
+export default async function EvalsPage() {
+  const { source, fallbackReason } = await resolveDataSource();
+  const runs = await source.listEvalRuns();
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
         Research prototype, not for clinical use
       </p>
-      <h1 className="text-2xl font-semibold tracking-tight">Eval Hub</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        Eval Hub
+        <ProvenanceBadge provenance={source.provenance} />
+      </h1>
       <p className="mt-1 text-sm text-zinc-600">
-        Means over full real JSONL files (verified in M0, see ADR-0001). Fixture holds one case
-        per model for drill-down.
+        {runs.length} runs.{" "}
+        {source.provenance === "postgres"
+          ? "Means over full imported runs (computed at import, plan rule 3)."
+          : "Means over full real JSONL files (verified in M0, see ADR-0001). Fixture holds one case per model for drill-down."}
       </p>
+      {fallbackReason && (
+        <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          {fallbackReason}
+        </p>
+      )}
       <Suspense fallback={<p className="mt-6 text-sm">Loading leaderboard…</p>}>
         <EvalsTable />
       </Suspense>
@@ -52,8 +74,7 @@ export default function EvalsPage() {
   );
 }
 
-export function EvalDetail({ id }: { id: string }) {
-  const c = EvalCase.parse(getEval(id) as unknown);
+export function EvalDetail({ evalCase: c }: { evalCase: EvalCaseT }) {
   return (
     <div className="mt-6 space-y-4 text-sm">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -78,10 +99,10 @@ export function EvalDetail({ id }: { id: string }) {
   );
 }
 
-export function EvalDetailSection({ id }: { id: string }) {
+export function EvalDetailSection({ evalCase: c }: { evalCase: EvalCaseT }) {
   return (
     <Suspense fallback={<p className="mt-6 text-sm">Loading case…</p>}>
-      <EvalDetail id={id} />
+      <EvalDetail evalCase={c} />
     </Suspense>
   );
 }

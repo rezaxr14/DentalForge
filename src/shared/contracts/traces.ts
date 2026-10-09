@@ -56,10 +56,17 @@ export const ToolCallRecord = z
   })
   .passthrough();
 
+/**
+ * Model-emitted tool_calls inside `parsed`. REALITY OVERRIDE (plan §0 rule 2,
+ * ADR-0008): some traces store a `{thought, final_answer}` blob in the
+ * tool_calls slot (4 lines in the per-cohort files) — the model dumped its
+ * final answer where a tool call was expected. `tool`/`args` are therefore
+ * OPTIONAL; consumers skip entries without a `tool` name.
+ */
 const ParsedToolCall = z
   .object({
-    tool: z.string(),
-    args: z.record(z.string(), z.unknown()),
+    tool: z.string().optional(),
+    args: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 

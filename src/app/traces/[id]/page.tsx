@@ -1,22 +1,10 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { getTrace } from "@/shared/lib/fixtures";
-import { VerifiedTrace } from "@/shared/contracts/traces";
+import type { VerifiedTraceT } from "@/shared/contracts/traces";
+import { resolveDataSource } from "@/shared/lib/resolve-source";
 
-function TraceBody({ id }: { id: string }) {
-  const raw = getTrace(id) as Record<string, unknown>;
-  const parsed = VerifiedTrace.safeParse(raw);
-  if (!parsed.success) {
-    return (
-      <div className="mt-6 rounded border p-4 text-sm">
-        <p className="font-medium">Unverified trace (nested trajectory, not replayable yet).</p>
-        <pre className="mt-2 overflow-auto text-xs text-zinc-600">
-          {JSON.stringify(raw, null, 2).slice(0, 2000)}
-        </pre>
-      </div>
-    );
-  }
-  const t = parsed.data;
+function TraceBody({ trace }: { trace: VerifiedTraceT }) {
+  const t = trace;
   return (
     <div className="mt-6 space-y-4">
       <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
@@ -59,6 +47,8 @@ function TraceBody({ id }: { id: string }) {
 
 export default async function TracePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { source } = await resolveDataSource();
+  const detail = await source.getTraceDetail(id);
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
@@ -67,9 +57,15 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
       <Link href="/traces" className="text-sm underline">
         ← All traces
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Trace {id}</h1>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Trace {id.slice(0, 8)}</h1>
       <Suspense fallback={<p className="mt-6 text-sm">Loading trace…</p>}>
-        <TraceBody id={id} />
+        {detail ? (
+          <TraceBody trace={detail.trace} />
+        ) : (
+          <p className="mt-6 text-sm text-zinc-600">
+            Trace not found in the {source.provenance} source.
+          </p>
+        )}
       </Suspense>
     </main>
   );
