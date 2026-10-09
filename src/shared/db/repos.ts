@@ -124,6 +124,57 @@ export interface InviteRecord {
   inviterId: string | null;
 }
 
+export interface WorkerRecord {
+  id: string;
+  orgId: string;
+  name: string;
+  runtime: string;
+  software: Record<string, unknown>;
+  capabilities: string[];
+  status: "online" | "degraded" | "offline";
+  lastHeartbeatAt: Date | null;
+  createdAt: Date;
+}
+
+export interface JobRecord {
+  id: string;
+  orgId: string;
+  type: string;
+  version: number;
+  payload: Record<string, unknown>;
+  status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled" | "expired";
+  priority: number;
+  attempts: number;
+  maxAttempts: number;
+  leaseExpiresAt: Date | null;
+  claimedBy: string | null;
+  idempotencyKey: string | null;
+  result: unknown | null;
+  error: unknown | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface JobEventRecord {
+  jobId: string;
+  seq: number;
+  type: string;
+  data: unknown;
+  createdAt: Date;
+}
+
+export interface WorkerTokenRecord {
+  id: string;
+  orgId: string;
+  name: string;
+  tokenHash: string;
+  scopes: string;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+
 /** Scoped repository surface — one org's view of the world. */
 export interface ScopedRepos {
   readonly orgId: string;
@@ -148,6 +199,21 @@ export interface ScopedRepos {
   createInvite(input: Omit<InviteRecord, "id">): Promise<InviteRecord>;
   consumeInvite(tokenHash: string): Promise<InviteRecord | null>;
   getInviteByHash(tokenHash: string): Promise<InviteRecord | null>;
+
+  // Workers & Jobs (Plan §10)
+  registerWorker(input: { name: string; runtime: string; software?: Record<string, unknown>; capabilities?: string[] }): Promise<WorkerRecord>;
+  heartbeatWorker(workerId: string, status?: "online" | "degraded" | "offline"): Promise<WorkerRecord | null>;
+  getWorker(workerId: string): Promise<WorkerRecord | null>;
+  listWorkers(): Promise<WorkerRecord[]>;
+  createJob(input: { type: string; version?: number; payload: Record<string, unknown>; priority?: number; idempotencyKey?: string | null; createdBy?: string | null }): Promise<JobRecord>;
+  claimJobs(workerId: string, accepts: string[], max?: number, leaseSeconds?: number): Promise<JobRecord[]>;
+  getJob(jobId: string): Promise<JobRecord | null>;
+  appendJobEvents(jobId: string, events: { seq: number; type: string; data: unknown }[], leaseSeconds?: number): Promise<{ accepted: number; leaseExpiresAt: Date | null }>;
+  listJobEvents(jobId: string, afterSeq?: number): Promise<JobEventRecord[]>;
+  completeJob(jobId: string, result: unknown, artifactIds?: string[]): Promise<JobRecord | null>;
+  failJob(jobId: string, error: { code: string; message: string; retryable?: boolean }): Promise<{ job: JobRecord | null; attemptsRemaining: number }>;
+  createWorkerToken(input: { name: string; tokenHash: string; scopes?: string }): Promise<WorkerTokenRecord>;
+  getWorkerTokenByHash(tokenHash: string): Promise<WorkerTokenRecord | null>;
 }
 
 /** Top-level store: orgs, memberships, and the `scoped()` entry point. */
@@ -157,4 +223,5 @@ export interface OrgStore {
   addMember(input: { userId: string; orgId: string; role: MembershipRecord["role"] }): Promise<MembershipRecord>;
   membership(userId: string, orgId: string): Promise<MembershipRecord | null>;
   scoped(orgId: string): ScopedRepos;
+  findOrgByWorkerTokenHash(tokenHash: string): Promise<{ org: OrgRecord; token: WorkerTokenRecord } | null>;
 }
