@@ -18,6 +18,24 @@
 
 export type Rgb = Uint8Array; // 3 bytes per pixel, row-major
 
+/**
+ * The registry tools that return an IMAGE (plan §4.4) — everything else
+ * (`locate_tooth`, `fdi_label`, `nudge_crop`) returns data already carried in
+ * the call record. The trace viewer uses this to decide between a stored
+ * artifact and the §9 placeholder-with-args fallback.
+ */
+export const IMAGE_OUTPUT_TOOLS = [
+  "zoom_crop",
+  "window_level",
+  "denoise",
+  "contralateral_compare",
+  "enhance_contrast",
+] as const;
+
+export function isImageOutputTool(toolName: string): boolean {
+  return (IMAGE_OUTPUT_TOOLS as readonly string[]).includes(toolName);
+}
+
 /** PIL integer Rec.601 luma with round-to-nearest (bit-exact vs PIL.convert("L")). */
 export function luma8(r: number, g: number, b: number): number {
   return (19595 * r + 38470 * g + 7471 * b + 32768) >> 16;

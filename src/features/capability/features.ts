@@ -24,8 +24,12 @@ export const FEATURES: Record<FeatureKey, FeatureInfo> = {
   "trace.render_artifacts": {
     label: "Trace tool images",
     browserReady: false,
-    replayReady: true,
-    note: "Replays stored case-study renders; in-browser re-render lands with M11.",
+    // Honesty (ADR-0009 §9): this repo ships NO stored tool renders — the
+    // case-study assets live in the VLM-DENTAL repo. The trace viewer shows a
+    // labeled placeholder with the recorded args until the renders are ingested
+    // (M11). Flip back to true in the commit that actually ships them.
+    replayReady: false,
+    note: "Stored artifacts replay when present; otherwise a placeholder with the recorded args (renders land with M11).",
   },
   "tool.execute": {
     label: "Tool Lab",

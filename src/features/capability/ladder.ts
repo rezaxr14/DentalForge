@@ -39,8 +39,13 @@ export function resolveStrategy(feature: FeatureKey, ctx: CapabilityContext = {}
 
   // 2. Browser (approximate / ported). Never authoritative — callers stamp provenance.
   if (feature === "tool.execute") {
-    const pureOrCanvas = ctx.toolName !== undefined && ctx.toolName !== "locate_tooth";
-    if (pureOrCanvas || ctx.browserSupported) {
+    // `browserSupported` is the FEATURE-level flag (7 of the 8 tools are
+    // ported). When a specific tool is named, decide from the tool itself:
+    // locate_tooth runs a detector and has no in-browser port (plan §9.2, M4),
+    // so it must fall through to replay/unavailable even though the feature
+    // flag says "browser ready".
+    const ported = ctx.toolName !== undefined ? ctx.toolName !== "locate_tooth" : ctx.browserSupported;
+    if (ported) {
       return done("browser", "Computed in-browser via the Canvas2D / Web Worker port (browser approximate).");
     }
   }

@@ -11,7 +11,7 @@
  * ("fixture" | "postgres") so the UI can badge where numbers came from.
  * Counts are always computed from the underlying data (plan rule 3).
  */
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   EvalCase,
   VerifiedTrace,
@@ -43,6 +43,13 @@ export interface EvalCaseDetail {
   provenance: DataProvenance;
 }
 
+/** A stored image artifact reachable through the storage gateway (plan §7 artifacts). */
+export interface ArtifactImageRef {
+  id: string;
+  storageKey: string;
+  provenance: "worker_exact" | "browser_approx" | "import_replay";
+}
+
 export interface LeaderboardRow extends EvalSummary {
   provenance: DataProvenance;
 }
@@ -57,6 +64,8 @@ export interface DataSource {
   getTraceDetail(id: string): Promise<TraceDetail | null>;
   listEvalRuns(): Promise<LeaderboardRow[]>;
   getEvalCase(id: string): Promise<EvalCaseDetail | null>;
+  /** Stored image artifacts for trace tool calls (fixture source: none exist yet). */
+  getArtifactImages(ids: string[]): Promise<ArtifactImageRef[]>;
 }
 
 /** Committed sanitized fixtures — always available, no DB needed. */
@@ -93,6 +102,9 @@ export function fixtureSource(): DataSource {
       if (!parsed.success) return Promise.resolve(null);
       return Promise.resolve({ id, evalCase: parsed.data, provenance: "fixture" as const });
     },
+    // The committed fixtures ship no artifact rows (the case-study renders live
+    // in VLM-DENTAL; see FEATURES["trace.render_artifacts"]).
+    getArtifactImages: () => Promise.resolve([]),
   };
 }
 
@@ -104,6 +116,7 @@ export function postgresSource(db: Db, orgId: string): DataSource {
     getTraceDetail: (id) => getTraceRow(db, orgId, id),
     listEvalRuns: () => listEvalRunRows(db, orgId),
     getEvalCase: (id) => getEvalCaseRow(db, orgId, id),
+    getArtifactImages: (ids) => getArtifactImageRows(db, orgId, ids),
   };
 }
 
@@ -213,6 +226,9 @@ async function getTraceRow(
         tool_name: c.toolName,
         tool_args: (c.args ?? {}) as Record<string, unknown>,
         tool_ok: c.ok ?? false,
+        // Kept by ToolCallRecord's passthrough; lets the trace viewer follow
+        // the §9 ladder from a stored artifact to a placeholder.
+        ...(c.artifactId ? { artifact_id: c.artifactId } : {}),
       })),
     })),
     tool_calls: turnRows.reduce((n, turn) => n + (callsByTurn.get(turn.id) ?? []).length, 0),
@@ -246,6 +262,28 @@ async function listEvalRunRows(db: Db, orgId: string): Promise<LeaderboardRow[]>
       provenance: "postgres" as const,
     };
   });
+}
+
+/** Org-scoped lookup of stored image artifacts (cross-tenant ids simply miss). */
+async function getArtifactImageRows(
+  db: Db,
+  orgId: string,
+  ids: string[],
+): Promise<ArtifactImageRef[]> {
+  const unique = [...new Set(ids)].filter((id) => id.length > 0);
+  if (unique.length === 0) return [];
+  const rows = await db
+    .select({
+      id: s.artifacts.id,
+      storageKey: s.artifacts.storageKey,
+      provenance: s.artifacts.provenance,
+      kind: s.artifacts.kind,
+    })
+    .from(s.artifacts)
+    .where(and(eq(s.artifacts.orgId, orgId), inArray(s.artifacts.id, unique)));
+  return rows
+    .filter((r) => r.kind === "tool_image" || r.kind === "agent_image")
+    .map((r) => ({ id: r.id, storageKey: r.storageKey, provenance: r.provenance }));
 }
 
 async function getEvalCaseRow(

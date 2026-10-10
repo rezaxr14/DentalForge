@@ -120,7 +120,9 @@ describe("worker snapshot (derived on read, no stored flag, no cron)", () => {
     const out = Object.fromEntries(FEATURE_KEYS.map((f) => [f, resolveFeature(f, snap).strategy]));
     expect(out).toEqual({
       "yolo.prelabel": "replay",
-      "trace.render_artifacts": "replay",
+      // replayReady flipped to false with the trace-viewer placeholder: no
+      // stored renders ship in this repo (ADR-0009 deferred list corrected).
+      "trace.render_artifacts": "unavailable",
       "tool.execute": "browser",
       "agent.run": "unavailable",
       "eval.run": "unavailable",
@@ -128,6 +130,21 @@ describe("worker snapshot (derived on read, no stored flag, no cron)", () => {
     });
     // The static flags this relies on are the single source of truth for "what exists in this build".
     expect(FEATURES["agent.run"].replayReady).toBe(false);
+    expect(FEATURES["trace.render_artifacts"].replayReady).toBe(false);
+    expect(FEATURES["trace.render_artifacts"].browserReady).toBe(false);
+  });
+
+  it("REGRESSION: the feature-level browserReady flag never leaks onto locate_tooth", async () => {
+    const { repos } = await seeded();
+    const snap = await loadWorkerSnapshot(repos, "live", true);
+    // 7 of 8 tools are ported, so the feature flag says browserReady…
+    expect(FEATURES["tool.execute"].browserReady).toBe(true);
+    // …but locate_tooth has no in-browser port and must never resolve to it.
+    const ctx = contextFor("tool.execute", snap, { toolName: "locate_tooth", hasReplay: false });
+    expect(ctx.browserSupported).toBe(true); // the flag rides along…
+    expect(resolveStrategy("tool.execute", ctx).strategy).toBe("unavailable"); // …but cannot win
+    expect(resolveFeature("tool.execute", snap, { toolName: "locate_tooth", hasReplay: false }).strategy).toBe("unavailable");
+    expect(resolveFeature("tool.execute", snap, { toolName: "zoom_crop" }).strategy).toBe("browser");
   });
 });
 

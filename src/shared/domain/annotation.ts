@@ -35,12 +35,67 @@ export function clampBox(box: Bbox, width: number, height: number, minSize = 4):
   return [x, y, w, h];
 }
 
+export interface PrelabelTarget {
+  /** Fixture/annotation image id (used in the generated annotation ids). */
+  imageId: string;
+  /** Native image dimensions for clamping (plan §4.3). */
+  width: number;
+  height: number;
+  /** Model id stamped into `author_id` (`yolo:<model>`). */
+  modelId: string;
+  /** Id suffix start — pass the current annotation count to avoid collisions. */
+  startIdx: number;
+}
+
+/**
+ * Stored YOLO predictions (replay tier, `fixtures/labels/*.json`) → draft
+ * annotations. Suggestions are `source=model`, carry confidence, and are
+ * clamped into the image (raw inference boxes may graze the edge).
+ */
+export function predictionsToAnnotations(
+  preds: readonly { bbox: readonly number[]; fdi_quadrant: number; fdi_position: number; confidence: number }[],
+  target: PrelabelTarget,
+): Annotation[] {
+  const out: Annotation[] = [];
+  for (const p of preds) {
+    const clamped = clampBox([p.bbox[0] ?? 0, p.bbox[1] ?? 0, p.bbox[2] ?? 0, p.bbox[3] ?? 0], target.width, target.height);
+    if (!clamped) continue;
+    out.push({
+      id: `pred_${target.imageId}_${target.startIdx + out.length}`,
+      bbox: clamped,
+      fdi_quadrant: p.fdi_quadrant,
+      fdi_position: p.fdi_position,
+      pathology: "Caries",
+      source: "model",
+      confidence: p.confidence,
+      status: "draft",
+      version: 1,
+      author_id: `yolo:${target.modelId}`,
+    });
+  }
+  return out;
+}
+
+/**
+ * `yolo.prelabel` worker result boxes → draft annotations (worker tier,
+ * provenance `worker_exact`). Same shape rules as the replay tier so the two
+ * paths are interchangeable.
+ */
+export function prelabelResultToAnnotations(
+  boxes: readonly { bbox: readonly number[]; conf: number; fdiQuadrant: number; fdiPosition: number }[],
+  target: PrelabelTarget,
+): Annotation[] {
+  return predictionsToAnnotations(
+    boxes.map((b) => ({ bbox: b.bbox, fdi_quadrant: b.fdiQuadrant, fdi_position: b.fdiPosition, confidence: b.conf })),
+    target,
+  );
+}
+
 export interface MatchedPair<A, B> {
   a: A;
   b: B;
   iou: number;
 }
-
 /**
  * Greedy one-to-one matching by descending IoU (ties broken by indices for
  * determinism). Threshold is inclusive: iou >= threshold matches.
