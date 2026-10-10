@@ -14,8 +14,15 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Annotation, AnnotationStatus, LabelFixture } from "@/shared/contracts/labels";
-import { clampBox, agreementStats, type Bbox } from "@/shared/domain/annotation";
+import { YoloPrelabelResult } from "@/shared/contracts/worker";
+import {
+  clampBox, agreementStats, predictionsToAnnotations, prelabelResultToAnnotations, type Bbox,
+} from "@/shared/domain/annotation";
 import { anatomicalName, fdiLabel } from "@/shared/domain/fdi";
+import {
+  CapabilityGate, ProvenanceBadge, contextFor, resolveStrategy, useWorkerSnapshot,
+} from "@/features/capability";
+import { useJobStream } from "@/features/jobs";
 import {
   applyDecision, demoAuthorId, ensureSet, getRole, saveAnnotations, setRole,
 } from "@/shared/lib/annotationStore";
@@ -56,6 +63,26 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const [role, setRoleState] = useState<"user" | "reviewer" | "admin">(() => getRole());
   const [reviewReason, setReviewReason] = useState("");
   const hydratedRef = useRef(false);
+  // Worker tier of the "Suggest boxes" ladder: a queued yolo.prelabel job.
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobProblem, setJobProblem] = useState<string | null>(null);
+  const [appliedJobId, setAppliedJobId] = useState<string | null>(null);
+
+  // Capability ladder (plan §9.2): worker (`yolo.prelabel`) → stored
+  // predictions (replay) → disabled with reason (+ queue for later when
+  // queueable). Before the snapshot loads we resolve offline-conservatively —
+  // never claiming a worker we have not seen.
+  const snap = useWorkerSnapshot();
+  const hasPredictions = (fixture.predictions?.length ?? 0) > 0;
+  const capCtx = useMemo(
+    () =>
+      snap
+        ? contextFor("yolo.prelabel", snap, { hasReplay: hasPredictions })
+        : { hasReplay: hasPredictions, dbAvailable: false },
+    [snap, hasPredictions],
+  );
+  const capability = useMemo(() => resolveStrategy("yolo.prelabel", capCtx), [capCtx]);
+  const stream = useJobStream(jobId);
 
   // One-shot localStorage hydration. This effect only *reads* external state
   // (the store) into React state on mount — the supported useEffect pattern.
@@ -234,37 +261,69 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
   const importPrelabels = (): void => {
     if (!fixture.predictions?.length) return;
-    const W = fixture.width;
-    const H = fixture.height;
-    setAnnotations((prev) => {
-      const added: Annotation[] = [];
-      fixture.predictions!.forEach((p) => {
-        // Raw inference boxes may graze the edge — clamp into the image.
-        const raw: Bbox = [
-          p.bbox[0] ?? 0,
-          p.bbox[1] ?? 0,
-          p.bbox[2] ?? 0,
-          p.bbox[3] ?? 0,
-        ];
-        const clamped = clampBox(raw, W, H);
-        if (!clamped) return;
-        added.push({
-          id: `pred_${fixture.id}_${prev.length + added.length}`,
-          bbox: clamped,
-          fdi_quadrant: p.fdi_quadrant,
-          fdi_position: p.fdi_position,
-          pathology: "Caries",
-          source: "model",
-          confidence: p.confidence,
-          status: "draft",
-          version: 1,
-          author_id: `yolo:${fixture.prediction_model ?? "unknown"}`,
-        });
-      });
-      return [...prev, ...added];
+    const added = predictionsToAnnotations(fixture.predictions, {
+      imageId: fixture.id,
+      width: fixture.width,
+      height: fixture.height,
+      modelId: fixture.prediction_model ?? "unknown",
+      startIdx: annotations.length,
     });
+    if (added.length === 0) return;
+    setAnnotations((prev) => [...prev, ...added]);
     setMsg(`Imported pre-labels (provenance: import_replay); review them before submitting.`);
   };
+
+  /** Worker tier: enqueue `yolo.prelabel` now, or "for later" (stays queued until a worker connects). */
+  const suggestOnWorker = async (): Promise<void> => {
+    setJobProblem(null);
+    setJobId(null);
+    try {
+      const imageId = /^\d+$/.test(fixture.id) ? Number(fixture.id) : fixture.id;
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          type: "yolo.prelabel",
+          payload: { imageId, modelId: fixture.prediction_model ?? "yolo_cv_best" },
+        }),
+      });
+      const body = (await res.json()) as { id?: string; detail?: string; title?: string; code?: string };
+      if (res.ok && body.id) {
+        setJobId(body.id);
+        setMsg(capability.strategy === "worker" ? "Queued yolo.prelabel for the connected worker…" : "Queued for later — it will run when a worker connects.");
+      } else {
+        setJobProblem(body.detail ?? body.title ?? `Enqueue failed (HTTP ${res.status})`);
+      }
+    } catch {
+      setJobProblem("Network error — could not reach the server.");
+    }
+  };
+
+  // Apply a successful worker result exactly once (worker_exact provenance).
+  // Render-phase adjustment (react.dev "you might not need an effect"): the job
+  // stream is the external input; when it crosses to `succeeded` we derive the
+  // annotation update once, guarded by the last applied job id.
+  const succeededJob =
+    stream.job?.status === "succeeded" && stream.job.id !== appliedJobId ? stream.job : null;
+  if (succeededJob) {
+    setAppliedJobId(succeededJob.id);
+    const parsed = YoloPrelabelResult.safeParse(succeededJob.result);
+    if (!parsed.success) {
+      setMsg("Worker finished but the result failed schema validation — nothing applied.");
+    } else if (status !== "draft") {
+      setMsg("Worker finished, but this set is no longer a draft — suggestions were not applied.");
+    } else {
+      const added = prelabelResultToAnnotations(parsed.data.boxes, {
+        imageId: fixture.id,
+        width: fixture.width,
+        height: fixture.height,
+        modelId: parsed.data.modelId,
+        startIdx: annotations.length,
+      });
+      setAnnotations((prev) => [...prev, ...added]);
+      setMsg(`Worker suggested ${added.length} boxes (provenance: worker_exact); review them before submitting.`);
+    }
+  }
 
   const review = (decision: "approved" | "rejected"): void => {
     const res = applyDecision(fixture.id, decision, reviewReason, role);
@@ -342,18 +401,95 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           >
             Pre-labels ({fixture.predictions?.length ?? 0})
           </button>
-          <button
-            type="button"
-            onClick={importPrelabels}
-            disabled={!fixture.predictions?.length || status !== "draft"}
-            className="rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-700 disabled:opacity-40"
+          <ProvenanceBadge resolution={capability} />
+          <CapabilityGate
+            feature="yolo.prelabel"
+            context={capCtx}
+            fallback={(r) => (
+              <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled
+                  title={r.reason}
+                  className="rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-700 opacity-40"
+                  data-suggest="unavailable"
+                >
+                  Suggest boxes
+                </button>
+                {r.queueable && (
+                  <button
+                    type="button"
+                    onClick={() => void suggestOnWorker()}
+                    disabled={status !== "draft"}
+                    title="Queue an exact run; it executes when a worker connects"
+                    className="rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-800 disabled:opacity-40"
+                    data-suggest="queue-later"
+                  >
+                    Queue for later
+                  </button>
+                )}
+              </span>
+            )}
           >
-            Import pre-labels as draft
-          </button>
+            {(r) => (
+              <span className="flex items-center gap-1.5">
+                {r.strategy === "worker" ? (
+                  <button
+                    type="button"
+                    onClick={() => void suggestOnWorker()}
+                    disabled={status !== "draft"}
+                    title={r.reason}
+                    className="rounded border border-emerald-500 bg-emerald-50 px-2 py-1 text-emerald-800 disabled:opacity-40"
+                    data-suggest="worker"
+                  >
+                    Suggest boxes (worker)
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={importPrelabels}
+                    disabled={!fixture.predictions?.length || status !== "draft"}
+                    title={r.reason}
+                    className="rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-700 disabled:opacity-40"
+                    data-suggest="replay"
+                  >
+                    Suggest boxes (stored)
+                  </button>
+                )}
+                {r.strategy !== "worker" && r.queueable && (
+                  <button
+                    type="button"
+                    onClick={() => void suggestOnWorker()}
+                    disabled={status !== "draft"}
+                    title="Queue an exact run; it executes when a worker connects"
+                    className="rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-800 disabled:opacity-40"
+                    data-suggest="queue-later"
+                  >
+                    Queue for later
+                  </button>
+                )}
+              </span>
+            )}
+          </CapabilityGate>
           <span className="ml-auto rounded border border-zinc-300 bg-zinc-50 px-2 py-1 text-zinc-600">
             {annotations.length} boxes · drag to draw · ⌫ deletes · Esc deselects
           </span>
         </div>
+        <p className="mb-2 text-xs text-zinc-500" data-capability-reason>
+          {capability.reason}
+        </p>
+        {jobId && (
+          <p className="mb-2 text-xs text-zinc-600" aria-live="polite">
+            Job <span className="font-mono">{jobId.slice(0, 8)}</span> — <strong>{stream.status}</strong>
+            <span className="ms-1 text-zinc-400">via {stream.transport}</span>
+            {stream.job?.status === "queued" && " · waiting for a worker"}
+          </p>
+        )}
+        {jobProblem && (
+          <p role="alert" className="mb-2 text-xs text-red-600">
+            {jobProblem}
+          </p>
+        )}
 
         {/* Image + overlay */}
         <div

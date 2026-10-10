@@ -6,11 +6,8 @@
  * or fails because of, the database. Any failure renders `offline`.
  */
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { WorkerSnapshot } from "../service";
+import { useWorkerSnapshot } from "../useWorkerSnapshot";
 import { WorkerStatusPill } from "./WorkerStatusPill";
-
-const REFRESH_MS = 30_000;
 
 function ago(iso: string | null): string | undefined {
   if (!iso) return undefined;
@@ -19,26 +16,7 @@ function ago(iso: string | null): string | undefined {
 }
 
 export function WorkerStatusBadge() {
-  const [snap, setSnap] = useState<WorkerSnapshot | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/worker/status", { cache: "no-store" });
-        const body = (await res.json()) as WorkerSnapshot;
-        if (alive) setSnap(body);
-      } catch {
-        if (alive) setSnap(null);
-      }
-    };
-    void load();
-    const t = setInterval(() => void load(), REFRESH_MS);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
+  const snap = useWorkerSnapshot();
 
   const newest = snap?.workers
     .map((w) => w.lastHeartbeatAt)

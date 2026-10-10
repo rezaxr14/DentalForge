@@ -2,6 +2,8 @@ export * from "./types";
 export * from "./ladder";
 export * from "./features";
 export * from "./service";
+export * from "./useWorkerSnapshot";
 export * from "./ui/WorkerStatusPill";
 export * from "./ui/CapabilityGate";
 export * from "./ui/WorkerStatusBadge";
+export * from "./ui/ProvenanceBadge";

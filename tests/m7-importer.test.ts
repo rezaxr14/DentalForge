@@ -277,12 +277,15 @@ describe("M7: DataSource abstraction", () => {
   });
 
   it("resolveDataSource gracefully falls back to fixtureSource if postgres is unreachable", async () => {
+    // Windows: importing the Better Auth stack here costs ~2.4–3.2 s, and the
+    // full suite runs Postgres-backed files in parallel — the 5 s default
+    // timed out under load. Assertions unchanged; only the wall-clock budget.
     process.env.TRACEFORGE_DATASOURCE = "postgres";
     const { source, fallbackReason } = await resolveDataSource();
     expect(source.provenance).toBe("fixture");
     expect(fallbackReason).toBeTruthy();
     delete process.env.TRACEFORGE_DATASOURCE;
-  });
+  }, 15_000);
 
   it("emptyStats initializes all counters to 0", () => {
     const stats = emptyStats("org-123");

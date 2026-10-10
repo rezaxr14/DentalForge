@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CapabilityGate, ProvenanceBadge, contextFor, resolveStrategy, useWorkerSnapshot,
+} from "@/features/capability";
 import {
   WINDOW_PRESETS, type Rgb, contralateralComposite, denoiseBilateral,
   denoiseMedian, enhanceContrast, windowLevel,
@@ -188,6 +191,21 @@ export function ToolLab() {
   const outCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ x0: number; y0: number } | null>(null);
 
+  // Capability ladder (plan §9): resolve HOW the selected tool runs. Before
+  // the snapshot loads we resolve with a conservative offline context — no
+  // claim of worker availability is ever made without a heartbeat. Tool Lab
+  // ships no replayed outputs of its own (hasReplay: false), so locate_tooth
+  // honestly falls to `unavailable` while the worker is offline.
+  const snap = useWorkerSnapshot();
+  const capCtx = useMemo(
+    () =>
+      snap
+        ? contextFor("tool.execute", snap, { toolName: tool, hasReplay: false })
+        : { toolName: tool, dbAvailable: false },
+    [snap, tool],
+  );
+  const capability = useMemo(() => resolveStrategy("tool.execute", capCtx), [capCtx]);
+
   // load the sample radiograph once
   useEffect(() => {
     const im = new Image();
@@ -288,7 +306,9 @@ export function ToolLab() {
         flip: { quadrant: flipQuadrant(p.quadrant), label: fdiLabel(flipQuadrant(p.quadrant), p.position) },
       }
     : null;
-  const info: unknown = tool === "locate_tooth" ? { tool: "locate_tooth", browser_tier: false } : (result?.info ?? fdiInfo);
+  const info: unknown = tool === "locate_tooth"
+    ? { tool: "locate_tooth", browser_tier: false, strategy: capability.strategy, reason: capability.reason }
+    : (result?.info ?? fdiInfo);
 
   return (
     <div className="mt-6">
@@ -422,24 +442,47 @@ export function ToolLab() {
         <section>
           <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-700">
             Result
+            <ProvenanceBadge resolution={capability} />
             {busy && (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-normal text-amber-800">
                 processing…
               </span>
             )}
           </h2>
+          <p className="mt-1 text-xs text-zinc-500" data-capability-reason>
+            {capability.reason}
+          </p>
           {tool === "locate_tooth" ? (
-            <div className="mt-2 rounded border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
-              <p className="font-medium text-zinc-800">
-                locate_tooth runs the YOLO detector inside the VLM-DENTAL agent runtime.
-              </p>
-              <p className="mt-2">
-                Model inference cannot run in the browser tier (plan §9) — this is the one tool of
-                the 8 registry tools not ported client-side. See its real outputs on Trace Explorer;
-                reference renders live in <span className="font-mono text-xs">docs/images/</span>{" "}
-                (154 assets, not yet ported).
-              </p>
-            </div>
+            <CapabilityGate
+              feature="tool.execute"
+              context={capCtx}
+              fallback={(r) => (
+                <div className="mt-2 rounded border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
+                  <p className="font-medium text-zinc-800">
+                    locate_tooth is unavailable: it is the one registry tool with no in-browser port.
+                  </p>
+                  <p className="mt-2">{r.reason}</p>
+                  <p className="mt-2">
+                    Model inference cannot run in the browser tier (plan §9). Its real outputs are
+                    visible on Trace Explorer, and a connected worker (or a queued job) can compute
+                    them exactly for library radiographs.
+                  </p>
+                </div>
+              )}
+            >
+              {(r) => (
+                <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <p className="font-medium">
+                    locate_tooth resolves to <span className="font-mono">{r.strategy}</span>.
+                  </p>
+                  <p className="mt-1">{r.reason}</p>
+                  <p className="mt-2 text-xs">
+                    This demo radiograph is not a library image, so run locate_tooth against library
+                    images from Trace Explorer or Live Agent (M12).
+                  </p>
+                </div>
+              )}
+            </CapabilityGate>
           ) : tool !== "fdi_label" ? (
             <canvas ref={outCanvasRef} className="mt-2 w-full rounded border border-zinc-300 bg-zinc-950" />
           ) : null}
