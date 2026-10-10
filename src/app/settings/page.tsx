@@ -6,8 +6,11 @@
  */
 import { headers } from "next/headers";
 import { selectOrgStore } from "@/shared/db";
+import { can, Role } from "@/shared/domain/auth";
+import { listTokensForAdmin, type WorkerTokenSummary } from "@/shared/jobs/token-admin";
 import { InviteCreator } from "./invite-creator";
 import OrgFormClient from "./org-form-client";
+import { WorkerTokenManager } from "./worker-tokens";
 
 interface OrgRow {
   id: string;
@@ -15,6 +18,8 @@ interface OrgRow {
   slug: string;
   /** Caller role in this org (drives the admin-only invite UI). */
   role: string | null;
+  /** Worker tokens, loaded only for roles that `can("worker.listTokens")`; null = not an admin / unavailable. */
+  tokens: WorkerTokenSummary[] | null;
 }
 
 export default async function SettingsPage() {
@@ -56,7 +61,13 @@ export default async function SettingsPage() {
         } catch {
           role = null;
         }
-        return { id: o.id, name: o.name, slug: o.slug ?? o.id, role };
+        const parsedRole = Role.safeParse(role);
+        let tokens: WorkerTokenSummary[] | null = null;
+        if (parsedRole.success && can(parsedRole.data, "worker.listTokens")) {
+          const res = await listTokensForAdmin(store, session.user.id, o.id);
+          tokens = res.ok ? res.tokens : null;
+        }
+        return { id: o.id, name: o.name, slug: o.slug ?? o.id, role, tokens };
       }),
     );
   } catch {
@@ -92,6 +103,9 @@ export default async function SettingsPage() {
                     <span className="font-medium">{o.name}</span>{" "}
                     <span className="text-zinc-500">({o.slug})</span>
                     <InviteCreator orgId={o.id} orgName={o.name} />
+                    {o.tokens ? (
+                      <WorkerTokenManager orgId={o.id} orgName={o.name} initialTokens={o.tokens} />
+                    ) : null}
                   </li>
                 ))}
               </ul>
