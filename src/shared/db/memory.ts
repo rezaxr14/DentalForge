@@ -7,17 +7,25 @@
  */
 import { randomUUID } from "node:crypto";
 import {
-  AnnotationRecord,
-  AuditRecord,
-  DatasetRecord,
-  EvalRunRecord,
-  ImageRecord,
-  InviteRecord,
-  MembershipRecord,
-  OrgRecord,
-  OrgStore,
-  ScopedRepos,
-  TraceRecord,
+  DEFAULT_QUEUE_TTL_MS,
+  gateJobWrite,
+  type AnnotationRecord,
+  type ArtifactRecord,
+  type AuditRecord,
+  type DatasetRecord,
+  type EvalRunRecord,
+  type ImageRecord,
+  type InviteRecord,
+  type JobEventRecord,
+  type JobRecord,
+  type JobWrite,
+  type MembershipRecord,
+  type OrgRecord,
+  type OrgStore,
+  type ScopedRepos,
+  type TraceRecord,
+  type WorkerRecord,
+  type WorkerTokenRecord,
 } from "./repos";
 
 function uid(): string {
@@ -154,13 +162,37 @@ class ScopedMemory implements ScopedRepos {
     return inv;
   }
 
-  // Workers & Jobs (Plan §10)
+  // ---- Workers & Jobs (plan §10) -------------------------------------------
+  // Semantics mirror the Drizzle implementation 1:1; both run the shared
+  // contract suite in tests/m8-jobs-repo.test.ts.
+
+  private orgJobs(): JobRecord[] {
+    return [...this.root.jobs.values()].filter((j) => j.orgId === this.orgId);
+  }
+
+  private ownJob(jobId: string): JobRecord | null {
+    const j = this.root.jobs.get(jobId);
+    return j && j.orgId === this.orgId ? j : null;
+  }
+
   async registerWorker(input: {
     name: string;
     runtime: string;
     software?: Record<string, unknown>;
     capabilities?: string[];
   }): Promise<WorkerRecord> {
+    const now = new Date();
+    const existing = [...this.root.workers.values()].find(
+      (w) => w.orgId === this.orgId && w.name === input.name,
+    );
+    if (existing) {
+      existing.runtime = input.runtime;
+      existing.software = input.software ?? {};
+      existing.capabilities = input.capabilities ?? [];
+      existing.status = "online";
+      existing.lastHeartbeatAt = now;
+      return { ...existing };
+    }
     const rec: WorkerRecord = {
       id: uid(),
       orgId: this.orgId,
@@ -169,32 +201,30 @@ class ScopedMemory implements ScopedRepos {
       software: input.software ?? {},
       capabilities: input.capabilities ?? [],
       status: "online",
-      lastHeartbeatAt: new Date(),
-      createdAt: new Date(),
+      lastHeartbeatAt: now,
+      createdAt: now,
     };
     this.root.workers.set(rec.id, rec);
-    return rec;
+    return { ...rec };
   }
 
-  async heartbeatWorker(
-    workerId: string,
-    status: "online" | "degraded" | "offline" = "online",
-  ): Promise<WorkerRecord | null> {
+  async heartbeatWorker(workerId: string): Promise<WorkerRecord | null> {
     const w = this.root.workers.get(workerId);
     if (!w || w.orgId !== this.orgId) return null;
-    w.status = status;
+    w.status = "online";
     w.lastHeartbeatAt = new Date();
-    this.root.workers.set(workerId, w);
-    return w;
+    return { ...w };
   }
 
   async getWorker(workerId: string): Promise<WorkerRecord | null> {
     const w = this.root.workers.get(workerId);
-    return w && w.orgId === this.orgId ? w : null;
+    return w && w.orgId === this.orgId ? { ...w } : null;
   }
 
   async listWorkers(): Promise<WorkerRecord[]> {
-    return [...this.root.workers.values()].filter((w) => w.orgId === this.orgId);
+    return [...this.root.workers.values()]
+      .filter((w) => w.orgId === this.orgId)
+      .map((w) => ({ ...w }));
   }
 
   async createJob(input: {
@@ -206,11 +236,10 @@ class ScopedMemory implements ScopedRepos {
     createdBy?: string | null;
   }): Promise<JobRecord> {
     if (input.idempotencyKey) {
-      const existing = [...this.root.jobs.values()].find(
-        (j) => j.orgId === this.orgId && j.idempotencyKey === input.idempotencyKey,
-      );
-      if (existing) return existing;
+      const existing = this.orgJobs().find((j) => j.idempotencyKey === input.idempotencyKey);
+      if (existing) return { ...existing };
     }
+    const now = new Date();
     const rec: JobRecord = {
       id: uid(),
       orgId: this.orgId,
@@ -226,149 +255,253 @@ class ScopedMemory implements ScopedRepos {
       idempotencyKey: input.idempotencyKey ?? null,
       result: null,
       error: null,
+      artifactIds: [],
       createdBy: input.createdBy ?? null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     };
     this.root.jobs.set(rec.id, rec);
-    return rec;
+    return { ...rec };
+  }
+
+  async reapJobs(opts?: { queueTtlMs?: number }): Promise<{ requeued: number; expired: number }> {
+    const ttl = opts?.queueTtlMs ?? DEFAULT_QUEUE_TTL_MS;
+    const now = Date.now();
+    let requeued = 0;
+    let expired = 0;
+    for (const job of this.orgJobs()) {
+      const leased = job.status === "claimed" || job.status === "running";
+      if (leased && job.leaseExpiresAt !== null && job.leaseExpiresAt.getTime() <= now) {
+        if (job.attempts >= job.maxAttempts) {
+          job.status = "expired";
+          job.error = { code: "lease_expired", message: "worker lease expired and attempts are exhausted" };
+          job.leaseExpiresAt = null;
+          expired += 1;
+        } else {
+          job.status = "queued";
+          job.claimedBy = null;
+          job.leaseExpiresAt = null;
+          requeued += 1;
+        }
+        job.updatedAt = new Date();
+      } else if (job.status === "queued" && now - job.createdAt.getTime() > ttl) {
+        job.status = "expired";
+        job.error = { code: "queue_timeout", message: "no worker picked this job up in time" };
+        job.updatedAt = new Date();
+        expired += 1;
+      }
+    }
+    return { requeued, expired };
   }
 
   async claimJobs(
     workerId: string,
     accepts: string[],
-    max = 1,
-    leaseSeconds = 60,
+    max: number,
+    leaseSeconds: number,
   ): Promise<JobRecord[]> {
     const now = Date.now();
-    const candidates = [...this.root.jobs.values()]
-      .filter((j) => {
-        if (j.orgId !== this.orgId) return false;
-        if (!accepts.includes(j.type)) return false;
-        if (j.status === "queued") return true;
-        if (
-          j.status === "claimed" &&
-          j.leaseExpiresAt &&
-          j.leaseExpiresAt.getTime() < now &&
-          j.attempts < j.maxAttempts
-        ) {
-          return true;
-        }
-        return false;
-      })
+    const picked = this.orgJobs()
+      .filter((j) => j.status === "queued" && accepts.includes(j.type) && j.attempts < j.maxAttempts)
       .sort((a, b) => b.priority - a.priority || a.createdAt.getTime() - b.createdAt.getTime())
-      .slice(0, max);
-
-    const claimed: JobRecord[] = [];
-    for (const job of candidates) {
+      .slice(0, Math.max(0, max));
+    for (const job of picked) {
       job.status = "claimed";
       job.claimedBy = workerId;
       job.attempts += 1;
       job.leaseExpiresAt = new Date(now + leaseSeconds * 1000);
       job.updatedAt = new Date();
-      this.root.jobs.set(job.id, job);
-      claimed.push(job);
     }
-    return claimed;
+    return picked.map((j) => ({ ...j }));
   }
 
   async getJob(jobId: string): Promise<JobRecord | null> {
-    const j = this.root.jobs.get(jobId);
-    return j && j.orgId === this.orgId ? j : null;
+    const j = this.ownJob(jobId);
+    return j ? { ...j } : null;
+  }
+
+  async listJobs(filter?: {
+    status?: JobRecord["status"];
+    type?: string;
+    limit?: number;
+  }): Promise<JobRecord[]> {
+    return this.orgJobs()
+      .filter((j) => (filter?.status ? j.status === filter.status : true))
+      .filter((j) => (filter?.type ? j.type === filter.type : true))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, filter?.limit ?? 50)
+      .map((j) => ({ ...j }));
   }
 
   async appendJobEvents(
     jobId: string,
+    workerId: string,
     events: { seq: number; type: string; data: unknown }[],
-    leaseSeconds = 60,
-  ): Promise<{ accepted: number; leaseExpiresAt: Date | null }> {
-    const job = await this.getJob(jobId);
-    if (!job) throw new Error("job not found");
-
+    leaseSeconds: number,
+  ): Promise<JobWrite<{ accepted: number; leaseExpiresAt: Date | null }>> {
+    const g = gateJobWrite(this.ownJob(jobId), workerId);
+    if (!g.ok) return g;
+    const job = g.value;
     const list = this.root.jobEvents.get(jobId) ?? [];
+    const have = new Set(list.map((e) => e.seq));
+    let accepted = 0;
     for (const e of events) {
-      list.push({
-        jobId,
-        seq: e.seq,
-        type: e.type,
-        data: e.data,
-        createdAt: new Date(),
-      });
+      if (have.has(e.seq)) continue; // idempotent re-send
+      have.add(e.seq);
+      list.push({ jobId, seq: e.seq, type: e.type, data: e.data, createdAt: new Date() });
+      accepted += 1;
     }
     this.root.jobEvents.set(jobId, list);
-
     job.leaseExpiresAt = new Date(Date.now() + leaseSeconds * 1000);
+    if (job.status === "claimed") job.status = "running";
     job.updatedAt = new Date();
-    this.root.jobs.set(job.id, job);
-
-    return { accepted: events.length, leaseExpiresAt: job.leaseExpiresAt };
+    return { ok: true, value: { accepted, leaseExpiresAt: job.leaseExpiresAt } };
   }
 
-  async listJobEvents(jobId: string, afterSeq = 0): Promise<JobEventRecord[]> {
-    const job = await this.getJob(jobId);
-    if (!job) return [];
-    const list = this.root.jobEvents.get(jobId) ?? [];
-    return list.filter((e) => e.seq > afterSeq).sort((a, b) => a.seq - b.seq);
+  async listJobEvents(jobId: string, afterSeq = 0, limit = 500): Promise<JobEventRecord[]> {
+    if (!this.ownJob(jobId)) return [];
+    return (this.root.jobEvents.get(jobId) ?? [])
+      .filter((e) => e.seq > afterSeq)
+      .sort((a, b) => a.seq - b.seq)
+      .slice(0, limit)
+      .map((e) => ({ ...e }));
   }
 
-  async completeJob(jobId: string, result: unknown): Promise<JobRecord | null> {
-    const job = await this.getJob(jobId);
-    if (!job) return null;
-    job.status = "succeeded";
-    job.result = result;
-    job.updatedAt = new Date();
-    this.root.jobs.set(jobId, job);
-    return job;
+  async completeJob(
+    jobId: string,
+    workerId: string,
+    result: unknown,
+    artifactIds: string[],
+  ): Promise<JobWrite<JobRecord>> {
+    const job = this.ownJob(jobId);
+    // Idempotent replay: the owner completing an already-succeeded job is fine.
+    if (job && job.status === "succeeded" && job.claimedBy === workerId) {
+      return { ok: true, value: { ...job } };
+    }
+    const g = gateJobWrite(job, workerId);
+    if (!g.ok) return g;
+    g.value.status = "succeeded";
+    g.value.result = result;
+    g.value.artifactIds = [...artifactIds];
+    g.value.error = null;
+    g.value.leaseExpiresAt = null;
+    g.value.updatedAt = new Date();
+    return { ok: true, value: { ...g.value } };
   }
 
   async failJob(
     jobId: string,
+    workerId: string,
     error: { code: string; message: string; retryable?: boolean },
-  ): Promise<{ job: JobRecord | null; attemptsRemaining: number }> {
-    const job = await this.getJob(jobId);
-    if (!job) return { job: null, attemptsRemaining: 0 };
-
-    const retryable = error.retryable ?? false;
-    const attemptsRemaining = Math.max(0, job.maxAttempts - job.attempts);
-
-    if (retryable && attemptsRemaining > 0) {
-      job.status = "queued";
-      job.claimedBy = null;
-      job.leaseExpiresAt = null;
-    } else {
-      job.status = "failed";
+  ): Promise<JobWrite<{ job: JobRecord; attemptsRemaining: number }>> {
+    const job = this.ownJob(jobId);
+    if (job && job.status === "failed" && job.claimedBy === workerId) {
+      return { ok: true, value: { job: { ...job }, attemptsRemaining: 0 } };
     }
+    const g = gateJobWrite(job, workerId);
+    if (!g.ok) return g;
+    const j = g.value;
+    const remaining = Math.max(0, j.maxAttempts - j.attempts);
+    const requeue = (error.retryable ?? false) && remaining > 0;
+    if (requeue) {
+      j.status = "queued";
+      j.claimedBy = null;
+    } else {
+      j.status = "failed";
+    }
+    j.leaseExpiresAt = null;
+    j.error = error;
+    j.updatedAt = new Date();
+    return { ok: true, value: { job: { ...j }, attemptsRemaining: requeue ? remaining : 0 } };
+  }
 
-    job.error = error;
-    job.updatedAt = new Date();
-    this.root.jobs.set(jobId, job);
-    return { job, attemptsRemaining };
+  async cancelJob(jobId: string): Promise<JobRecord | null> {
+    const job = this.ownJob(jobId);
+    if (!job) return null;
+    if (job.status === "queued" || job.status === "claimed" || job.status === "running") {
+      job.status = "cancelled";
+      job.leaseExpiresAt = null;
+      job.updatedAt = new Date();
+    }
+    return { ...job };
+  }
+
+  async renewLeases(workerId: string, leaseSeconds: number): Promise<number> {
+    let n = 0;
+    for (const job of this.orgJobs()) {
+      if ((job.status === "claimed" || job.status === "running") && job.claimedBy === workerId) {
+        job.leaseExpiresAt = new Date(Date.now() + leaseSeconds * 1000);
+        job.updatedAt = new Date();
+        n += 1;
+      }
+    }
+    return n;
+  }
+
+  async cancelledJobIdsFor(workerId: string, sinceMs = 10 * 60 * 1000): Promise<string[]> {
+    const cutoff = Date.now() - sinceMs;
+    return this.orgJobs()
+      .filter((j) => j.status === "cancelled" && j.claimedBy === workerId && j.updatedAt.getTime() >= cutoff)
+      .map((j) => j.id);
+  }
+
+  async createArtifact(input: Omit<ArtifactRecord, "id" | "orgId" | "createdAt">): Promise<ArtifactRecord> {
+    const rec: ArtifactRecord = { ...input, id: uid(), orgId: this.orgId, createdAt: new Date() };
+    this.root.artifacts.set(rec.id, rec);
+    return { ...rec };
+  }
+
+  async getArtifacts(ids: string[]): Promise<ArtifactRecord[]> {
+    const out: ArtifactRecord[] = [];
+    for (const id of new Set(ids)) {
+      const a = this.root.artifacts.get(id);
+      if (a && a.orgId === this.orgId) out.push({ ...a });
+    }
+    return out;
+  }
+
+  async getImage(imageId: string): Promise<ImageRecord | null> {
+    const img = this.root.images.get(imageId);
+    return img && img.orgId === this.orgId ? { ...img } : null;
   }
 
   async createWorkerToken(input: {
     name: string;
     tokenHash: string;
-    scopes?: string;
+    scopes?: WorkerTokenRecord["scopes"];
   }): Promise<WorkerTokenRecord> {
     const rec: WorkerTokenRecord = {
       id: uid(),
       orgId: this.orgId,
       name: input.name,
       tokenHash: input.tokenHash,
-      scopes: input.scopes ?? "jobs:read",
+      scopes: input.scopes ?? "jobs:write",
       lastUsedAt: null,
       revokedAt: null,
       createdAt: new Date(),
     };
     this.root.workerTokens.set(rec.id, rec);
-    return rec;
+    return { ...rec };
   }
 
   async getWorkerTokenByHash(tokenHash: string): Promise<WorkerTokenRecord | null> {
     const t = [...this.root.workerTokens.values()].find(
       (tok) => tok.orgId === this.orgId && tok.tokenHash === tokenHash && !tok.revokedAt,
     );
-    return t ?? null;
+    return t ? { ...t } : null;
+  }
+
+  async listWorkerTokens(): Promise<WorkerTokenRecord[]> {
+    return [...this.root.workerTokens.values()]
+      .filter((t) => t.orgId === this.orgId)
+      .map((t) => ({ ...t }));
+  }
+
+  async revokeWorkerToken(tokenId: string): Promise<boolean> {
+    const t = this.root.workerTokens.get(tokenId);
+    if (!t || t.orgId !== this.orgId || t.revokedAt) return false;
+    t.revokedAt = new Date();
+    return true;
   }
 }
 
@@ -387,6 +520,7 @@ export class MemoryStore implements OrgStore {
   readonly jobs = new Map<string, JobRecord>();
   readonly jobEvents = new Map<string, JobEventRecord[]>();
   readonly workerTokens = new Map<string, WorkerTokenRecord>();
+  readonly artifacts = new Map<string, ArtifactRecord>();
 
   async createOrg(input: { slug: string; name: string }): Promise<OrgRecord> {
     if (this.bySlug.has(input.slug)) throw new Error(`org slug taken: ${input.slug}`);
@@ -421,6 +555,8 @@ export class MemoryStore implements OrgStore {
     const tok = [...this.workerTokens.values()].find((t) => t.tokenHash === tokenHash && !t.revokedAt);
     if (!tok) return null;
     const org = this.orgs.get(tok.orgId);
-    return org ? { org, token: tok } : null;
+    if (!org) return null;
+    tok.lastUsedAt = new Date();
+    return { org, token: { ...tok } };
   }
 }

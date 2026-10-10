@@ -15,6 +15,13 @@
       "when": 1791533163045,
       "tag": "0001_light_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791539091134,
+      "tag": "0002_m8_jobs_artifacts_worker_upsert",
+      "breakpoints": true
     }
   ]
 }

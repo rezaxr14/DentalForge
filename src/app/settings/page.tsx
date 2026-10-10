@@ -4,7 +4,6 @@
  * then renders the admin-gated invite creator per org. Degrades to a
  * signed-out/offline message instead of throwing (plan §9).
  */
-import { auth } from "@/shared/auth";
 import { headers } from "next/headers";
 import { selectOrgStore } from "@/shared/db";
 import { InviteCreator } from "./invite-creator";
@@ -20,13 +19,17 @@ interface OrgRow {
 
 export default async function SettingsPage() {
   const h = await headers();
+  // Lazy import: if the auth stack cannot initialise (misconfigured env), this page
+  // must still render its signed-out message instead of failing to load (plan §9).
+  let auth: (typeof import("@/shared/auth"))["auth"] | null = null;
   let session = null;
   try {
+    auth = (await import("@/shared/auth")).auth;
     session = await auth.api.getSession({ headers: h });
   } catch {
     session = null;
   }
-  if (!session) {
+  if (!auth || !session) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-12">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>

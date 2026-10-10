@@ -1,0 +1,2409 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TraceForge Worker Contract",
+    "version": "1",
+    "description": "Pull-based, outbound-only worker API. Workers poll; the app never calls a worker. Errors are RFC 9457 application/problem+json. Job-write endpoints require X-Worker-Id."
+  },
+  "servers": [
+    {
+      "url": "/api/worker/v1"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "workerToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "tf_wrk_<random>"
+      }
+    },
+    "schemas": {
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "default": "about:blank",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterWorkerRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runtime": {
+            "type": "string",
+            "enum": [
+              "local-gpu",
+              "colab",
+              "kaggle",
+              "cloud"
+            ]
+          },
+          "software": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "python": {
+                "type": "string"
+              },
+              "torch": {
+                "type": "string"
+              },
+              "cuda": {
+                "type": "string"
+              },
+              "vlmDentalCommit": {
+                "type": "string"
+              }
+            }
+          },
+          "capabilities": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "job": {
+                  "type": "string"
+                },
+                "versions": {
+                  "default": [
+                    1
+                  ],
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "models": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "job"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name",
+          "runtime"
+        ]
+      },
+      "RegisterWorkerResponse": {
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "pollIntervalMs": {
+            "default": 5000,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "leaseSeconds": {
+            "default": 60,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "serverTime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workerId",
+          "pollIntervalMs",
+          "leaseSeconds",
+          "serverTime"
+        ],
+        "additionalProperties": false
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "default": "idle",
+            "type": "string",
+            "enum": [
+              "idle",
+              "busy"
+            ]
+          },
+          "load": {
+            "type": "object",
+            "properties": {
+              "gpuUtil": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "vramMb": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "required": [
+          "workerId"
+        ]
+      },
+      "HeartbeatResponse": {
+        "type": "object",
+        "properties": {
+          "cancelJobIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "cancelJobIds"
+        ],
+        "additionalProperties": false
+      },
+      "ClaimJobsRequest": {
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accepts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max": {
+            "default": 1,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "waitMs": {
+            "default": 5000,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000
+          }
+        },
+        "required": [
+          "workerId",
+          "accepts"
+        ]
+      },
+      "ClaimJobsResponse": {
+        "type": "object",
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "payload": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "attempt": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "leaseExpiresAt": {
+                  "type": "string"
+                },
+                "idempotencyKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "version",
+                "payload",
+                "attempt",
+                "leaseExpiresAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "jobs"
+        ],
+        "additionalProperties": false
+      },
+      "JobEventsRequest": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "progress",
+                    "log",
+                    "turn",
+                    "artifact",
+                    "partial"
+                  ]
+                },
+                "data": {}
+              },
+              "required": [
+                "seq",
+                "type",
+                "data"
+              ]
+            }
+          }
+        },
+        "required": [
+          "events"
+        ]
+      },
+      "JobEventsResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "leaseExtendedUntil": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accepted",
+          "leaseExtendedUntil"
+        ],
+        "additionalProperties": false
+      },
+      "PresignArtifactRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mime": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "name",
+          "mime",
+          "bytes",
+          "sha256"
+        ]
+      },
+      "PresignArtifactResponse": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "uploadUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "headers": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "artifactId",
+          "uploadUrl",
+          "headers"
+        ],
+        "additionalProperties": false
+      },
+      "CompleteJobRequest": {
+        "type": "object",
+        "properties": {
+          "result": {},
+          "artifactIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "CompleteJobResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "FailJobRequest": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "FailJobResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "attemptsRemaining": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "ok",
+          "attemptsRemaining"
+        ],
+        "additionalProperties": false
+      },
+      "CreateJobRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "system.ping",
+              "yolo.prelabel",
+              "tool.execute",
+              "agent.run",
+              "eval.run",
+              "trace.render_artifacts",
+              "al.score"
+            ]
+          },
+          "payload": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "priority": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "claimed",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "maxAttempts": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "payload": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifactIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "claimedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "version",
+          "status",
+          "priority",
+          "attempts",
+          "maxAttempts",
+          "payload",
+          "result",
+          "error",
+          "artifactIds",
+          "claimedBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "JobEvent": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "type": {
+            "type": "string"
+          },
+          "data": {},
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "type",
+          "data",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "JobEventsPage": {
+        "type": "object",
+        "properties": {
+          "job": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "claimed",
+                  "running",
+                  "succeeded",
+                  "failed",
+                  "cancelled",
+                  "expired"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "attempts": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "maxAttempts": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "payload": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "result": {
+                "anyOf": [
+                  {},
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "error": {
+                "anyOf": [
+                  {},
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "artifactIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "claimedBy": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "version",
+              "status",
+              "priority",
+              "attempts",
+              "maxAttempts",
+              "payload",
+              "result",
+              "error",
+              "artifactIds",
+              "claimedBy",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "type": {
+                  "type": "string"
+                },
+                "data": {},
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "seq",
+                "type",
+                "data",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextAfter": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "done": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job",
+          "events",
+          "nextAfter",
+          "done"
+        ],
+        "additionalProperties": false
+      },
+      "SystemPingPayload": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "default": "ping",
+            "type": "string",
+            "maxLength": 200
+          },
+          "steps": {
+            "default": 3,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          }
+        }
+      },
+      "SystemPingResult": {
+        "type": "object",
+        "properties": {
+          "echo": {
+            "type": "string"
+          },
+          "workerName": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "echo",
+          "workerName",
+          "steps"
+        ],
+        "additionalProperties": false
+      },
+      "YoloPrelabelPayload": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "confThreshold": {
+            "default": 0.25,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "imageId",
+          "modelId"
+        ]
+      },
+      "YoloPrelabelResult": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string"
+          },
+          "inferenceMs": {
+            "type": "number"
+          },
+          "boxes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "bbox": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
+                },
+                "conf": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "classIdx": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 31
+                },
+                "fdiQuadrant": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                },
+                "fdiPosition": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                }
+              },
+              "required": [
+                "bbox",
+                "conf",
+                "classIdx",
+                "fdiQuadrant",
+                "fdiPosition"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "modelId",
+          "inferenceMs",
+          "boxes"
+        ],
+        "additionalProperties": false
+      },
+      "ToolExecutePayload": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            ]
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "zoom_crop",
+              "window_level",
+              "locate_tooth",
+              "fdi_label",
+              "denoise",
+              "contralateral_compare",
+              "enhance_contrast",
+              "nudge_crop"
+            ]
+          },
+          "args": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "view": {
+            "default": "native",
+            "type": "string",
+            "enum": [
+              "native",
+              "canonical"
+            ]
+          }
+        },
+        "required": [
+          "imageId",
+          "tool",
+          "args"
+        ]
+      },
+      "ToolExecuteResult": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "data"
+            ]
+          },
+          "data": {},
+          "artifactId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "durationMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "durationMs"
+        ],
+        "additionalProperties": false
+      },
+      "AgentRunPayload": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "with_tools",
+              "no_tools"
+            ]
+          },
+          "maxTurns": {
+            "default": 30,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "maxToolCalls": {
+            "default": 50,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "canonicalResize": {
+            "default": false,
+            "type": "boolean"
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "imageId",
+          "modelId",
+          "mode"
+        ]
+      },
+      "AgentRunResult": {
+        "type": "object",
+        "properties": {
+          "finalAnswer": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quadrant": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                },
+                "tooth_position": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "diagnosis": {
+                  "type": "string"
+                },
+                "raw_diagnosis": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "bbox": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
+                }
+              },
+              "required": [
+                "quadrant",
+                "tooth_position",
+                "diagnosis"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "nTurns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "nToolCalls": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "formatOk": {
+            "type": "boolean"
+          },
+          "rewardComponents": {
+            "type": "object",
+            "properties": {
+              "accuracy": {
+                "type": "number"
+              },
+              "format": {
+                "type": "number"
+              },
+              "toolValidity": {
+                "type": "number"
+              },
+              "efficiency": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "accuracy",
+              "format",
+              "toolValidity",
+              "efficiency"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "finalAnswer",
+          "nTurns",
+          "nToolCalls",
+          "formatOk"
+        ],
+        "additionalProperties": false
+      },
+      "EvalRunPayload": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string"
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "split": {
+            "default": "test",
+            "type": "string"
+          },
+          "canonicalResize": {
+            "default": false,
+            "type": "boolean"
+          },
+          "imageIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "required": [
+          "modelId",
+          "dataset"
+        ]
+      },
+      "EvalRunResult": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "n": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "summary": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "runId",
+          "n",
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      "TraceRenderArtifactsPayload": {
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "traceId"
+        ]
+      },
+      "TraceRenderArtifactsResult": {
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "turnIdx": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "callIdx": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "artifactId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              },
+              "required": [
+                "turnIdx",
+                "callIdx",
+                "artifactId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "artifacts"
+        ],
+        "additionalProperties": false
+      },
+      "AlScorePayload": {
+        "type": "object",
+        "properties": {
+          "imageIds": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              ]
+            }
+          },
+          "modelId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "imageIds",
+          "modelId"
+        ]
+      },
+      "AlScoreResult": {
+        "type": "object",
+        "properties": {
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "imageId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  ]
+                },
+                "meanConf": {
+                  "type": "number"
+                },
+                "minConf": {
+                  "type": "number"
+                },
+                "entropy": {
+                  "type": "number"
+                },
+                "nBoxes": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "imageId",
+                "meanConf",
+                "minConf",
+                "entropy",
+                "nBoxes"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "scores"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "paths": {
+    "/register": {
+      "post": {
+        "summary": "Register (upsert by name) and obtain a workerId",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterWorkerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterWorkerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/heartbeat": {
+      "post": {
+        "summary": "Liveness; returns jobs cancelled while you held them",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/jobs/claim": {
+      "post": {
+        "summary": "Long-poll (≤20 s) for jobs; leases them for `leaseSeconds`",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimJobsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimJobsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/jobs/{id}/events": {
+      "post": {
+        "summary": "Append events (idempotent on seq); extends the lease",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Worker-Id",
+            "in": "header",
+            "required": true,
+            "description": "The workerId returned by /register. Fences job writes to the lease holder (ADR-0009).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobEventsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEventsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "job_not_owner | job_cancelled | job_terminal — stop working on this job",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/jobs/{id}/artifacts/presign": {
+      "post": {
+        "summary": "Presign an artifact upload",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Worker-Id",
+            "in": "header",
+            "required": true,
+            "description": "The workerId returned by /register. Fences job writes to the lease holder (ADR-0009).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignArtifactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignArtifactResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "job_not_owner | job_cancelled | job_terminal — stop working on this job",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/jobs/{id}/complete": {
+      "post": {
+        "summary": "Complete a job (idempotent for the lease holder)",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Worker-Id",
+            "in": "header",
+            "required": true,
+            "description": "The workerId returned by /register. Fences job writes to the lease holder (ADR-0009).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "job_not_owner | job_cancelled | job_terminal — stop working on this job",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/jobs/{id}/fail": {
+      "post": {
+        "summary": "Fail a job; retryable failures requeue while attempts remain",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Worker-Id",
+            "in": "header",
+            "required": true,
+            "description": "The workerId returned by /register. Fences job writes to the lease holder (ADR-0009).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "job_not_owner | job_cancelled | job_terminal — stop working on this job",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/images/{imageId}": {
+      "get": {
+        "summary": "Short-lived presigned download URL for an image (variant: original)",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "original"
+              ],
+              "default": "original"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown image or variant",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
+      }
+    },
+    "/models/register": {
+      "post": {
+        "summary": "Register a model checkpoint",
+        "x-implemented": false,
+        "responses": {
+          "501": {
+            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/eval-run": {
+      "post": {
+        "summary": "Ingest eval cases",
+        "x-implemented": false,
+        "responses": {
+          "501": {
+            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/traces": {
+      "post": {
+        "summary": "Ingest verified traces",
+        "x-implemented": false,
+        "responses": {
+          "501": {
+            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/metrics": {
+      "post": {
+        "summary": "Ingest training metrics",
+        "x-implemented": false,
+        "responses": {
+          "501": {
+            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-job-types": {
+    "system.ping": {
+      "payload": {
+        "$ref": "#/components/schemas/SystemPingPayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/SystemPingResult"
+      }
+    },
+    "yolo.prelabel": {
+      "payload": {
+        "$ref": "#/components/schemas/YoloPrelabelPayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/YoloPrelabelResult"
+      }
+    },
+    "tool.execute": {
+      "payload": {
+        "$ref": "#/components/schemas/ToolExecutePayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/ToolExecuteResult"
+      }
+    },
+    "agent.run": {
+      "payload": {
+        "$ref": "#/components/schemas/AgentRunPayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/AgentRunResult"
+      }
+    },
+    "eval.run": {
+      "payload": {
+        "$ref": "#/components/schemas/EvalRunPayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/EvalRunResult"
+      }
+    },
+    "trace.render_artifacts": {
+      "payload": {
+        "$ref": "#/components/schemas/TraceRenderArtifactsPayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/TraceRenderArtifactsResult"
+      }
+    },
+    "al.score": {
+      "payload": {
+        "$ref": "#/components/schemas/AlScorePayload"
+      },
+      "result": {
+        "$ref": "#/components/schemas/AlScoreResult"
+      }
+    }
+  }
+}

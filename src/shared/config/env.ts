@@ -129,6 +129,24 @@ export function parseEnv(record: Record<string, string | undefined>): AppEnv {
   return { ...env, dbConfigured: Boolean(normalized.DATABASE_URL) };
 }
 
+/**
+ * Diagnostic-safe env check for health/status endpoints: never throws and never
+ * echoes a value — only which variables are wrong (the guard's messages name
+ * variables, not their contents).
+ */
+export function tryGetEnv(): { ok: true; env: AppEnv } | { ok: false; problems: string[] } {
+  try {
+    return { ok: true, env: getEnv() };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const lines = msg
+      .split("\n")
+      .map((l) => l.replace(/^\s*-\s*/, "").trim())
+      .filter((l) => l && !l.startsWith("[env]") && !l.startsWith("Set the variables"));
+    return { ok: false, problems: lines.length > 0 ? lines : ["environment failed validation"] };
+  }
+}
+
 export interface Capabilities {
   db: boolean;
   redis: boolean;

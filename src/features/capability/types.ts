@@ -18,6 +18,12 @@ export interface StrategyResolution {
   strategy: StrategyKind;
   reason: string;
   workerStatus: WorkerStatus;
+  /**
+   * True when the UI may offer "queue for later": job integration is on and a
+   * database exists to hold the job until a worker connects (plan §9.4 rule 6).
+   * Always false while the worker is the chosen strategy (just run it).
+   */
+  queueable: boolean;
 }
 
 export interface CapabilityContext {
@@ -33,4 +39,6 @@ export interface CapabilityContext {
   lastHeartbeatMsAgo?: number;
   /** Capabilities declared by registered workers. */
   declaredCapabilities?: string[];
+  /** Is there a database to persist queued jobs in? Defaults to true when unspecified. */
+  dbAvailable?: boolean;
 }

@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/shared/ui/theme-provider";
 import { ThemeToggle } from "@/shared/ui/theme-toggle";
 import { OrgSwitcher } from "@/shared/ui/org-switcher";
 import { SessionHeader } from "@/shared/ui/session-header";
+import { WorkerStatusBadge } from "@/features/capability";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 ))}
               </nav>
               <div className="ms-auto flex items-center gap-3">
+                <WorkerStatusBadge />
                 <OrgSwitcher />
                 <SessionHeader />
                 <ThemeToggle inline />

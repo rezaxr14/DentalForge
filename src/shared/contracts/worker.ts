@@ -6,7 +6,7 @@
  * Header: `X-Contract-Version: 1` required; errors follow RFC 9457 Problem Details.
  */
 import { z } from "zod";
-import { Bbox } from "./traces";
+import { Bbox, Finding } from "./traces";
 
 export const CONTRACT_VERSION = 1;
 export const CONTRACT_HEADER = "x-contract-version";
@@ -18,6 +18,8 @@ export const ProblemDetails = z.object({
   status: z.number().int(),
   detail: z.string().optional(),
   instance: z.string().optional(),
+  /** Stable machine-readable code (extension member), e.g. `job_not_owner`. */
+  code: z.string().optional(),
 });
 export type ProblemDetailsT = z.infer<typeof ProblemDetails>;
 
@@ -257,3 +259,35 @@ export const AlScoreResult = z.object({
     }),
   ),
 });
+
+// 3b. agent.run result (streams one `turn` event per turn; event data = Turn, see traces.ts)
+export const AgentRunResult = z.object({
+  finalAnswer: z.array(Finding),
+  nTurns: z.number().int().min(0),
+  nToolCalls: z.number().int().min(0),
+  formatOk: z.boolean(),
+  rewardComponents: z
+    .object({
+      accuracy: z.number(),
+      format: z.number(),
+      toolValidity: z.number(),
+      efficiency: z.number(),
+    })
+    .optional(),
+});
+
+// 7. system.ping — contract-level diagnostic (not in plan §10.2). Lets an operator
+// verify the whole pipe (enqueue → claim → events → complete → SSE) with no GPU.
+export const SystemPingPayload = z.object({
+  message: z.string().max(200).default("ping"),
+  /** Number of progress events the worker should emit before completing. */
+  steps: z.number().int().min(0).max(20).default(3),
+});
+export const SystemPingResult = z.object({
+  echo: z.string(),
+  workerName: z.string(),
+  steps: z.number().int().min(0),
+});
+
+/** Header carrying the calling worker's id on job-write endpoints (ownership fence). */
+export const WORKER_ID_HEADER = "x-worker-id";
