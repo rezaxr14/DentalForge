@@ -72,10 +72,8 @@ lease ownership.
 - **Endpoints answering 501** (documented in the contract): `models/register`,
   `ingest/eval-run`, `ingest/traces`, `ingest/metrics`.
 - **Image variants:** `GET /images/:id` serves `original` only.
-- **Worker-token admin UI** (settings); tokens are minted with `pnpm worker:token`.
-- **Features do not consume the ladder yet.** `/status` and the header pill do;
-  Tool Lab, LabelForge pre-label, trace viewer etc. still need `resolveFeature()` +
-  provenance badges wired in.
+- ~~Worker-token admin UI~~ — shipped, see ADR-0010 (`pnpm worker:token` remains for `admin` scope / scripting).
+- ~~Features do not consume the ladder yet~~ — Tool Lab, LabelForge "Suggest boxes" and the trace viewer now do (commit `57a9ffb`).
 - **Browser-level tests:** Playwright degradation/a11y specs are not written (the
   HTTP-level `pnpm smoke` and `pnpm e2e:worker` exist). k6 load tests, worker
   endpoint rate limiting, and an R2 adapter (still a stub) are also open.

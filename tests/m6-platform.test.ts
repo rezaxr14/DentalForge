@@ -23,6 +23,8 @@ describe("can() role gate", () => {
       "member.changeRole",
       "member.remove",
       "worker.register",
+      "worker.createToken",
+      "worker.listTokens",
       "worker.revokeToken",
       "org.manage",
     ] as const;

@@ -27,6 +27,8 @@ export const Action = z.enum([
   "member.changeRole",
   "member.remove",
   "worker.register",
+  "worker.createToken",
+  "worker.listTokens",
   "worker.revokeToken",
   "job.create",
   "job.cancel",
@@ -80,6 +82,8 @@ export function can(role: Role, action: Action, resource?: Resource): boolean {
     case "member.changeRole":
     case "member.remove":
     case "worker.register":
+    case "worker.createToken":
+    case "worker.listTokens":
     case "worker.revokeToken":
     case "org.manage":
       return role === "admin";
