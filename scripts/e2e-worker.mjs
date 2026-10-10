@@ -21,6 +21,13 @@ const BASE = `http://localhost:${PORT}`;
 const stamp = Date.now().toString(36);
 const EMAIL = `e2e-${stamp}@example.com`;
 const SLUG = `e2e-${stamp}`;
+// Windows: `node_modules/.bin/next` and `.bin/tsx` are extensionless sh scripts
+// that spawn() cannot execute without a shell, so invoke the JS entry points
+// through the current node binary instead. Python: `python3` is only a Microsoft
+// Store alias on Windows; the real interpreter is on PATH as `python`.
+const NEXT_BIN = join(root, "node_modules", "next", "dist", "bin", "next");
+const TSX_BIN = join(root, "node_modules", "tsx", "dist", "cli.mjs");
+const PY = process.platform === "win32" ? "python" : "python3";
 const ENV = {
   DATABASE_URL: DB_URL,
   BETTER_AUTH_URL: BASE,
@@ -110,7 +117,7 @@ async function readSse(path, timeoutMs = 25_000) {
 
 async function main() {
   console.log(`e2e against ${BASE}`);
-  const server = run(join(root, "node_modules", ".bin", "next"), ["start", "-p", String(PORT)], { ...ENV, NODE_ENV: "production" }, "next");
+  const server = run(process.execPath, [NEXT_BIN, "start", "-p", String(PORT)], { ...ENV, NODE_ENV: "production" }, "next");
   const up = await waitFor(async () => {
     try { return (await fetch(`${BASE}/api/health`)).ok; } catch { return false; }
   }, { timeoutMs: 60_000, everyMs: 500 });
@@ -130,7 +137,7 @@ async function main() {
   check("session resolves to an org member (GET /api/jobs → 200)", list.status === 200, `${list.status}`);
 
   // ---- a worker token via the real CLI ------------------------------------
-  const tokRun = spawnSync(join(root, "node_modules", ".bin", "tsx"), ["scripts/create-worker-token.ts", "--org", SLUG, "--name", "e2e"], {
+  const tokRun = spawnSync(process.execPath, [TSX_BIN, "scripts/create-worker-token.ts", "--org", SLUG, "--name", "e2e"], {
     cwd: root, env: { PATH: process.env.PATH, HOME: process.env.HOME, DATABASE_URL: DB_URL, BETTER_AUTH_SECRET: ENV.BETTER_AUTH_SECRET, INVITE_SIGNING_SECRET: ENV.INVITE_SIGNING_SECRET }, encoding: "utf8",
   });
   const token = /tf_wrk_[\w-]+/.exec(tokRun.stdout)?.[0];
@@ -145,7 +152,7 @@ async function main() {
   check("worker status is offline while nobody is attached", noWorker.status === "offline" && noWorker.workers.length === 0, JSON.stringify(noWorker));
 
   // ---- attach the TypeScript mock worker -----------------------------------
-  const mock = run(join(root, "node_modules", ".bin", "tsx"), ["examples/mock-worker/index.ts"], {
+  const mock = run(process.execPath, [TSX_BIN, "examples/mock-worker/index.ts"], {
     TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, MOCK_STEP_DELAY_MS: "80", MOCK_CLAIM_WAIT_MS: "2000",
   }, "mock-worker");
   const earlyDone = await finish(early);
@@ -210,7 +217,7 @@ async function main() {
 
   // ---- a second language on the same wire ---------------------------------------
   await stop(mock);
-  const py = run("python3", ["examples/python-worker/worker.py"], {
+  const py = run(PY, ["examples/python-worker/worker.py"], {
     TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-e2e", MAX_JOBS: "1", STEP_DELAY_S: "0.05",
   }, "python-worker");
   const pyJob = await enqueue("system.ping", { message: "from python", steps: 2 });
@@ -221,7 +228,7 @@ async function main() {
 
   // ---- capabilities are honest: the python worker only advertises what it can do ------
   const wantsAgent = await enqueue("agent.run", { imageId: 1, modelId: "demo", mode: "with_tools" });
-  const py2 = run("python3", ["examples/python-worker/worker.py"], { TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-e2e", STEP_DELAY_S: "0.05" }, "python-worker-2");
+  const py2 = run(PY, ["examples/python-worker/worker.py"], { TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-e2e", STEP_DELAY_S: "0.05" }, "python-worker-2");
   await sleep(4000);
   check("a worker that does not advertise agent.run is never handed one", (await job(wantsAgent)).status === "queued");
   await api(`/api/jobs/${wantsAgent}/cancel`, { method: "POST" });

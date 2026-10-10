@@ -22,6 +22,9 @@ import pg from "pg";
 
 const root = process.cwd();
 const APP = join(root, "src", "app");
+// Windows: `node_modules/.bin/next` is an extensionless sh script that spawn()
+// cannot execute without a shell — invoke the JS entry via the node binary.
+const NEXT_BIN = join(root, "node_modules", "next", "dist", "bin", "next");
 const DB_URL = process.env.SMOKE_DATABASE_URL ?? "postgresql://traceforge:traceforge@localhost:5433/traceforge";
 const DEAD_DB = "postgresql://nobody:nobody@127.0.0.1:1/none";
 const SECRETS = {
@@ -64,7 +67,7 @@ function check(label, ok, detail = "") {
 }
 
 async function startServer(env, port) {
-  const child = spawn(join(root, "node_modules", ".bin", "next"), ["start", "-p", String(port)], {
+  const child = spawn(process.execPath, [NEXT_BIN, "start", "-p", String(port)], {
     cwd: root,
     env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production", ...env },
     stdio: ["ignore", "pipe", "pipe"],

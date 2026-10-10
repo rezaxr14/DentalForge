@@ -1,0 +1,6 @@
+# Generated contract docs are byte-compared against their zod source in
+# tests/m8-contract-docs.test.ts; JSON.stringify always emits "\n", so these
+# must stay LF in every working tree (core.autocrlf would otherwise convert
+# them to CRLF on Windows checkouts and fail the freshness test).
+docs/worker-openapi.json text eol=lf
+docs/worker-contract.md text eol=lf
