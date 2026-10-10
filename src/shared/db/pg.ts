@@ -15,6 +15,8 @@ export function getPool(): pg.Pool {
     g.__tfPool = new pg.Pool({
       connectionString: getEnv().DATABASE_URL,
       max: 10,
+      // Fail fast: a blackholed DB host must degrade the app, not hang requests.
+      connectionTimeoutMillis: 3000,
     });
   }
   return g.__tfPool;

@@ -8,7 +8,6 @@
  * fixtures so a page never throws (plan section 9.4 rule 2).
  */
 import { headers } from "next/headers";
-import { auth } from "@/shared/auth";
 import { getPgDb } from "@/shared/db/pg";
 import { DrizzleOrgStore } from "@/shared/db/repositories";
 import {
@@ -24,6 +23,9 @@ export type SourceResolution = {
 };
 
 async function resolveOrgId(): Promise<string | null> {
+  // Lazy: Better Auth validates the env at IMPORT time. Fixture mode (the default)
+  // must never pay for — or be broken by — an auth stack it does not use.
+  const { auth } = await import("@/shared/auth");
   const session = await auth.api.getSession({ headers: await headers() });
   const userId = session?.user?.id;
   if (!userId) return null;

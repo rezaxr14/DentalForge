@@ -661,7 +661,12 @@ export const workers = pgTable(
     lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [index("workers_org_idx").on(t.orgId)],
+  (t) => [
+    index("workers_org_idx").on(t.orgId),
+    // Register is an upsert by (org, name): a restarted Colab/Kaggle session
+    // re-attaches to its own row instead of piling up duplicates (plan §10.1).
+    uniqueIndex("workers_org_name_uniq").on(t.orgId, t.name),
+  ],
 );
 
 export const jobs = pgTable(
@@ -687,6 +692,8 @@ export const jobs = pgTable(
     idempotencyKey: text("idempotency_key"),
     result: jsonb("result").$type<unknown>(),
     error: jsonb("error").$type<unknown>(),
+    /** Artifacts the worker attached on completion (plan §10.1 `complete`). */
+    artifactIds: jsonb("artifact_ids").$type<string[]>().notNull().default([]),
     createdBy: text("created_by"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
