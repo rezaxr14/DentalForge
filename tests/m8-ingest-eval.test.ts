@@ -340,6 +340,34 @@ describe.each(backends)("eval run ingestion — $name", ({ skip, make }) => {
       expect((await store.scoped(a.id).listEvalCases(first.runId)).map((c) => c.sourceImageId)).toEqual([1]);
     });
 
+    it("accepts what real models emit (FDI code in tooth_position, null confidence) and keeps it as emitted — ADR-0014", async () => {
+      const quirky = (n: number) =>
+        mk(n, { predictions: [{ quadrant: 3, tooth_position: 36, diagnosis: "Caries", confidence: null }], confidence: null });
+      const res = await ok({ runKey: "http-quirks", cases: [mk(1), quirky(2), quirky(3)] });
+      expect(res).toMatchObject({ runCreated: true, n: 3, cases: { received: 3, inserted: 3 } });
+      const stored = await store.scoped(a.id).listEvalCases(res.runId);
+      expect(stored.map((c) => c.sourceImageId)).toEqual([1, 2, 3]);
+      expect(stored[1]!.predictions).toEqual([{ quadrant: 3, tooth_position: 36, diagnosis: "Caries", confidence: null }]);
+      expect(stored[1]!.confidence).toBeNull();
+    });
+
+    it("importer and endpoint accept the SAME lines (one contract, one answer)", async () => {
+      const lines = [mk(1), mk(2, { predictions: [{ quadrant: 1, tooth_position: 18, diagnosis: "x", confidence: null }] }), mk(3, { confidence: null })];
+      const file = parseEvalFile("parity.jsonl", lines.map((l) => JSON.stringify(l)))!;
+      const res = await ok({ runKey: "http-parity", cases: lines });
+      expect(res.n).toBe(file.run.n); // 3 and 3: neither path drops a case the other keeps
+      for (const k of Object.keys(file.run.summary)) expect(res.summary[k]!, k).toBeCloseTo(file.run.summary[k]!, 6);
+    });
+
+    it("still refuses a real structural error, naming the case index and path, and writes nothing", async () => {
+      const bad = mk(2, { ground_truth: [{ quadrant: 3, tooth_position: 36, diagnosis: "x" }] }); // ground truth stays strict
+      const res = await call({ token: tokA, body: { runKey: "http-strict", cases: [mk(1), bad] } });
+      expect(res.status).toBe(422);
+      const p = (await res.json()) as { detail: string };
+      expect(p.detail).toContain("cases.1.ground_truth.0.tooth_position");
+      expect((await store.scoped(a.id).listEvalRuns()).filter((r) => r.runKey === "http-strict")).toEqual([]);
+    });
+
     it("tenants are isolated: the same runKey in another org is its own run", async () => {
       const mine = await ok(chunk("http-iso", [1, 2]), tokA);
       const theirs = await ok({ runKey: "http-iso", cases: [mk(1, { model: "b-model" })] }, tokB); // would be a 409 if B could see A's run

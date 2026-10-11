@@ -14,7 +14,7 @@
  * not a feature — it pins `orgId` explicitly on every insert, mirroring the
  * `scoped(orgId)` contract; features themselves stay repo-only.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "@/shared/db/pg";
 import * as s from "@/shared/db/schema";
 import type { ParsedEval, ParsedTraceRow } from "./parse";
@@ -37,8 +37,12 @@ export interface ImportStats {
   turnsExisting: number;
   toolCallsInserted: number;
   invalidLines: number;
+  /** Eval-file lines skipped because they were not valid JSON or not a valid `EvalCase` (ADR-0014: never silent). */
+  evalLinesInvalid: number;
   evalRunsInserted: number;
   evalRunsExisting: number;
+  /** Existing runs whose stored case count differs from what the file yields now (e.g. imported before ADR-0014). */
+  evalRunsStale: number;
   evalCasesInserted: number;
 }
 
@@ -57,8 +61,10 @@ export function emptyStats(orgId: string): ImportStats {
     turnsExisting: 0,
     toolCallsInserted: 0,
     invalidLines: 0,
+    evalLinesInvalid: 0,
     evalRunsInserted: 0,
     evalRunsExisting: 0,
+    evalRunsStale: 0,
     evalCasesInserted: 0,
   };
 }
@@ -299,12 +305,15 @@ export async function insertEvalRows(
   stats: ImportStats,
 ): Promise<void> {
   const existing = await db
-    .select({ id: s.evalRuns.id })
+    .select({ id: s.evalRuns.id, n: s.evalRuns.n })
     .from(s.evalRuns)
     // Org-scoped: a second organization importing a file with the same name must get its own run,
     // not be told "already imported" because another tenant did it first.
     .where(and(eq(s.evalRuns.orgId, orgId), eq(s.evalRuns.sourceFile, parsed.run.sourceFile)));
   if (existing.length > 0) {
+    // "Already imported" is only true if it was imported COMPLETELY. A run stored with fewer cases than the file
+    // yields now (it was imported under a stricter contract) is reported so it can be replaced, never kept silently.
+    if (existing[0]!.n !== parsed.run.n) stats.evalRunsStale += 1;
     stats.evalRunsExisting += 1;
     return;
   }
@@ -349,3 +358,16 @@ export async function insertEvalRows(
   }
 }
 
+
+/**
+ * Delete this organization's FILE-IMPORTED eval runs (and, by cascade, their cases) for `sourceFile`, so the next
+ * `insertEvalRows` re-imports them in full. Scoped to the org and to `run_key IS NULL`: API-ingested runs
+ * (`ingest/eval-run`) and other tenants' runs are never touched. Returns how many runs were removed.
+ */
+export async function replaceEvalRunsBySourceFile(db: Db, orgId: string, sourceFile: string): Promise<number> {
+  const removed = await db
+    .delete(s.evalRuns)
+    .where(and(eq(s.evalRuns.orgId, orgId), eq(s.evalRuns.sourceFile, sourceFile), isNull(s.evalRuns.runKey)))
+    .returning({ id: s.evalRuns.id });
+  return removed.length;
+}

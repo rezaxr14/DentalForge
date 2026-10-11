@@ -1016,8 +1016,8 @@ Request/response bodies are listed under **Schemas** below.
                 },
                 "tooth_position": {
                   "type": "integer",
-                  "minimum": 1,
-                  "maximum": 8
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
                 },
                 "diagnosis": {
                   "type": "string"
@@ -1026,9 +1026,16 @@ Request/response bodies are listed under **Schemas** below.
                   "type": "string"
                 },
                 "confidence": {
-                  "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "bbox": {
                   "type": "array",
@@ -1126,8 +1133,8 @@ Request/response bodies are listed under **Schemas** below.
                     },
                     "tooth_position": {
                       "type": "integer",
-                      "minimum": 1,
-                      "maximum": 8
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "diagnosis": {
                       "type": "string"
@@ -1136,9 +1143,16 @@ Request/response bodies are listed under **Schemas** below.
                       "type": "string"
                     },
                     "confidence": {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "bbox": {
                       "type": "array",
@@ -1252,7 +1266,10 @@ Request/response bodies are listed under **Schemas** below.
             "type": "string"
           },
           "confidence": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "timestamp": {
             "type": [
