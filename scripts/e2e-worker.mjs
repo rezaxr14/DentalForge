@@ -10,7 +10,7 @@
  *   Python reference worker (a second language) handles a job on the same wire.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 
@@ -274,6 +274,45 @@ async function main() {
     check("a rejected batch left no run behind", abort.rows[0].n === 0, JSON.stringify(abort.rows));
   } finally {
     await dbp.end();
+  }
+
+  // ---- ingest/traces: real fixture trace over HTTP into real Postgres ----
+  const tp = new pg.Pool({ connectionString: DB_URL });
+  try {
+    // The dataset and its image must already exist (the endpoint never creates them): seed as the importer would.
+    const ds = await tp.query("INSERT INTO datasets (id, org_id, name, source) VALUES (gen_random_uuid(), $1, 'DENTEX', 'dentex') RETURNING id", [orgId]);
+    await tp.query(
+      "INSERT INTO images (id, org_id, dataset_id, source_image_id, content_hash, width, height, storage_key) VALUES (gen_random_uuid(), $1, $2, 1, 'e2e-img-1', 100, 50, '')",
+      [orgId, ds.rows[0].id],
+    );
+    const fixture = JSON.parse(readFileSync(join(root, "fixtures", "traces", "verified_with_tools.json"), "utf8"));
+    const tbatch = { source: { cohort: "e2e_dentex", mode: "with_tools", sourceFile: "e2e" }, traces: [fixture, { ...fixture, image_id: 999 }] };
+    const t1 = await wpost("/ingest/traces", tbatch);
+    check(
+      "ingest/traces inserts the known image and rejects the unknown one (per-item, HTTP 200)",
+      t1.status === 200 && t1.json.inserted === 1 && t1.json.rejected === 1 && t1.json.results[0].outcome === "inserted" && t1.json.results[1].reason === "unknown_image",
+      JSON.stringify(t1),
+    );
+    const t2 = await wpost("/ingest/traces", tbatch);
+    check(
+      "  …and re-sending it reports `existing` with the same content",
+      t2.json.existing === 1 && t2.json.results[0].sameContent === true && t2.json.results[0].traceId === t1.json.results[0].traceId,
+      JSON.stringify(t2),
+    );
+    const counts = await tp.query(
+      `SELECT (SELECT count(*)::int FROM traces WHERE org_id = $1) AS traces,
+              (SELECT count(*)::int FROM trace_turns WHERE org_id = $1) AS turns,
+              (SELECT count(*)::int FROM tool_calls WHERE org_id = $1) AS calls`,
+      [orgId],
+    );
+    const wantCalls = fixture.turns.reduce((n, t) => n + (t.tool_calls_this_turn?.length ?? 0), 0);
+    check(
+      "the trace, its turns and its tool calls are really in Postgres (once, not doubled by the replay)",
+      counts.rows[0].traces === 1 && counts.rows[0].turns === fixture.turns.length && counts.rows[0].calls === wantCalls,
+      JSON.stringify({ got: counts.rows[0], wantTurns: fixture.turns.length, wantCalls }),
+    );
+  } finally {
+    await tp.end();
   }
 }
 

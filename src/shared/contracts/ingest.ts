@@ -6,6 +6,7 @@
  * them and `contract:docs` renders them into docs/worker-openapi.json.
  */
 import { z } from "zod";
+import { VerifiedTrace } from "./traces";
 
 /** Largest magnitude a Postgres `real` (float4) can hold; beyond it the INSERT would overflow. */
 export const FLOAT4_MAX = 3.4028234663852886e38;
@@ -128,3 +129,63 @@ export const IngestMetricsResponse = z.object({
   rewardSamples: WriteCounts,
 });
 export type IngestMetricsResponseT = z.infer<typeof IngestMetricsResponse>;
+
+// --- POST /ingest/traces ---------------------------------------------------
+
+/** Cohort labels are slugs; `hybrid` is the importer's skip-me union label and is never a real cohort. */
+export const COHORT_PATTERN = /^[a-z0-9][a-z0-9_]{0,63}$/;
+export const MAX_TRACES_PER_REQUEST = 100;
+
+export const TraceBatchSource = z.object({
+  cohort: z
+    .string()
+    .regex(COHORT_PATTERN, "lowercase letters, digits and underscores, up to 64 characters")
+    .refine((c) => c !== "hybrid", 'the "hybrid" union label is not a cohort'),
+  mode: z.enum(["with_tools", "no_tools"]),
+  /** Applies to every trace in the batch. */
+  verified: z.boolean().default(true),
+  /** Free-form provenance label stored with each new trace (e.g. the run or file the worker produced them from). */
+  sourceFile: z.string().trim().min(1).max(300).optional(),
+});
+
+/**
+ * A verified trace as the importer reads it (`VerifiedTrace`, plan §4.3), except that `messages` (the full chat
+ * transcript, large) and `image_path` (machine-specific, never used to locate images) may be omitted. They are
+ * never persisted and never part of the content hash, so including them changes nothing.
+ */
+export const IngestTrace = VerifiedTrace.extend({
+  image_path: z.string().optional(),
+  messages: z.array(z.unknown()).optional(),
+});
+export type IngestTraceT = z.infer<typeof IngestTrace>;
+
+export const IngestTracesRequest = z.object({
+  source: TraceBatchSource,
+  traces: z.array(IngestTrace).min(1).max(MAX_TRACES_PER_REQUEST),
+});
+export type IngestTracesRequestT = z.infer<typeof IngestTracesRequest>;
+
+export const TraceOutcome = z.enum(["inserted", "existing", "rejected"]);
+export const TraceRejectReason = z.enum(["unknown_dataset", "unknown_image", "invalid_trace"]);
+
+export const IngestTraceResultItem = z.object({
+  /** Position in the request's `traces` array. */
+  index: z.number().int(),
+  /** The trace's own `image_id` (the dataset's image number), echoed for convenience. */
+  imageId: z.number().int(),
+  outcome: TraceOutcome,
+  /** Present for `inserted` and `existing`. */
+  traceId: z.string().uuid().optional(),
+  /** `existing` only: whether the stored content hash equals this trace's. `false` = same identity, different content; the FIRST import is kept. */
+  sameContent: z.boolean().optional(),
+  /** `rejected` only. */
+  reason: TraceRejectReason.optional(),
+});
+
+export const IngestTracesResponse = z.object({
+  results: z.array(IngestTraceResultItem),
+  inserted: z.number().int(),
+  existing: z.number().int(),
+  rejected: z.number().int(),
+});
+export type IngestTracesResponseT = z.infer<typeof IngestTracesResponse>;

@@ -7,7 +7,7 @@
  * thrown (plan §9.4 rule 2).
  */
 import { artifactRefsInResult, parseResult } from "@/shared/contracts/jobs";
-import { IngestMetricsRequest, RegisterModelRequest } from "@/shared/contracts/ingest";
+import { IngestMetricsRequest, IngestTracesRequest, RegisterModelRequest, type IngestTracesResponseT } from "@/shared/contracts/ingest";
 import {
   ClaimJobsRequest,
   CompleteJobRequest,
@@ -23,6 +23,7 @@ import type { StorageAdapter } from "@/shared/storage/adapter";
 import { authenticateWorker, requireWorker } from "./worker-auth";
 import { json, jobWriteProblem, problem, readJson, validationProblem } from "./problem";
 import { toClaimedJob } from "./mappers";
+import { prepareTrace } from "./trace-ingest";
 
 export const LEASE_SECONDS = 60;
 export const POLL_INTERVAL_MS = 5000;
@@ -304,6 +305,59 @@ export async function ingestMetrics(req: Request, deps: WorkerDeps): Promise<Res
     metrics: { received: r.metrics.length, inserted: out.metricsInserted },
     rewardSamples: { received: r.rewardSamples.length, inserted: out.rewardSamplesInserted },
   });
+}
+
+// ---- POST /ingest/traces ---------------------------------------------------
+/**
+ * Verified traces, deduplicated by IDENTITY (dataset, image, cohort, mode) — ADR-0008/0012.
+ * Structurally invalid requests are a 422 (client bug); everything state-dependent (unknown image,
+ * already present) is a per-item outcome in a 200, so one bad trace never blocks the rest and a
+ * retried batch is safe. Each trace commits atomically with its turns and tool calls. `jobs:write`.
+ */
+export async function ingestTraces(req: Request, deps: WorkerDeps): Promise<Response> {
+  const auth = await authenticateWorker(req, deps.store, "jobs:write");
+  if (auth instanceof Response) return auth;
+  const body = await readJson(req);
+  if (!body.ok) return body.res;
+  const parsed = IngestTracesRequest.safeParse(body.value);
+  if (!parsed.success) return validationProblem(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
+  const { source, traces } = parsed.data;
+
+  const datasetBySource = new Map<string, string>();
+  for (const d of await auth.repos.listDatasets()) if (!datasetBySource.has(d.source)) datasetBySource.set(d.source, d.id);
+
+  const results: IngestTracesResponseT["results"] = [];
+  const counts = { inserted: 0, existing: 0, rejected: 0 };
+  for (const [index, item] of traces.entries()) {
+    const reject = (reason: "unknown_dataset" | "unknown_image" | "invalid_trace") => {
+      counts.rejected += 1;
+      results.push({ index, imageId: item.image_id, outcome: "rejected", reason });
+    };
+    const datasetId = datasetBySource.get(item.dataset);
+    if (!datasetId) {
+      reject("unknown_dataset");
+      continue;
+    }
+    const prepared = prepareTrace(item, source, datasetId);
+    if (!prepared) {
+      reject("invalid_trace");
+      continue;
+    }
+    const out = await auth.repos.ingestTrace(prepared);
+    if (out.outcome === "rejected") {
+      reject(out.reason);
+      continue;
+    }
+    counts[out.outcome] += 1;
+    results.push({
+      index,
+      imageId: item.image_id,
+      outcome: out.outcome,
+      traceId: out.trace.id,
+      ...(out.outcome === "existing" ? { sameContent: out.sameContent } : {}),
+    });
+  }
+  return json({ results, ...counts });
 }
 
 export function notImplemented(name: string): Response {

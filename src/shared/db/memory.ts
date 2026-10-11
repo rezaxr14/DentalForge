@@ -15,6 +15,8 @@ import {
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type IngestTraceInput,
+  type IngestTraceResult,
   type IngestTrainingInput,
   type IngestTrainingResult,
   type InviteRecord,
@@ -29,6 +31,7 @@ import {
   type RewardSampleRecord,
   type ScopedRepos,
   type TraceRecord,
+  type TraceTurnRecord,
   type TrainingMetricRecord,
   type TrainingRunRecord,
   type WorkerRecord,
@@ -630,6 +633,71 @@ class ScopedMemory implements ScopedRepos {
       .sort((a, b) => a.step - b.step || cmp(a.trajectoryRef, b.trajectoryRef))
       .map((r) => structuredClone(r));
   }
+
+  async ingestTrace(input: IngestTraceInput): Promise<IngestTraceResult> {
+    // Mirrors the unique indexes trace_turns(trace, idx) and tool_calls(turn, idx): refuse before mutating anything.
+    if (new Set(input.turns.map((t) => t.idx)).size !== input.turns.length) throw new Error("duplicate turn idx in one trace");
+    if (input.turns.some((t) => new Set(t.toolCalls.map((c) => c.idx)).size !== t.toolCalls.length)) {
+      throw new Error("duplicate tool call idx in one turn");
+    }
+    const dataset = this.root.datasets.get(input.datasetId);
+    if (!dataset || dataset.orgId !== this.orgId) return { outcome: "rejected", reason: "unknown_dataset" };
+    const image = [...this.root.images.values()].find(
+      (i) => i.orgId === this.orgId && i.datasetId === input.datasetId && i.sourceImageId === input.sourceImageId,
+    );
+    if (!image) return { outcome: "rejected", reason: "unknown_image" };
+
+    const existing = [...this.root.traces.values()].find(
+      (t) =>
+        t.orgId === this.orgId &&
+        t.datasetId === input.datasetId &&
+        t.imageId === image.id &&
+        t.cohort === input.cohort &&
+        t.mode === input.mode,
+    );
+    if (existing) {
+      return { outcome: "existing", trace: structuredClone(existing), sameContent: existing.contentHash === input.contentHash };
+    }
+    const trace: TraceRecord = {
+      id: uid(),
+      orgId: this.orgId,
+      datasetId: input.datasetId,
+      imageId: image.id,
+      cohort: input.cohort,
+      mode: input.mode,
+      verified: input.verified,
+      sourceFile: input.sourceFile,
+      contentHash: input.contentHash,
+      nTurns: input.nTurns,
+      nToolCalls: input.nToolCalls,
+      formatOk: input.formatOk,
+      verifierReason: input.verifierReason,
+      groundTruth: structuredClone(input.groundTruth),
+      finalAnswer: structuredClone(input.finalAnswer),
+    };
+    this.root.traces.set(trace.id, trace);
+    this.root.traceTurns.set(
+      trace.id,
+      input.turns.map((t) => ({
+        id: uid(),
+        traceId: trace.id,
+        idx: t.idx,
+        status: t.status,
+        thought: t.thought,
+        rawOutput: t.rawOutput,
+        parsed: structuredClone(t.parsed),
+        toolCalls: t.toolCalls.map((c) => ({ ...structuredClone(c), id: uid() })),
+      })),
+    );
+    return { outcome: "inserted", trace: structuredClone(trace), sameContent: true };
+  }
+
+  async listTraceTurns(traceId: string): Promise<TraceTurnRecord[]> {
+    if (this.root.traces.get(traceId)?.orgId !== this.orgId) return [];
+    return structuredClone(this.root.traceTurns.get(traceId) ?? [])
+      .sort((a, b) => a.idx - b.idx)
+      .map((t) => ({ ...t, toolCalls: [...t.toolCalls].sort((a, b) => a.idx - b.idx) }));
+  }
 }
 
 export class MemoryStore implements OrgStore {
@@ -648,6 +716,7 @@ export class MemoryStore implements OrgStore {
   readonly jobEvents = new Map<string, JobEventRecord[]>();
   readonly workerTokens = new Map<string, WorkerTokenRecord>();
   readonly artifacts = new Map<string, ArtifactRecord>();
+  readonly traceTurns = new Map<string, TraceTurnRecord[]>();
   readonly models = new Map<string, ModelRecord>();
   readonly trainingRuns = new Map<string, TrainingRunRecord>();
   readonly trainingMetrics = new Map<string, TrainingMetricRecord>();

@@ -24,6 +24,8 @@ import {
   modelRegistry,
   organizations,
   rewardSamples,
+  toolCalls,
+  traceTurns,
   traces,
   trainingMetrics,
   trainingRuns,
@@ -39,6 +41,8 @@ import {
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type IngestTraceInput,
+  type IngestTraceResult,
   type IngestTrainingInput,
   type IngestTrainingResult,
   type InviteRecord,
@@ -53,6 +57,7 @@ import {
   type RewardSampleRecord,
   type ScopedRepos,
   type TraceRecord,
+  type TraceTurnRecord,
   type TrainingMetricRecord,
   type TrainingRunRecord,
   type WorkerRecord,
@@ -902,6 +907,148 @@ class ScopedPg implements ScopedRepos {
       .from(rewardSamples)
       .where(and(eq(rewardSamples.runId, runId), eq(rewardSamples.orgId, this.orgId)))
       .orderBy(asc(rewardSamples.step), sql`${rewardSamples.trajectoryRef} COLLATE "C"`);
+  }
+
+  async ingestTrace(input: IngestTraceInput): Promise<IngestTraceResult> {
+    return this.db.transaction(async (tx) => {
+      // Resolve dataset and image INSIDE this org: FKs alone would let a caller attach a trace to another tenant's image.
+      const ds = await tx
+        .select({ id: datasets.id })
+        .from(datasets)
+        .where(and(eq(datasets.id, input.datasetId), eq(datasets.orgId, this.orgId)))
+        .limit(1);
+      if (!ds[0]) return { outcome: "rejected", reason: "unknown_dataset" } as const;
+      const img = await tx
+        .select({ id: images.id })
+        .from(images)
+        .where(
+          and(
+            eq(images.orgId, this.orgId),
+            eq(images.datasetId, input.datasetId),
+            eq(images.sourceImageId, input.sourceImageId),
+          ),
+        )
+        .limit(1);
+      if (!img[0]) return { outcome: "rejected", reason: "unknown_image" } as const;
+      const imageId = img[0].id;
+
+      const fresh = await tx
+        .insert(traces)
+        .values({
+          orgId: this.orgId,
+          datasetId: input.datasetId,
+          imageId,
+          cohort: input.cohort,
+          mode: input.mode,
+          verified: input.verified,
+          sourceFile: input.sourceFile,
+          contentHash: input.contentHash,
+          nTurns: input.nTurns,
+          nToolCalls: input.nToolCalls,
+          formatOk: input.formatOk,
+          verifierReason: input.verifierReason,
+          groundTruth: input.groundTruth,
+          finalAnswer: input.finalAnswer,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (!fresh[0]) {
+        // Identity already present (possibly inserted by a concurrent request that has now committed): first import wins.
+        const existing = (
+          await tx
+            .select()
+            .from(traces)
+            .where(
+              and(
+                eq(traces.orgId, this.orgId),
+                eq(traces.datasetId, input.datasetId),
+                eq(traces.imageId, imageId),
+                eq(traces.cohort, input.cohort),
+                eq(traces.mode, input.mode),
+              ),
+            )
+            .limit(1)
+        )[0]!;
+        return { outcome: "existing", trace: existing, sameContent: existing.contentHash === input.contentHash } as const;
+      }
+      const trace = fresh[0];
+
+      if (input.turns.length > 0) {
+        const turnRows = await tx
+          .insert(traceTurns)
+          .values(
+            input.turns.map((t) => ({
+              orgId: this.orgId,
+              traceId: trace.id,
+              idx: t.idx,
+              status: t.status,
+              thought: t.thought,
+              rawOutput: t.rawOutput,
+              parsed: t.parsed as Record<string, unknown> | null,
+            })),
+          )
+          .returning({ id: traceTurns.id, idx: traceTurns.idx });
+        const turnId = new Map(turnRows.map((r) => [r.idx, r.id]));
+        const calls = input.turns.flatMap((t) =>
+          t.toolCalls.map((c) => ({
+            orgId: this.orgId,
+            turnId: turnId.get(t.idx)!,
+            idx: c.idx,
+            toolName: c.toolName,
+            args: c.args,
+            ok: c.ok,
+            error: c.error,
+            trueBbox: c.trueBbox,
+            perturbTier: c.perturbTier,
+          })),
+        );
+        for (const part of chunks(calls, 500)) {
+          await tx.insert(toolCalls).values(part);
+        }
+      }
+      return { outcome: "inserted", trace, sameContent: true } as const;
+    });
+  }
+
+  async listTraceTurns(traceId: string): Promise<TraceTurnRecord[]> {
+    const owned = await this.db
+      .select({ id: traces.id })
+      .from(traces)
+      .where(and(eq(traces.id, traceId), eq(traces.orgId, this.orgId)))
+      .limit(1);
+    if (!owned[0]) return [];
+    const turns = await this.db
+      .select()
+      .from(traceTurns)
+      .where(and(eq(traceTurns.traceId, traceId), eq(traceTurns.orgId, this.orgId)))
+      .orderBy(asc(traceTurns.idx));
+    if (turns.length === 0) return [];
+    const calls = await this.db
+      .select()
+      .from(toolCalls)
+      .where(and(inArray(toolCalls.turnId, turns.map((t) => t.id)), eq(toolCalls.orgId, this.orgId)))
+      .orderBy(asc(toolCalls.idx));
+    return turns.map((t) => ({
+      id: t.id,
+      traceId: t.traceId,
+      idx: t.idx,
+      status: t.status ?? "",
+      thought: t.thought,
+      rawOutput: t.rawOutput,
+      parsed: t.parsed,
+      toolCalls: calls
+        .filter((c) => c.turnId === t.id)
+        .map((c) => ({
+          id: c.id,
+          idx: c.idx,
+          toolName: c.toolName,
+          args: c.args as Record<string, unknown>,
+          ok: c.ok,
+          error: c.error,
+          trueBbox: c.trueBbox,
+          perturbTier: c.perturbTier,
+        })),
+    }));
   }
 }
 
