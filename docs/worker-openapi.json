@@ -765,6 +765,460 @@
         ],
         "additionalProperties": false
       },
+      "IngestTracesRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "cohort": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_]{0,63}$"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "with_tools",
+                  "no_tools"
+                ]
+              },
+              "verified": {
+                "default": true,
+                "type": "boolean"
+              },
+              "sourceFile": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "cohort",
+              "mode"
+            ]
+          },
+          "traces": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "image_id": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "image_path": {
+                  "type": "string"
+                },
+                "dataset": {
+                  "default": "dentex",
+                  "type": "string"
+                },
+                "ground_truth": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "quadrant": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4
+                      },
+                      "tooth_position": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8
+                      },
+                      "diagnosis": {
+                        "type": "string"
+                      },
+                      "raw_diagnosis": {
+                        "type": "string"
+                      },
+                      "confidence": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "bbox": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    },
+                    "required": [
+                      "quadrant",
+                      "tooth_position",
+                      "diagnosis"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "turns": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "turn": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "raw_output": {
+                        "type": "string"
+                      },
+                      "parsed": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "thought": {
+                                "type": "string"
+                              },
+                              "tool_calls": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "tool": {
+                                      "type": "string"
+                                    },
+                                    "args": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "final_answer": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "quadrant": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 4
+                                    },
+                                    "tooth_position": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 8
+                                    },
+                                    "diagnosis": {
+                                      "type": "string"
+                                    },
+                                    "raw_diagnosis": {
+                                      "type": "string"
+                                    },
+                                    "confidence": {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "maximum": 1
+                                    },
+                                    "bbox": {
+                                      "type": "array",
+                                      "prefixItems": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "number"
+                                        }
+                                      ],
+                                      "items": false,
+                                      "minItems": 4,
+                                      "maxItems": 4
+                                    }
+                                  },
+                                  "required": [
+                                    "quadrant",
+                                    "tooth_position",
+                                    "diagnosis"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              }
+                            },
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "tool_calls_this_turn": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "tool_name": {
+                              "type": "string"
+                            },
+                            "tool_args": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "tool_ok": {
+                              "type": "boolean"
+                            },
+                            "tool_error": {
+                              "type": "string"
+                            },
+                            "true_bbox": {
+                              "type": "array",
+                              "prefixItems": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "items": false,
+                              "minItems": 4,
+                              "maxItems": 4
+                            },
+                            "perturb_tier": {
+                              "type": "string",
+                              "enum": [
+                                "small",
+                                "big"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "tool_name",
+                            "tool_args",
+                            "tool_ok"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      }
+                    },
+                    "required": [
+                      "turn"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "tool_calls": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "array",
+                      "items": {}
+                    }
+                  ]
+                },
+                "final_answer": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "quadrant": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 4
+                          },
+                          "tooth_position": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 8
+                          },
+                          "diagnosis": {
+                            "type": "string"
+                          },
+                          "raw_diagnosis": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "bbox": {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "items": false,
+                            "minItems": 4,
+                            "maxItems": 4
+                          }
+                        },
+                        "required": [
+                          "quadrant",
+                          "tooth_position",
+                          "diagnosis"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "messages": {
+                  "type": "array",
+                  "items": {}
+                },
+                "format_ok": {
+                  "type": "boolean"
+                },
+                "verifier_reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "image_id",
+                "ground_truth",
+                "turns",
+                "tool_calls",
+                "final_answer",
+                "format_ok"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "source",
+          "traces"
+        ]
+      },
+      "IngestTracesResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "imageId": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "inserted",
+                    "existing",
+                    "rejected"
+                  ]
+                },
+                "traceId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "sameContent": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "unknown_dataset",
+                    "unknown_image",
+                    "invalid_trace"
+                  ]
+                }
+              },
+              "required": [
+                "index",
+                "imageId",
+                "outcome"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "inserted": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "existing": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "results",
+          "inserted",
+          "existing",
+          "rejected"
+        ],
+        "additionalProperties": false
+      },
       "CreateJobRequest": {
         "type": "object",
         "properties": {
@@ -2672,11 +3126,91 @@
     },
     "/ingest/traces": {
       "post": {
-        "summary": "Ingest verified traces",
-        "x-implemented": false,
+        "summary": "Ingest verified traces; deduplicated by identity (dataset, image, cohort, mode); per-item outcomes; the dataset and image must already exist",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestTracesRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "501": {
-            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestTracesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2685,7 +3219,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
       }
     },
     "/ingest/metrics": {

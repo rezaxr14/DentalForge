@@ -60,6 +60,8 @@ export interface TraceRecord {
   nTurns: number;
   nToolCalls: number;
   formatOk: boolean;
+  /** Optional so older constructors (fixtures, createTrace callers) stay valid. */
+  verifierReason?: string | null;
   groundTruth: unknown;
   finalAnswer: unknown;
 }
@@ -259,6 +261,60 @@ export interface IngestTrainingResult {
   rewardSamplesInserted: number;
 }
 
+export interface TraceToolCallInput {
+  idx: number;
+  toolName: string;
+  args: Record<string, unknown>;
+  ok: boolean;
+  error: string | null;
+  trueBbox: unknown;
+  perturbTier: string | null;
+}
+
+export interface TraceTurnInput {
+  idx: number;
+  status: string;
+  thought: string | null;
+  rawOutput: string | null;
+  parsed: unknown;
+  toolCalls: TraceToolCallInput[];
+}
+
+/** A trace turn with its tool calls nested, in (turn idx, call idx) order. */
+export type TraceTurnRecord = Omit<TraceTurnInput, "toolCalls"> & {
+  id: string;
+  traceId: string;
+  toolCalls: (TraceToolCallInput & { id: string })[];
+};
+
+export interface IngestTraceInput {
+  datasetId: string;
+  /** The dataset's own image number (`image_id` in the JSONL); resolved to an image row INSIDE the org. */
+  sourceImageId: number;
+  cohort: string;
+  mode: TraceRecord["mode"];
+  verified: boolean;
+  sourceFile: string | null;
+  contentHash: string;
+  nTurns: number;
+  nToolCalls: number;
+  formatOk: boolean;
+  verifierReason: string | null;
+  groundTruth: unknown;
+  finalAnswer: unknown;
+  turns: TraceTurnInput[];
+}
+
+/**
+ * `inserted`  new identity (dataset, image, cohort, mode): trace + turns + tool calls written atomically.
+ * `existing`  identity already present: NOTHING is written (first import wins, ADR-0008);
+ *             `sameContent` says whether the stored content hash equals this one.
+ * `rejected`  the dataset or image is not in this organization.
+ */
+export type IngestTraceResult =
+  | { outcome: "inserted" | "existing"; trace: TraceRecord; sameContent: boolean }
+  | { outcome: "rejected"; reason: "unknown_dataset" | "unknown_image" };
+
 /**
  * Why a worker-side job write was refused. Expected conditions are DATA, not
  * exceptions (plan §9.4 rule 2): the route layer maps each to a problem+json.
@@ -389,6 +445,15 @@ export interface ScopedRepos {
   listTrainingMetrics(runId: string): Promise<TrainingMetricRecord[]>;
   /** Ordered by (step, trajectoryRef). Empty when the run is unknown OR belongs to another org. */
   listRewardSamples(runId: string): Promise<RewardSampleRecord[]>;
+
+  /**
+   * Insert one verified trace with its turns and tool calls in ONE atomic step, deduplicated by
+   * IDENTITY (dataset, image, cohort, mode) — never by content hash alone (ADR-0008). The dataset and
+   * image are resolved inside this organization, so a caller can never attach a trace to another tenant's image.
+   */
+  ingestTrace(input: IngestTraceInput): Promise<IngestTraceResult>;
+  /** Empty when the trace is unknown OR belongs to another org. */
+  listTraceTurns(traceId: string): Promise<TraceTurnRecord[]>;
 }
 
 /** Top-level store: orgs, memberships, and the `scoped()` entry point. */

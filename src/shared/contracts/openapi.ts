@@ -10,6 +10,8 @@ import { z } from "zod";
 import {
   IngestMetricsRequest,
   IngestMetricsResponse,
+  IngestTracesRequest,
+  IngestTracesResponse,
   RegisterModelRequest,
   RegisterModelResponse,
 } from "./ingest";
@@ -82,6 +84,8 @@ export function buildWorkerOpenApi(): Json {
     RegisterModelResponse: output(RegisterModelResponse),
     IngestMetricsRequest: input(IngestMetricsRequest),
     IngestMetricsResponse: output(IngestMetricsResponse),
+    IngestTracesRequest: input(IngestTracesRequest),
+    IngestTracesResponse: output(IngestTracesResponse),
     CreateJobRequest: input(CreateJobRequest),
     Job: output(JobDto),
     JobEvent: output(JobEventDto),
@@ -162,7 +166,11 @@ export function buildWorkerOpenApi(): Json {
         "RegisterModelResponse",
       ),
       "/ingest/eval-run": notImpl("Ingest eval cases"),
-      "/ingest/traces": notImpl("Ingest verified traces"),
+      "/ingest/traces": post(
+        "Ingest verified traces; deduplicated by identity (dataset, image, cohort, mode); per-item outcomes; the dataset and image must already exist",
+        "IngestTracesRequest",
+        "IngestTracesResponse",
+      ),
       "/ingest/metrics": post(
         "Ingest training metrics and reward samples; the run is upserted by (kind, name); idempotent per (run, step, name)",
         "IngestMetricsRequest",
