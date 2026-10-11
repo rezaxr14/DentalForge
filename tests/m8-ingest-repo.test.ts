@@ -241,6 +241,25 @@ describe.each(backends)("model registry + training ingestion — $name", ({ skip
       expect((await r.listTrainingMetrics(first.run.id)).length).toBe(5000);
     });
 
+    it("cross-tenant replay: with the same run name in BOTH orgs, each org's next batch lands on its OWN run", async () => {
+      // The locked re-read after an insert conflict only runs when your own org already holds the run;
+      // it must never pick up another tenant's run that shares its (kind, name).
+      const ra = store.scoped(a.id);
+      const rb = store.scoped(b.id);
+      const spec = { kind: "sft" as const, name: "both-orgs" };
+      const a1 = await ra.ingestTraining({ run: spec, metrics: [{ step: 1, name: "loss", value: 1 }], rewardSamples: [] });
+      const b1 = await rb.ingestTraining({ run: spec, metrics: [{ step: 1, name: "loss", value: 2 }], rewardSamples: [] });
+      const b2 = await rb.ingestTraining({ run: { ...spec, status: "succeeded" }, metrics: [{ step: 2, name: "loss", value: 3 }], rewardSamples: [] });
+      expect(b2.runCreated).toBe(false);
+      expect(b2.run.id).toBe(b1.run.id);
+      expect(b2.run.status).toBe("succeeded");
+      const a2 = await ra.ingestTraining({ run: spec, metrics: [{ step: 2, name: "loss", value: 4 }], rewardSamples: [] });
+      expect(a2.run.id).toBe(a1.run.id);
+      expect(a2.run.status).toBe("running"); // B finishing its run did not touch A's
+      expect((await ra.listTrainingMetrics(a1.run.id)).map((m) => m.value)).toEqual([1, 4]);
+      expect((await rb.listTrainingMetrics(b1.run.id)).map((m) => m.value)).toEqual([2, 3]);
+    });
+
     it("cross-tenant: the same run name is a different run, and another org's run id reads as empty", async () => {
       const mine = await store.scoped(a.id).ingestTraining({
         run: { kind: "grpo", name: "tenant-run" },
