@@ -14,7 +14,7 @@
  * not a feature — it pins `orgId` explicitly on every insert, mirroring the
  * `scoped(orgId)` contract; features themselves stay repo-only.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "@/shared/db/pg";
 import * as s from "@/shared/db/schema";
 import type { ParsedEval, ParsedTraceRow } from "./parse";
@@ -172,7 +172,9 @@ export async function insertTraceRows(
   // rows are byte-identical but distinct identities (ADR-0008).
   const existing = await db
     .select({ id: s.traces.id, datasetId: s.traces.datasetId, imageId: s.traces.imageId, cohort: s.traces.cohort, mode: s.traces.mode })
-    .from(s.traces);
+    .from(s.traces)
+    // Org-scoped: without it every import loaded every tenant's traces into memory.
+    .where(eq(s.traces.orgId, orgId));
   const traceIdByIdentity = new Map<string, string>();
   for (const r of existing) traceIdByIdentity.set(`${r.datasetId}|${r.imageId}|${r.cohort}|${r.mode}`, r.id);
 
@@ -299,7 +301,9 @@ export async function insertEvalRows(
   const existing = await db
     .select({ id: s.evalRuns.id })
     .from(s.evalRuns)
-    .where(eq(s.evalRuns.sourceFile, parsed.run.sourceFile));
+    // Org-scoped: a second organization importing a file with the same name must get its own run,
+    // not be told "already imported" because another tenant did it first.
+    .where(and(eq(s.evalRuns.orgId, orgId), eq(s.evalRuns.sourceFile, parsed.run.sourceFile)));
   if (existing.length > 0) {
     stats.evalRunsExisting += 1;
     return;
