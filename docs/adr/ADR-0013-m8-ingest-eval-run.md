@@ -45,7 +45,13 @@ survived at first (the cross-tenant re-read) and led to the tests above. `pnpm e
 the 409 and checks in Postgres that the stored summary equals the mean of the stored rows. Migrations `0000`→`0004` apply on a scratch database
 and `drizzle-kit generate` shows no drift.
 
-## Not verified
-Real zero-shot JSONL files (only the fixtures); whether real runs ever contain two lines for one `image_id` (this endpoint
-rejects that with 422, the importer would have accepted it); chunks near the body cap with real `raw_output` sizes; concurrent chunks
-(reasoned, not load-tested); Postgres 17 / Actions / Vercel.
+## Verified later on the owner's real data (reported by the owner's local agent, 2026-10-11)
+Postgres 17 and the real VLM-DENTAL `data/evaluations` (8 files). Not re-run by the author of this ADR. Reported: no repeated `image_id`
+in any file; one real 50-case run ingests in one chunk with a stored summary equal to the mean computed from the file (float32, 1e-6);
+a 993,422-character chunk of real cases is accepted, the whole 1.77 MB file in one request is a 413 with no run written, and the remainder
+completes the run; 2 rounds of 4 simultaneous chunks of one run all succeed and end with `n` equal to the stored rows and `summary`
+equal to their mean (the row lock holds); migrations `0000`→`0004` apply to an empty database with no drift.
+It also found the contract-vs-reality mismatch that led to ADR-0014 (12 of 49 lines of one real file were rejected).
+
+## Still not verified
+Postgres on Vercel/Neon and GitHub Actions.

@@ -242,21 +242,59 @@ export function evalCaseRow(c: EvalCaseT): ParsedEval["cases"][number] {
   };
 }
 
-export function parseEvalFile(fileName: string, lines: string[]): ParsedEval | null {
+/** A non-blank line that could not be used, with the first few reasons (`path: message`). */
+export interface EvalLineProblem {
+  /** 1-based line number in the file. */
+  line: number;
+  issues: string[];
+}
+
+export interface ParsedEvalFile {
+  parsed: ParsedEval | null;
+  /** Non-blank lines in the file. */
+  nonBlankLines: number;
+  /** Lines that were not valid JSON or did not satisfy `EvalCase`. They are NOT in `parsed`. */
+  invalidCount: number;
+  /** The first {@link MAX_INVALID_SAMPLES} of them. */
+  invalid: EvalLineProblem[];
+}
+
+export const MAX_INVALID_SAMPLES = 20;
+
+/**
+ * Like `parseEvalFile`, but says what it skipped. Skipping is still how a file is imported (one bad line must not
+ * block the rest), yet it must never be SILENT: dropping cases changes every mean in the summary (ADR-0014).
+ */
+export function parseEvalFileDetailed(fileName: string, lines: string[]): ParsedEvalFile {
   const cases: ParsedEval["cases"] = [];
   let run: ParsedEval["run"] | null = null;
+  let nonBlankLines = 0;
+  let invalidCount = 0;
+  const invalid: EvalLineProblem[] = [];
+  const reject = (line: number, issues: string[]) => {
+    invalidCount += 1;
+    if (invalid.length < MAX_INVALID_SAMPLES) invalid.push({ line, issues: issues.slice(0, 3) });
+  };
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (const [i, raw] of lines.entries()) {
+    const trimmed = raw.trim();
     if (!trimmed) continue;
+    nonBlankLines += 1;
     let json: unknown;
     try {
       json = JSON.parse(trimmed);
     } catch {
+      reject(i + 1, ["not valid JSON"]);
       continue;
     }
     const c = EvalCase.safeParse(json);
-    if (!c.success) continue;
+    if (!c.success) {
+      reject(
+        i + 1,
+        c.error.issues.map((x) => `${x.path.join(".") || "(root)"}: ${x.message}`),
+      );
+      continue;
+    }
     if (!run) {
       run = {
         dataset: c.data.dataset,
@@ -272,8 +310,12 @@ export function parseEvalFile(fileName: string, lines: string[]): ParsedEval | n
     cases.push(evalCaseRow(c.data));
   }
 
-  if (!run || run.n === 0) return null;
+  if (!run || run.n === 0) return { parsed: null, nonBlankLines, invalidCount, invalid };
   run.summary = summarizeEval(cases);
-  return { run, cases };
+  return { parsed: { run, cases }, nonBlankLines, invalidCount, invalid };
+}
+
+export function parseEvalFile(fileName: string, lines: string[]): ParsedEval | null {
+  return parseEvalFileDetailed(fileName, lines).parsed;
 }
 

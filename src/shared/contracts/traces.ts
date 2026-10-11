@@ -25,6 +25,14 @@ import { z } from "zod";
  *    "Deep Caries" variants alongside "Impacted" — normalization
  *    (normalize_dental_diagnosis) is an Eval-Hub port task, not a schema
  *    constraint; diagnosis stays a plain string here.
+ * 6. REAL-DATA FINDING (ADR-0014, found by importing the owner's real files into
+ *    the `ingest/eval-run` path): 12 of 49 lines of one real zero-shot file were
+ *    rejected because MODEL OUTPUT is not always well-formed — a model may put a
+ *    whole FDI code (18, 36, 48) in `tooth_position` (the strict Finding caps it at
+ *    8) and may emit `confidence: null`. The eval metrics already score exactly such
+ *    mistakes, so the record that stores them must be able to represent them.
+ *    `PredictedFinding` (predictions, matched `pred`) tolerates that; ground truth
+ *    (`Finding`, matched `gt`) stays strict because it comes from the dataset.
  */
 
 /** [x, y, w, h] in native image pixels. Never canvas coordinates. */
@@ -43,6 +51,16 @@ export const Finding = z
     bbox: Bbox.optional(),
   })
   .passthrough();
+
+/**
+ * A finding EMITTED BY A MODEL (eval `predictions`, matched `pred`). Same shape as `Finding`, but the two
+ * things real models get wrong are representable instead of invalidating the whole record: `tooth_position`
+ * may be any integer (e.g. a full FDI code) and `confidence` may be `null`. Ground truth keeps `Finding`.
+ */
+export const PredictedFinding = Finding.extend({
+  tooth_position: z.number().int(),
+  confidence: z.number().min(0).max(1).nullish(),
+});
 
 export const ToolCallRecord = z
   .object({
@@ -128,7 +146,7 @@ export const UnverifiedTraceWrapper = z
 export const MatchedPair = z
   .object({
     gt: Finding,
-    pred: Finding,
+    pred: PredictedFinding,
     fdi_match: z.boolean(),
     exact_match: z.boolean(),
     closeness: z.number(),
@@ -145,7 +163,7 @@ export const EvalCase = z
     provider: z.string(),
     model: z.string(),
     ground_truth: z.array(Finding),
-    predictions: z.array(Finding),
+    predictions: z.array(PredictedFinding),
     matched_pairs: z.array(MatchedPair),
     fdi_precision: z.number(),
     fdi_recall: z.number(),
@@ -166,7 +184,8 @@ export const EvalCase = z
     raw_output: z.string(),
     format_ok: z.boolean(),
     finish_reason: z.string(),
-    confidence: z.number().optional(),
+    /** Real files contain `null` here as well as absent. */
+    confidence: z.number().nullish(),
     /** Unix epoch float in real files (e.g. 1788418771.41), not ISO string. */
     timestamp: z.union([z.string(), z.number()]).optional(),
   })
@@ -174,6 +193,7 @@ export const EvalCase = z
 
 export type BboxT = z.infer<typeof Bbox>;
 export type FindingT = z.infer<typeof Finding>;
+export type PredictedFindingT = z.infer<typeof PredictedFinding>;
 export type ToolCallRecordT = z.infer<typeof ToolCallRecord>;
 export type TurnT = z.infer<typeof Turn>;
 export type VerifiedTraceT = z.infer<typeof VerifiedTrace>;

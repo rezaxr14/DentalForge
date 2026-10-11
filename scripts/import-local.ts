@@ -6,7 +6,9 @@
  * (per-cohort first so hybrid files dedupe into them) + zero-shot evals.
  *
  * Usage:  pnpm import:local [--dry-run]
- *   --dry-run   parse + dedupe stats only, no DB writes
+ *   --dry-run        parse + dedupe stats only, no DB writes
+ *   --replace-evals  delete this org's file-imported eval runs for the files being imported, then re-import
+ *                    them in full (use when the report says "STALE"; never touches API-ingested runs)
  *
  * Count contract (M7 DoD): 1,847 images / 3,694 trace rows after dedupe /
  * 8 eval runs — printed at the end; mismatches exit non-zero so CI can gate.
@@ -16,13 +18,14 @@ import { join, resolve as resolvePath } from "node:path";
 import { getPgDb, getPool } from "@/shared/db/pg";
 import { DrizzleOrgStore } from "@/shared/db/repositories";
 import { getEnv } from "@/shared/config/env";
-import { traceFileMeta, parseTraceLine, parseEvalFile } from "@/shared/lib/import/parse";
+import { traceFileMeta, parseTraceLine, parseEvalFileDetailed } from "@/shared/lib/import/parse";
 import { resolveImagePath, readImageSource } from "@/shared/lib/import/imageMeta";
 import {
   emptyStats,
   ensureDatasets,
   insertEvalRows,
   insertTraceRows,
+  replaceEvalRunsBySourceFile,
   type ImageResolver,
 } from "@/shared/lib/import/db";
 
@@ -30,6 +33,8 @@ const VLM_DATA = process.env.VLM_DENTAL_DIR
   ? join(process.env.VLM_DENTAL_DIR, "data")
   : resolvePath(process.cwd(), "..", "VLM-DENTAL", "data");
 const DRY_RUN = process.argv.includes("--dry-run");
+/** Re-import eval runs that already exist (e.g. imported before ADR-0014 dropped lines): deletes this org's file-imported runs for the files being imported, then inserts them in full. */
+const REPLACE_EVALS = process.argv.includes("--replace-evals");
 const ORG_SLUG = process.env.IMPORT_ORG_SLUG ?? "demo";
 
 /** Content-hash cache: sha256 of a 4 MB PNG should be read once. */
@@ -81,7 +86,15 @@ async function main(): Promise<void> {
   // tree — plan §4.1 said data/evaluations, reality agrees: 8 files).
   const evalDir = join(VLM_DATA, "evaluations");
   const evalFiles = readdirSync(evalDir).filter((f) => f.startsWith("zero_shot_") && f.endsWith(".jsonl"));
-  const evals = evalFiles.map((file) => parseEvalFile(file, readLines(join(evalDir, file)))).filter(Boolean);
+  const evals: NonNullable<ReturnType<typeof parseEvalFileDetailed>["parsed"]>[] = [];
+  for (const file of evalFiles) {
+    const r = parseEvalFileDetailed(file, readLines(join(evalDir, file)));
+    stats.evalLinesInvalid += r.invalidCount;
+    console.log(`[import] ${file}: ${r.nonBlankLines} lines, ${r.nonBlankLines - r.invalidCount} valid${r.invalidCount > 0 ? `, ${r.invalidCount} SKIPPED` : ""}`);
+    // Skipped lines change every mean in the run summary, so say why — loudly, with the first reasons.
+    for (const p of r.invalid.slice(0, 3)) console.warn(`[import]   line ${p.line}: ${p.issues.join("; ")}`);
+    if (r.parsed) evals.push(r.parsed);
+  }
 
   if (DRY_RUN) {
     // Dedupe simulation over PER-COHORT files only (hybrids skipped above):
@@ -126,7 +139,16 @@ async function main(): Promise<void> {
   }
 
   for (const parsed of evals) {
-    if (parsed) await insertEvalRows(db, org.id, parsed, stats);
+    if (REPLACE_EVALS) {
+      const removed = await replaceEvalRunsBySourceFile(db, org.id, parsed.run.sourceFile);
+      if (removed > 0) console.log(`[import] replaced ${removed} existing run(s) of ${parsed.run.sourceFile}`);
+    }
+    await insertEvalRows(db, org.id, parsed, stats);
+  }
+  if (stats.evalRunsStale > 0) {
+    console.error(
+      `[import] STALE: ${stats.evalRunsStale} eval run(s) already in the database have a different case count than their file yields now. Re-run with --replace-evals.`,
+    );
   }
 
   console.log("[import] done:", JSON.stringify(stats, null, 2));
@@ -138,17 +160,22 @@ async function main(): Promise<void> {
   //   (678+27+202+660+280). The §7 unique key (dataset_id, source_image_id)
   //   collapses them to 1,645 rows (Tufts pathology cohort ⊂ other cohorts;
   //   DENTEX 705 + Tufts 940). Reality wins — ADR-0008.
-  // - eval runs: 8 zero_shot files.
+  // - eval runs: 8 zero_shot files, and NO skipped eval lines (a skipped case silently biases the summary).
   const expectedTraces = 3694;
   const expectedImages = 1645;
   const expectedRuns = 8;
   const traceTotal = stats.tracesInserted + stats.tracesDeduped;
   const imageTotal = stats.imagesInserted + stats.imagesExisting;
   const runTotal = stats.evalRunsInserted + stats.evalRunsExisting;
-  const ok = traceTotal >= expectedTraces && imageTotal >= expectedImages && runTotal === expectedRuns;
+  const ok =
+    traceTotal >= expectedTraces &&
+    imageTotal >= expectedImages &&
+    runTotal === expectedRuns &&
+    stats.evalLinesInvalid === 0 &&
+    stats.evalRunsStale === 0;
   if (!ok) {
     console.error(
-      `[import] COUNT MISMATCH: traces=${traceTotal} (want ${expectedTraces}), images=${imageTotal} (want ${expectedImages}), runs=${runTotal} (want ${expectedRuns})`,
+      `[import] COUNT MISMATCH: traces=${traceTotal} (want ${expectedTraces}), images=${imageTotal} (want ${expectedImages}), runs=${runTotal} (want ${expectedRuns}), skipped eval lines=${stats.evalLinesInvalid} (want 0 — run \`pnpm diagnose:data\`), stale eval runs=${stats.evalRunsStale} (want 0 — use --replace-evals)`,
     );
   }
   await getPool().end();
