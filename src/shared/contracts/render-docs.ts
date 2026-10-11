@@ -31,7 +31,7 @@ export function renderContractMarkdown(doc: Json): string {
   out.push("| Version | `X-Contract-Version: 1` is **required**. Missing → `400`; unknown major → `426` with `supported: [1]` |");
   out.push("| Worker identity | Job-write endpoints (`events`, `artifacts/presign`, `complete`, `fail`) require `X-Worker-Id` (the id from `/register`). It fences writes to the current lease holder (ADR-0009) |");
   out.push("| Errors | RFC 9457 `application/problem+json` with a stable `code` member |");
-  out.push("| Idempotency | `events` are idempotent on `seq`; `complete`/`fail` replay safely for the lease holder; `register` upserts by `name` |");
+  out.push("| Idempotency | `events` are idempotent on `seq`; `complete`/`fail` replay safely for the lease holder; `register` upserts by `name`; `models/register` upserts by `(name, stage)`; `ingest/metrics` upserts the run by `(kind, name)` and rows by `(run, step, name)` / `(run, step, trajectoryRef)` — re-sending a batch is safe |");
   out.push("");
   out.push("### Job lifecycle");
   out.push("");

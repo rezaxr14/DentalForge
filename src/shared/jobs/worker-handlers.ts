@@ -7,6 +7,7 @@
  * thrown (plan §9.4 rule 2).
  */
 import { artifactRefsInResult, parseResult } from "@/shared/contracts/jobs";
+import { IngestMetricsRequest, RegisterModelRequest } from "@/shared/contracts/ingest";
 import {
   ClaimJobsRequest,
   CompleteJobRequest,
@@ -248,6 +249,63 @@ export async function imageUrl(req: Request, deps: WorkerDeps, imageId: string):
 }
 
 // ---- Documented-but-deferred endpoints (plan §10.1) -----------------------
+// ---- POST /models/register -------------------------------------------------
+/** Upsert by (org, name, stage). Needs `jobs:write`; the ONNX artifact must be a `model` artifact of THIS org. */
+export async function registerModel(req: Request, deps: WorkerDeps): Promise<Response> {
+  const auth = await authenticateWorker(req, deps.store, "jobs:write");
+  if (auth instanceof Response) return auth;
+  const body = await readJson(req);
+  if (!body.ok) return body.res;
+  const parsed = RegisterModelRequest.safeParse(body.value);
+  if (!parsed.success) return validationProblem(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
+  const r = parsed.data;
+  if (r.onnxArtifactId !== undefined) {
+    // getArtifacts is org-scoped: another org's artifact is indistinguishable from a missing one.
+    const [artifact] = await auth.repos.getArtifacts([r.onnxArtifactId]);
+    if (!artifact || artifact.kind !== "model") {
+      return validationProblem(["onnxArtifactId: no artifact of kind \"model\" with that id in this organization"]);
+    }
+  }
+  const { model, created } = await auth.repos.registerModel({
+    name: r.name,
+    kind: r.kind,
+    stage: r.stage,
+    ...(r.hfPath !== undefined ? { hfPath: r.hfPath } : {}),
+    ...(r.onnxArtifactId !== undefined ? { onnxArtifactId: r.onnxArtifactId } : {}),
+    ...(r.meta !== undefined ? { meta: r.meta } : {}),
+  });
+  return json({ modelId: model.id, created, name: model.name, kind: model.kind, stage: model.stage });
+}
+
+// ---- POST /ingest/metrics --------------------------------------------------
+/** Idempotent: re-sending a batch overwrites the same keys with the same values. Needs `jobs:write`. */
+export async function ingestMetrics(req: Request, deps: WorkerDeps): Promise<Response> {
+  const auth = await authenticateWorker(req, deps.store, "jobs:write");
+  if (auth instanceof Response) return auth;
+  const body = await readJson(req);
+  if (!body.ok) return body.res;
+  const parsed = IngestMetricsRequest.safeParse(body.value);
+  if (!parsed.success) return validationProblem(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
+  const r = parsed.data;
+  const out = await auth.repos.ingestTraining({
+    run: {
+      kind: r.run.kind,
+      name: r.run.name,
+      ...(r.run.config !== undefined ? { config: r.run.config } : {}),
+      ...(r.run.status !== undefined ? { status: r.run.status } : {}),
+    },
+    metrics: r.metrics,
+    rewardSamples: r.rewardSamples,
+  });
+  return json({
+    runId: out.run.id,
+    runCreated: out.runCreated,
+    status: out.run.status,
+    metrics: { received: r.metrics.length, inserted: out.metricsInserted },
+    rewardSamples: { received: r.rewardSamples.length, inserted: out.rewardSamplesInserted },
+  });
+}
+
 export function notImplemented(name: string): Response {
   return problem(501, "not_implemented", `${name} is not implemented in this build`, "Documented in the contract; scheduled after M8 (see ADR-0009).");
 }

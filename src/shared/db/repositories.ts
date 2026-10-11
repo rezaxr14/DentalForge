@@ -8,7 +8,7 @@
  *   - tests/m6-platform.test.ts      (memory)
  *   - tests/m6-repos.test.ts         (drizzle, requires Docker Postgres)
  */
-import { and, asc, desc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "./pg";
 import {
   annotations,
@@ -21,8 +21,12 @@ import {
   jobEvents,
   jobs,
   memberships,
+  modelRegistry,
   organizations,
+  rewardSamples,
   traces,
+  trainingMetrics,
+  trainingRuns,
   workerTokens,
   workers,
 } from "./schema";
@@ -35,18 +39,35 @@ import {
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type IngestTrainingInput,
+  type IngestTrainingResult,
   type InviteRecord,
   type JobEventRecord,
   type JobRecord,
   type JobWrite,
   type MembershipRecord,
+  type ModelRecord,
   type OrgRecord,
   type OrgStore,
+  type RegisterModelInput,
+  type RewardSampleRecord,
   type ScopedRepos,
   type TraceRecord,
+  type TrainingMetricRecord,
+  type TrainingRunRecord,
   type WorkerRecord,
   type WorkerTokenRecord,
 } from "./repos";
+import { mergeRunStatus } from "./ingest-rules";
+
+/** Rows per INSERT: 1000 × 4 params stays far below Postgres' 65 535-parameter limit. */
+const INGEST_CHUNK = 1000;
+
+function chunks<T>(rows: T[], size = INGEST_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}
 
 /** Map a raw `invites` row to the InviteRecord contract (org_id alias). */
 function toInvite(row: typeof invites.$inferSelect): InviteRecord {
@@ -736,6 +757,151 @@ class ScopedPg implements ScopedRepos {
       )
       .returning({ id: workerTokens.id });
     return rows.length > 0;
+  }
+
+  async registerModel(input: RegisterModelInput): Promise<{ model: ModelRecord; created: boolean }> {
+    // Omitted optional fields are left out of `set`, so a re-register keeps the stored value.
+    const set: Partial<typeof modelRegistry.$inferInsert> = { kind: input.kind };
+    if (input.hfPath !== undefined) set.hfPath = input.hfPath;
+    if (input.onnxArtifactId !== undefined) set.onnxArtifactId = input.onnxArtifactId;
+    if (input.meta !== undefined) set.meta = input.meta;
+    const rows = await this.db
+      .insert(modelRegistry)
+      .values({
+        orgId: this.orgId,
+        name: input.name,
+        kind: input.kind,
+        stage: input.stage,
+        hfPath: input.hfPath ?? null,
+        onnxArtifactId: input.onnxArtifactId ?? null,
+        meta: input.meta ?? {},
+      })
+      .onConflictDoUpdate({ target: [modelRegistry.orgId, modelRegistry.name, modelRegistry.stage], set })
+      // xmax = 0 only for a freshly inserted row (the standard "was this an insert?" upsert probe).
+      .returning({ ...getTableColumns(modelRegistry), inserted: sql<boolean>`(xmax = 0)` });
+    const { inserted, ...model } = rows[0]!;
+    return { model, created: inserted };
+  }
+
+  async listModels(): Promise<ModelRecord[]> {
+    return this.db
+      .select()
+      .from(modelRegistry)
+      .where(eq(modelRegistry.orgId, this.orgId))
+      .orderBy(asc(modelRegistry.createdAt), sql`${modelRegistry.name} COLLATE "C"`);
+  }
+
+  async ingestTraining(input: IngestTrainingInput): Promise<IngestTrainingResult> {
+    return this.db.transaction(async (tx) => {
+      // 1. The run, identified by (org, kind, name). DO NOTHING + locked re-read keeps the
+      //    status merge race-free when two sessions create/update the same run at once.
+      const fresh = await tx
+        .insert(trainingRuns)
+        .values({
+          orgId: this.orgId,
+          kind: input.run.kind,
+          name: input.run.name,
+          config: input.run.config ?? {},
+          status: input.run.status ?? "running",
+        })
+        .onConflictDoNothing()
+        .returning();
+      let run: TrainingRunRecord;
+      let runCreated: boolean;
+      if (fresh[0]) {
+        run = fresh[0];
+        runCreated = true;
+      } else {
+        const existing = (
+          await tx
+            .select()
+            .from(trainingRuns)
+            .where(
+              and(
+                eq(trainingRuns.orgId, this.orgId),
+                eq(trainingRuns.kind, input.run.kind),
+                eq(trainingRuns.name, input.run.name),
+              ),
+            )
+            .for("update")
+        )[0]!;
+        const updated = await tx
+          .update(trainingRuns)
+          .set({
+            status: mergeRunStatus(existing.status, input.run.status),
+            ...(input.run.config !== undefined ? { config: input.run.config } : {}),
+          })
+          .where(eq(trainingRuns.id, existing.id))
+          .returning();
+        run = updated[0]!;
+        runCreated = false;
+      }
+
+      // 2. Metrics: upsert on the table's own primary key (run, step, name).
+      let metricsInserted = 0;
+      for (const part of chunks(input.metrics)) {
+        const rows = await tx
+          .insert(trainingMetrics)
+          .values(part.map((m) => ({ runId: run.id, step: m.step, name: m.name, value: m.value })))
+          .onConflictDoUpdate({
+            target: [trainingMetrics.runId, trainingMetrics.step, trainingMetrics.name],
+            set: { value: sql`excluded.value`, ts: sql`now()` },
+          })
+          .returning({ inserted: sql<boolean>`(xmax = 0)` });
+        metricsInserted += rows.filter((r) => r.inserted).length;
+      }
+
+      // 3. Reward samples: upsert on (run, step, trajectory_ref).
+      let rewardSamplesInserted = 0;
+      for (const part of chunks(input.rewardSamples)) {
+        const rows = await tx
+          .insert(rewardSamples)
+          .values(
+            part.map((r) => ({
+              orgId: this.orgId,
+              runId: run.id,
+              step: r.step,
+              trajectoryRef: r.trajectoryRef,
+              components: r.components,
+              total: r.total,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [rewardSamples.runId, rewardSamples.step, rewardSamples.trajectoryRef],
+            set: { components: sql`excluded.components`, total: sql`excluded.total` },
+          })
+          .returning({ inserted: sql<boolean>`(xmax = 0)` });
+        rewardSamplesInserted += rows.filter((r) => r.inserted).length;
+      }
+      return { run, runCreated, metricsInserted, rewardSamplesInserted };
+    });
+  }
+
+  async listTrainingRuns(): Promise<TrainingRunRecord[]> {
+    return this.db
+      .select()
+      .from(trainingRuns)
+      .where(eq(trainingRuns.orgId, this.orgId))
+      .orderBy(asc(trainingRuns.createdAt), sql`${trainingRuns.name} COLLATE "C"`);
+  }
+
+  async listTrainingMetrics(runId: string): Promise<TrainingMetricRecord[]> {
+    // training_metrics has no org column: ownership is proven by joining the run.
+    const rows = await this.db
+      .select({ runId: trainingMetrics.runId, step: trainingMetrics.step, name: trainingMetrics.name, value: trainingMetrics.value })
+      .from(trainingMetrics)
+      .innerJoin(trainingRuns, eq(trainingRuns.id, trainingMetrics.runId))
+      .where(and(eq(trainingMetrics.runId, runId), eq(trainingRuns.orgId, this.orgId)))
+      .orderBy(asc(trainingMetrics.step), sql`${trainingMetrics.name} COLLATE "C"`);
+    return rows;
+  }
+
+  async listRewardSamples(runId: string): Promise<RewardSampleRecord[]> {
+    return this.db
+      .select()
+      .from(rewardSamples)
+      .where(and(eq(rewardSamples.runId, runId), eq(rewardSamples.orgId, this.orgId)))
+      .orderBy(asc(rewardSamples.step), sql`${rewardSamples.trajectoryRef} COLLATE "C"`);
   }
 }
 
