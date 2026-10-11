@@ -234,7 +234,7 @@ describe.each(backends)("models/register + ingest/metrics HTTP — $name", ({ sk
       expect(paths["/models/register"]!.post["x-implemented"]).not.toBe(false);
       expect(paths["/ingest/metrics"]!.post["x-implemented"]).not.toBe(false);
       expect(paths["/ingest/traces"]!.post["x-implemented"]).not.toBe(false); // implemented in C2a (ADR-0012)
-      expect(paths["/ingest/eval-run"]!.post["x-implemented"]).toBe(false); // C2b: still honestly 501
+      expect(paths["/ingest/eval-run"]!.post["x-implemented"]).not.toBe(false); // implemented in C2b (ADR-0013)
     });
   });
 });

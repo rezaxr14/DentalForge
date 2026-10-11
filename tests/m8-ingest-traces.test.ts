@@ -360,11 +360,10 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
       expect(await store.scoped(b.org.id).listTraceTurns(mine.results[0]!.traceId!)).toEqual([]);
     });
 
-    it("the generated contract documents ingest/traces as implemented; ingest/eval-run is still honestly 501", async () => {
+    it("the generated contract documents ingest/traces as implemented", async () => {
       const { buildWorkerOpenApi } = await import("@/shared/contracts/openapi");
       const paths = buildWorkerOpenApi().paths as Record<string, { post: Record<string, unknown> }>;
       expect(paths["/ingest/traces"]!.post["x-implemented"]).not.toBe(false);
-      expect(paths["/ingest/eval-run"]!.post["x-implemented"]).toBe(false);
     });
   });
 });

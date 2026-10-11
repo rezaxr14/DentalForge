@@ -11,7 +11,7 @@
  * duplicate them.
  */
 import { createHash } from "node:crypto";
-import { EvalCase, Turn, VerifiedTrace } from "@/shared/contracts/traces";
+import { EvalCase, type EvalCaseT, Turn, VerifiedTrace } from "@/shared/contracts/traces";
 
 export interface TraceFileMeta {
   cohort: string;
@@ -172,6 +172,9 @@ export interface ParsedEval {
     fdiF1: number;
     exactF1: number;
     closeness: number;
+    /** spatial_proximity / diagnostic_similarity: summarized, and stored by `ingest/eval-run` (not by file imports). */
+    spatial: number;
+    diagSim: number;
     confidence: number | null;
     formatOk: boolean;
     rawOutput: string;
@@ -183,11 +186,65 @@ export interface ParsedEval {
  * Returns null when no line validates — callers skip with a warning.
  * Summary means are COMPUTED over all cases (never hard-coded, §0 rule 3).
  */
+/** The per-case numbers a run summary is a mean of. */
+export interface EvalMetricRow {
+  fdiF1: number;
+  exactF1: number;
+  closeness: number;
+  spatial: number;
+  diagSim: number;
+  formatOk: boolean;
+}
+
+/**
+ * THE run summary: means over `rows`, in the given order (plan §0 rule 3: computed, never hard-coded).
+ * Used by `parseEvalFile` (file imports) and by `ingest/eval-run` (recomputed from all stored cases), so the two
+ * paths cannot disagree. `{}` for no rows.
+ */
+export function summarizeEval(rows: EvalMetricRow[]): Record<string, number> {
+  if (rows.length === 0) return {};
+  const sum = { fdi_f1: 0, exact_f1: 0, closeness: 0, spatial: 0, diag_sim: 0 };
+  let formatOkCount = 0;
+  for (const r of rows) {
+    sum.fdi_f1 += r.fdiF1;
+    sum.exact_f1 += r.exactF1;
+    sum.closeness += r.closeness;
+    sum.spatial += r.spatial;
+    sum.diag_sim += r.diagSim;
+    if (r.formatOk) formatOkCount += 1;
+  }
+  const n = rows.length;
+  return {
+    fdi_f1: sum.fdi_f1 / n,
+    exact_f1: sum.exact_f1 / n,
+    closeness: sum.closeness / n,
+    spatial: sum.spatial / n,
+    diag_sim: sum.diag_sim / n,
+    format_ok_rate: formatOkCount / n,
+  };
+}
+
+/** One validated eval case → the stored row shape. Shared by file imports and `ingest/eval-run`. */
+export function evalCaseRow(c: EvalCaseT): ParsedEval["cases"][number] {
+  return {
+    sourceImageId: c.image_id,
+    groundTruth: c.ground_truth,
+    predictions: c.predictions,
+    matchedPairs: c.matched_pairs,
+    fdiF1: c.fdi_f1,
+    exactF1: c.exact_f1,
+    closeness: c.closeness_score,
+    spatial: c.spatial_proximity,
+    diagSim: c.diagnostic_similarity,
+    confidence: c.confidence ?? null,
+    formatOk: c.format_ok,
+    rawOutput: c.raw_output,
+  };
+}
+
 export function parseEvalFile(fileName: string, lines: string[]): ParsedEval | null {
   const cases: ParsedEval["cases"] = [];
   let run: ParsedEval["run"] | null = null;
-  const sum: Record<string, number> = {};
-  let formatOkCount = 0;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -212,32 +269,11 @@ export function parseEvalFile(fileName: string, lines: string[]): ParsedEval | n
       };
     }
     run.n += 1;
-    cases.push({
-      sourceImageId: c.data.image_id,
-      groundTruth: c.data.ground_truth,
-      predictions: c.data.predictions,
-      matchedPairs: c.data.matched_pairs,
-      fdiF1: c.data.fdi_f1,
-      exactF1: c.data.exact_f1,
-      closeness: c.data.closeness_score,
-      confidence: c.data.confidence ?? null,
-      formatOk: c.data.format_ok,
-      rawOutput: c.data.raw_output,
-    });
-    const metrics = {
-      fdi_f1: c.data.fdi_f1,
-      exact_f1: c.data.exact_f1,
-      closeness: c.data.closeness_score,
-      spatial: c.data.spatial_proximity,
-      diag_sim: c.data.diagnostic_similarity,
-    };
-    for (const [k, v] of Object.entries(metrics)) sum[k] = (sum[k] ?? 0) + v;
-    if (c.data.format_ok) formatOkCount += 1;
+    cases.push(evalCaseRow(c.data));
   }
 
   if (!run || run.n === 0) return null;
-  for (const [k, v] of Object.entries(sum)) run.summary[k] = v / run.n;
-  run.summary.format_ok_rate = formatOkCount / run.n;
+  run.summary = summarizeEval(cases);
   return { run, cases };
 }
 

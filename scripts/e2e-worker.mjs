@@ -314,6 +314,39 @@ async function main() {
   } finally {
     await tp.end();
   }
+
+  // ---- ingest/eval-run: a run uploaded in two chunks; summary recomputed from the stored cases ----
+  const ep = new pg.Pool({ connectionString: DB_URL });
+  try {
+    const base = JSON.parse(readFileSync(join(root, "fixtures", "evals", "qwen.json"), "utf8"));
+    const mkCase = (n) => ({ ...base, image_id: n, fdi_f1: n / 8, exact_f1: n / 16, format_ok: n % 2 === 0 });
+    const c1 = await wpost("/ingest/eval-run", { runKey: "e2e-eval", cases: [1, 2, 3].map(mkCase) });
+    const c2 = await wpost("/ingest/eval-run", { runKey: "e2e-eval", cases: [4, 5].map(mkCase) });
+    check(
+      "ingest/eval-run creates the run, then the second chunk extends it (n covers the whole run)",
+      c1.status === 200 && c1.json.runCreated && c1.json.n === 3 && c2.json.runId === c1.json.runId && !c2.json.runCreated && c2.json.n === 5,
+      JSON.stringify([c1, c2]),
+    );
+    const c3 = await wpost("/ingest/eval-run", { runKey: "e2e-eval", cases: [4, 5].map(mkCase) });
+    check("  …and replaying a chunk inserts nothing", c3.json.cases.inserted === 0 && c3.json.n === 5, JSON.stringify(c3));
+    const mism = await wpost("/ingest/eval-run", { runKey: "e2e-eval", cases: [{ ...mkCase(6), model: "another/model" }] });
+    check("a reused runKey with a different model is 409 run_mismatch", mism.status === 409 && mism.json.code === "run_mismatch", JSON.stringify(mism));
+    const rows = await ep.query(
+      `SELECT r.n AS n, r.summary AS summary,
+              (SELECT count(*)::int FROM eval_cases c WHERE c.run_id = r.id) AS stored,
+              (SELECT avg(c.fdi_f1)::float8 FROM eval_cases c WHERE c.run_id = r.id) AS avg_fdi
+         FROM eval_runs r JOIN organizations o ON o.id = r.org_id WHERE o.slug = $1 AND r.run_key = 'e2e-eval'`,
+      [SLUG],
+    );
+    const got = rows.rows[0];
+    check(
+      "Postgres holds 5 cases and the stored summary equals the mean of the stored case rows",
+      got && got.n === 5 && got.stored === 5 && Math.abs(got.summary.fdi_f1 - got.avg_fdi) < 1e-6 && got.summary.format_ok_rate === 2 / 5,
+      JSON.stringify(got),
+    );
+  } finally {
+    await ep.end();
+  }
 }
 
 try {

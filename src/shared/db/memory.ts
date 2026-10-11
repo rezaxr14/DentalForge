@@ -15,6 +15,9 @@ import {
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type EvalCaseRecord,
+  type IngestEvalInput,
+  type IngestEvalResult,
   type IngestTraceInput,
   type IngestTraceResult,
   type IngestTrainingInput,
@@ -38,6 +41,7 @@ import {
   type WorkerTokenRecord,
 } from "./repos";
 import { mergeRunStatus, toFloat4 } from "./ingest-rules";
+import { summarizeEval } from "@/shared/lib/import/parse";
 
 function uid(): string {
   return randomUUID();
@@ -698,6 +702,81 @@ class ScopedMemory implements ScopedRepos {
       .sort((a, b) => a.idx - b.idx)
       .map((t) => ({ ...t, toolCalls: [...t.toolCalls].sort((a, b) => a.idx - b.idx) }));
   }
+
+  async ingestEvalCases(input: IngestEvalInput): Promise<IngestEvalResult> {
+    assertNoDuplicates(input.cases.map((c) => String(c.sourceImageId)), "eval case");
+    let run = [...this.root.evalRuns.values()].find((r) => r.orgId === this.orgId && r.runKey === input.runKey);
+    const runCreated = run === undefined;
+    if (run) {
+      const m = input.run;
+      if (run.dataset !== m.dataset || run.split !== m.split || run.provider !== m.provider || run.model !== m.model || (run.canonicalResize ?? false) !== m.canonicalResize) {
+        return { outcome: "run_mismatch", run: structuredClone(run) };
+      }
+    } else {
+      run = {
+        id: uid(),
+        orgId: this.orgId,
+        dataset: input.run.dataset,
+        split: input.run.split,
+        provider: input.run.provider,
+        model: input.run.model,
+        canonicalResize: input.run.canonicalResize,
+        n: 0,
+        summary: {},
+        runKey: input.runKey,
+        createdAt: new Date(),
+      };
+      this.root.evalRuns.set(run.id, run);
+    }
+
+    let casesInserted = 0;
+    for (const c of input.cases) {
+      const key = `${run.id}\u0000${c.sourceImageId}`;
+      const prior = this.root.evalCases.get(key);
+      if (!prior) casesInserted++;
+      this.root.evalCases.set(key, {
+        id: prior?.id ?? uid(),
+        runId: run.id,
+        sourceImageId: c.sourceImageId,
+        groundTruth: structuredClone(c.groundTruth),
+        predictions: structuredClone(c.predictions),
+        matchedPairs: structuredClone(c.matchedPairs),
+        // real columns: round like Postgres so both stores summarize identical numbers
+        fdiF1: toFloat4(c.fdiF1),
+        exactF1: toFloat4(c.exactF1),
+        closeness: toFloat4(c.closeness),
+        spatial: toFloat4(c.spatial),
+        diagSim: toFloat4(c.diagSim),
+        confidence: c.confidence === null ? null : toFloat4(c.confidence),
+        formatOk: c.formatOk,
+        rawOutput: c.rawOutput,
+      });
+    }
+
+    const stored = [...this.root.evalCases.values()]
+      .filter((c) => c.runId === run.id)
+      .sort((a, b) => (a.sourceImageId ?? 0) - (b.sourceImageId ?? 0));
+    run.n = stored.length;
+    run.summary = summarizeEval(
+      stored.map((c) => ({
+        fdiF1: c.fdiF1 ?? 0,
+        exactF1: c.exactF1 ?? 0,
+        closeness: c.closeness ?? 0,
+        spatial: c.spatial ?? 0,
+        diagSim: c.diagSim ?? 0,
+        formatOk: c.formatOk ?? false,
+      })),
+    );
+    return { outcome: "ok", run: structuredClone(run), runCreated, casesInserted };
+  }
+
+  async listEvalCases(runId: string): Promise<EvalCaseRecord[]> {
+    if (this.root.evalRuns.get(runId)?.orgId !== this.orgId) return [];
+    return [...this.root.evalCases.values()]
+      .filter((c) => c.runId === runId)
+      .sort((a, b) => (a.sourceImageId ?? Number.MAX_SAFE_INTEGER) - (b.sourceImageId ?? Number.MAX_SAFE_INTEGER))
+      .map((c) => structuredClone(c));
+  }
 }
 
 export class MemoryStore implements OrgStore {
@@ -717,6 +796,7 @@ export class MemoryStore implements OrgStore {
   readonly workerTokens = new Map<string, WorkerTokenRecord>();
   readonly artifacts = new Map<string, ArtifactRecord>();
   readonly traceTurns = new Map<string, TraceTurnRecord[]>();
+  readonly evalCases = new Map<string, EvalCaseRecord>();
   readonly models = new Map<string, ModelRecord>();
   readonly trainingRuns = new Map<string, TrainingRunRecord>();
   readonly trainingMetrics = new Map<string, TrainingMetricRecord>();

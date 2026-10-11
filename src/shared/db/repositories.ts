@@ -15,6 +15,7 @@ import {
   artifacts,
   auditLog,
   datasets,
+  evalCases,
   evalRuns,
   images,
   invites,
@@ -41,6 +42,9 @@ import {
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type EvalCaseRecord,
+  type IngestEvalInput,
+  type IngestEvalResult,
   type IngestTraceInput,
   type IngestTraceResult,
   type IngestTrainingInput,
@@ -64,6 +68,7 @@ import {
   type WorkerTokenRecord,
 } from "./repos";
 import { mergeRunStatus } from "./ingest-rules";
+import { summarizeEval } from "@/shared/lib/import/parse";
 
 /** Rows per INSERT: 1000 × 4 params stays far below Postgres' 65 535-parameter limit. */
 const INGEST_CHUNK = 1000;
@@ -1048,6 +1053,145 @@ class ScopedPg implements ScopedRepos {
           trueBbox: c.trueBbox,
           perturbTier: c.perturbTier,
         })),
+    }));
+  }
+
+  async ingestEvalCases(input: IngestEvalInput): Promise<IngestEvalResult> {
+    return this.db.transaction(async (tx) => {
+      // 1. The run, identified by (org, runKey). DO NOTHING + locked re-read keeps concurrent chunks of one
+      //    run serialized, so the recomputed summary below always sees every committed case.
+      const fresh = await tx
+        .insert(evalRuns)
+        .values({
+          orgId: this.orgId,
+          runKey: input.runKey,
+          dataset: input.run.dataset,
+          split: input.run.split,
+          provider: input.run.provider,
+          model: input.run.model,
+          canonicalResize: input.run.canonicalResize,
+          n: 0,
+          sourceFile: `api:${input.runKey}`,
+          summary: {},
+        })
+        .onConflictDoNothing()
+        .returning();
+      let run = fresh[0];
+      const runCreated = run !== undefined;
+      if (!run) {
+        run = (
+          await tx
+            .select()
+            .from(evalRuns)
+            .where(and(eq(evalRuns.orgId, this.orgId), eq(evalRuns.runKey, input.runKey)))
+            .for("update")
+        )[0]!;
+        const m = input.run;
+        if (run.dataset !== m.dataset || run.split !== m.split || run.provider !== m.provider || run.model !== m.model || run.canonicalResize !== m.canonicalResize) {
+          return { outcome: "run_mismatch", run } as const;
+        }
+      }
+      const runId = run.id;
+
+      // 2. Cases: upsert on (run, source image).
+      let casesInserted = 0;
+      for (const part of chunks(input.cases, 100)) {
+        const rows = await tx
+          .insert(evalCases)
+          .values(
+            part.map((c) => ({
+              orgId: this.orgId,
+              runId,
+              imageId: null,
+              sourceImageId: c.sourceImageId,
+              groundTruth: c.groundTruth,
+              predictionsJson: c.predictions,
+              matchedPairs: c.matchedPairs,
+              fdiF1: c.fdiF1,
+              exactF1: c.exactF1,
+              closeness: c.closeness,
+              spatial: c.spatial,
+              diagSim: c.diagSim,
+              confidence: c.confidence,
+              formatOk: c.formatOk,
+              rawOutput: c.rawOutput,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [evalCases.runId, evalCases.sourceImageId],
+            set: {
+              groundTruth: sql`excluded.ground_truth`,
+              predictionsJson: sql`excluded.predictions`,
+              matchedPairs: sql`excluded.matched_pairs`,
+              fdiF1: sql`excluded.fdi_f1`,
+              exactF1: sql`excluded.exact_f1`,
+              closeness: sql`excluded.closeness`,
+              spatial: sql`excluded.spatial`,
+              diagSim: sql`excluded.diag_sim`,
+              confidence: sql`excluded.confidence`,
+              formatOk: sql`excluded.format_ok`,
+              rawOutput: sql`excluded.raw_output`,
+            },
+          })
+          .returning({ inserted: sql<boolean>`(xmax = 0)` });
+        casesInserted += rows.filter((r) => r.inserted).length;
+      }
+
+      // 3. n and summary are COMPUTED from every stored case (never accumulated), in a fixed order.
+      const stored = await tx
+        .select({
+          fdiF1: evalCases.fdiF1,
+          exactF1: evalCases.exactF1,
+          closeness: evalCases.closeness,
+          spatial: evalCases.spatial,
+          diagSim: evalCases.diagSim,
+          formatOk: evalCases.formatOk,
+        })
+        .from(evalCases)
+        .where(eq(evalCases.runId, runId))
+        .orderBy(asc(evalCases.sourceImageId));
+      const updated = await tx
+        .update(evalRuns)
+        .set({
+          n: stored.length,
+          summary: summarizeEval(
+            stored.map((c) => ({
+              fdiF1: c.fdiF1 ?? 0,
+              exactF1: c.exactF1 ?? 0,
+              closeness: c.closeness ?? 0,
+              spatial: c.spatial ?? 0,
+              diagSim: c.diagSim ?? 0,
+              formatOk: c.formatOk ?? false,
+            })),
+          ),
+        })
+        .where(eq(evalRuns.id, runId))
+        .returning();
+      return { outcome: "ok", run: updated[0]!, runCreated, casesInserted } as const;
+    });
+  }
+
+  async listEvalCases(runId: string): Promise<EvalCaseRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(evalCases)
+      .where(and(eq(evalCases.runId, runId), eq(evalCases.orgId, this.orgId)))
+      .orderBy(asc(evalCases.sourceImageId));
+    return rows.map((c) => ({
+      id: c.id,
+      runId: c.runId,
+      sourceImageId: c.sourceImageId,
+      groundTruth: c.groundTruth,
+      predictions: c.predictionsJson,
+      matchedPairs: c.matchedPairs,
+      fdiF1: c.fdiF1,
+      exactF1: c.exactF1,
+      closeness: c.closeness,
+      spatial: c.spatial,
+      diagSim: c.diagSim,
+      confidence: c.confidence,
+      formatOk: c.formatOk,
+      rawOutput: c.rawOutput,
     }));
   }
 }

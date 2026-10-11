@@ -75,6 +75,9 @@ export interface EvalRunRecord {
   model: string;
   n: number;
   summary: Record<string, number>;
+  /** Set only for runs created through `ingest/eval-run` (ADR-0013); optional so older constructors stay valid. */
+  runKey?: string | null;
+  canonicalResize?: boolean;
   createdAt: Date;
 }
 
@@ -315,6 +318,56 @@ export type IngestTraceResult =
   | { outcome: "inserted" | "existing"; trace: TraceRecord; sameContent: boolean }
   | { outcome: "rejected"; reason: "unknown_dataset" | "unknown_image" };
 
+/** One eval case as `ingest/eval-run` stores it (the same fields a file import stores, plus the two summarized metrics). */
+export interface EvalCaseInput {
+  /** The dataset's own image number; with the run it is the case's identity. */
+  sourceImageId: number;
+  groundTruth: unknown;
+  predictions: unknown;
+  matchedPairs: unknown;
+  fdiF1: number;
+  exactF1: number;
+  closeness: number;
+  spatial: number;
+  diagSim: number;
+  confidence: number | null;
+  formatOk: boolean;
+  rawOutput: string;
+}
+
+export interface EvalCaseRecord {
+  id: string;
+  runId: string;
+  /** NULL for cases created by a file import. */
+  sourceImageId: number | null;
+  groundTruth: unknown;
+  predictions: unknown;
+  matchedPairs: unknown;
+  fdiF1: number | null;
+  exactF1: number | null;
+  closeness: number | null;
+  spatial: number | null;
+  diagSim: number | null;
+  confidence: number | null;
+  formatOk: boolean | null;
+  rawOutput: string | null;
+}
+
+export interface IngestEvalInput {
+  /** Worker-chosen identity of the run within the organization. */
+  runKey: string;
+  run: { dataset: string; split: string; provider: string; model: string; canonicalResize: boolean };
+  cases: EvalCaseInput[];
+}
+
+/**
+ * `ok`           cases upserted; `run.n` and `run.summary` are recomputed from ALL stored cases of the run.
+ * `run_mismatch` the key exists but with a different dataset/split/provider/model/canonicalResize: nothing written.
+ */
+export type IngestEvalResult =
+  | { outcome: "ok"; run: EvalRunRecord; runCreated: boolean; casesInserted: number }
+  | { outcome: "run_mismatch"; run: EvalRunRecord };
+
 /**
  * Why a worker-side job write was refused. Expected conditions are DATA, not
  * exceptions (plan §9.4 rule 2): the route layer maps each to a problem+json.
@@ -454,6 +507,15 @@ export interface ScopedRepos {
   ingestTrace(input: IngestTraceInput): Promise<IngestTraceResult>;
   /** Empty when the trace is unknown OR belongs to another org. */
   listTraceTurns(traceId: string): Promise<TraceTurnRecord[]>;
+
+  /**
+   * ONE atomic write: upsert the run by (org, runKey), upsert the cases by (run, sourceImageId), then recompute
+   * `n` and `summary` from every stored case of the run with `summarizeEval` (the importer's own function).
+   * Re-sending a chunk is a no-op in effect. Duplicate sourceImageIds INSIDE a chunk are the caller's bug and throw.
+   */
+  ingestEvalCases(input: IngestEvalInput): Promise<IngestEvalResult>;
+  /** Ordered by source image number (NULLs last). Empty when the run is unknown OR belongs to another org. */
+  listEvalCases(runId: string): Promise<EvalCaseRecord[]>;
 }
 
 /** Top-level store: orgs, memberships, and the `scoped()` entry point. */

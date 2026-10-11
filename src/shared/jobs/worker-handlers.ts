@@ -7,7 +7,7 @@
  * thrown (plan §9.4 rule 2).
  */
 import { artifactRefsInResult, parseResult } from "@/shared/contracts/jobs";
-import { IngestMetricsRequest, IngestTracesRequest, RegisterModelRequest, type IngestTracesResponseT } from "@/shared/contracts/ingest";
+import { IngestEvalRunRequest, IngestMetricsRequest, IngestTracesRequest, RegisterModelRequest, type IngestTracesResponseT } from "@/shared/contracts/ingest";
 import {
   ClaimJobsRequest,
   CompleteJobRequest,
@@ -24,6 +24,7 @@ import { authenticateWorker, requireWorker } from "./worker-auth";
 import { json, jobWriteProblem, problem, readJson, validationProblem } from "./problem";
 import { toClaimedJob } from "./mappers";
 import { prepareTrace } from "./trace-ingest";
+import { evalCaseRow } from "@/shared/lib/import/parse";
 
 export const LEASE_SECONDS = 60;
 export const POLL_INTERVAL_MS = 5000;
@@ -358,6 +359,52 @@ export async function ingestTraces(req: Request, deps: WorkerDeps): Promise<Resp
     });
   }
   return json({ results, ...counts });
+}
+
+// ---- POST /ingest/eval-run -------------------------------------------------
+/**
+ * One chunk of an evaluation run (ADR-0013). The run is identified by the worker's `runKey`; its
+ * dataset/split/provider/model come from the cases and must match on every chunk (409 `run_mismatch`
+ * otherwise). Cases are upserted by (run, image_id), so a retried chunk is safe, and `n` and `summary`
+ * are recomputed from ALL stored cases with the importer's own `summarizeEval`. `jobs:write`.
+ */
+export async function ingestEvalRun(req: Request, deps: WorkerDeps): Promise<Response> {
+  const auth = await authenticateWorker(req, deps.store, "jobs:write");
+  if (auth instanceof Response) return auth;
+  const body = await readJson(req);
+  if (!body.ok) return body.res;
+  const parsed = IngestEvalRunRequest.safeParse(body.value);
+  if (!parsed.success) return validationProblem(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
+  const r = parsed.data;
+  const first = r.cases[0]!;
+  const out = await auth.repos.ingestEvalCases({
+    runKey: r.runKey,
+    run: { dataset: first.dataset, split: first.split, provider: first.provider, model: first.model, canonicalResize: r.canonicalResize },
+    cases: r.cases.map((c) => {
+      const row = evalCaseRow(c);
+      return { ...row };
+    }),
+  });
+  if (out.outcome === "run_mismatch") {
+    const s = out.run;
+    return problem(
+      409,
+      "run_mismatch",
+      "Run key already used for a different run",
+      `Run "${r.runKey}" is ${s.dataset}/${s.split}/${s.provider}/${s.model} (canonicalResize ${String(s.canonicalResize ?? false)}); this chunk says ${first.dataset}/${first.split}/${first.provider}/${first.model} (canonicalResize ${String(r.canonicalResize)}). Use a new runKey for a different run.`,
+    );
+  }
+  return json({
+    runId: out.run.id,
+    runCreated: out.runCreated,
+    dataset: out.run.dataset,
+    split: out.run.split,
+    provider: out.run.provider,
+    model: out.run.model,
+    n: out.run.n,
+    cases: { received: r.cases.length, inserted: out.casesInserted },
+    summary: out.run.summary,
+  });
 }
 
 export function notImplemented(name: string): Response {
