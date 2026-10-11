@@ -40,7 +40,7 @@ work against the in-memory store cannot call it. Reading it also turned up two t
 - The importer's DB writer had **no database-level tests** (only parsing). `tests/m8-importer-scoping.test.ts` adds two (Postgres).
 
 ## Not in this change
-`POST /ingest/eval-run` stays 501 (task C2b). It needs decisions the plan does not make: eval cases have no repo layer and no natural key
+`POST /ingest/eval-run` stayed 501 here; implemented afterwards in ADR-0013 (task C2b). It needs decisions the plan does not make: eval cases have no repo layer and no natural key
 (`eval_cases` has no source image id, so a retried batch cannot be deduplicated), a whole real run may not fit the 1 MB
 (Vercel: 4.5 MB) body, and the stored `summary` must stay computed from all stored cases (plan §0 rule 3), which a chunked upload makes
 a recompute rather than a one-shot. Expect a migration.

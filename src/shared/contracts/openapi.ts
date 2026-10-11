@@ -8,6 +8,8 @@
  */
 import { z } from "zod";
 import {
+  IngestEvalRunRequest,
+  IngestEvalRunResponse,
   IngestMetricsRequest,
   IngestMetricsResponse,
   IngestTracesRequest,
@@ -84,6 +86,8 @@ export function buildWorkerOpenApi(): Json {
     RegisterModelResponse: output(RegisterModelResponse),
     IngestMetricsRequest: input(IngestMetricsRequest),
     IngestMetricsResponse: output(IngestMetricsResponse),
+    IngestEvalRunRequest: input(IngestEvalRunRequest),
+    IngestEvalRunResponse: output(IngestEvalRunResponse),
     IngestTracesRequest: input(IngestTracesRequest),
     IngestTracesResponse: output(IngestTracesResponse),
     CreateJobRequest: input(CreateJobRequest),
@@ -117,14 +121,6 @@ export function buildWorkerOpenApi(): Json {
   });
   /** Lease fence: refused when you no longer hold the job. */
   const jobConflict = { "409": problemRes("job_not_owner | job_cancelled | job_terminal — stop working on this job") };
-
-  const notImpl = (summary: string) => ({
-    post: {
-      summary,
-      "x-implemented": false,
-      responses: { "501": problemRes("Documented in v1, not implemented in this build (ADR-0009)") },
-    },
-  });
 
   return {
     openapi: "3.1.0",
@@ -165,7 +161,11 @@ export function buildWorkerOpenApi(): Json {
         "RegisterModelRequest",
         "RegisterModelResponse",
       ),
-      "/ingest/eval-run": notImpl("Ingest eval cases"),
+      "/ingest/eval-run": post(
+        "Ingest one chunk of an evaluation run; the run is identified by runKey; cases are upserted by (run, image_id); n and summary are recomputed from all stored cases",
+        "IngestEvalRunRequest",
+        "IngestEvalRunResponse",
+      ),
       "/ingest/traces": post(
         "Ingest verified traces; deduplicated by identity (dataset, image, cohort, mode); per-item outcomes; the dataset and image must already exist",
         "IngestTracesRequest",

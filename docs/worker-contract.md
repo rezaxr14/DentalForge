@@ -48,7 +48,7 @@ home GPU box behind NAT, a Colab/Kaggle session, or a cloud server all attach to
 | POST | `/jobs/{id}/fail` | Fail a job; retryable failures requeue while attempts remain | implemented |
 | GET | `/images/{imageId}` | Short-lived presigned download URL for an image (variant: original) | implemented |
 | POST | `/models/register` | Register a model checkpoint (upsert by name+stage; omitted optional fields keep their stored value) | implemented |
-| POST | `/ingest/eval-run` | Ingest eval cases | not implemented (501) |
+| POST | `/ingest/eval-run` | Ingest one chunk of an evaluation run; the run is identified by runKey; cases are upserted by (run, image_id); n and summary are recomputed from all stored cases | implemented |
 | POST | `/ingest/traces` | Ingest verified traces; deduplicated by identity (dataset, image, cohort, mode); per-item outcomes; the dataset and image must already exist | implemented |
 | POST | `/ingest/metrics` | Ingest training metrics and reward samples; the run is upserted by (kind, name); idempotent per (run, step, name) | implemented |
 
@@ -906,6 +906,471 @@ Request/response bodies are listed under **Schemas** below.
     "status",
     "metrics",
     "rewardSamples"
+  ],
+  "additionalProperties": false
+}
+```
+
+### IngestEvalRunRequest
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "runKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$"
+    },
+    "canonicalResize": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cases": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "image_id": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "split": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "ground_truth": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quadrant": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                },
+                "tooth_position": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "diagnosis": {
+                  "type": "string"
+                },
+                "raw_diagnosis": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "bbox": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
+                }
+              },
+              "required": [
+                "quadrant",
+                "tooth_position",
+                "diagnosis"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "predictions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quadrant": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                },
+                "tooth_position": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "diagnosis": {
+                  "type": "string"
+                },
+                "raw_diagnosis": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "bbox": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
+                }
+              },
+              "required": [
+                "quadrant",
+                "tooth_position",
+                "diagnosis"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "matched_pairs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "gt": {
+                  "type": "object",
+                  "properties": {
+                    "quadrant": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4
+                    },
+                    "tooth_position": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "diagnosis": {
+                      "type": "string"
+                    },
+                    "raw_diagnosis": {
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "bbox": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 4,
+                      "maxItems": 4
+                    }
+                  },
+                  "required": [
+                    "quadrant",
+                    "tooth_position",
+                    "diagnosis"
+                  ],
+                  "additionalProperties": {}
+                },
+                "pred": {
+                  "type": "object",
+                  "properties": {
+                    "quadrant": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4
+                    },
+                    "tooth_position": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "diagnosis": {
+                      "type": "string"
+                    },
+                    "raw_diagnosis": {
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "bbox": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 4,
+                      "maxItems": 4
+                    }
+                  },
+                  "required": [
+                    "quadrant",
+                    "tooth_position",
+                    "diagnosis"
+                  ],
+                  "additionalProperties": {}
+                },
+                "fdi_match": {
+                  "type": "boolean"
+                },
+                "exact_match": {
+                  "type": "boolean"
+                },
+                "closeness": {
+                  "type": "number"
+                },
+                "spatial": {
+                  "type": "number"
+                },
+                "diag_sim": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "gt",
+                "pred",
+                "fdi_match",
+                "exact_match",
+                "closeness",
+                "spatial",
+                "diag_sim"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "fdi_precision": {
+            "type": "number"
+          },
+          "fdi_recall": {
+            "type": "number"
+          },
+          "fdi_f1": {
+            "type": "number"
+          },
+          "exact_precision": {
+            "type": "number"
+          },
+          "exact_recall": {
+            "type": "number"
+          },
+          "exact_f1": {
+            "type": "number"
+          },
+          "closeness_score": {
+            "type": "number"
+          },
+          "spatial_proximity": {
+            "type": "number"
+          },
+          "diagnostic_similarity": {
+            "type": "number"
+          },
+          "fdi_correct": {
+            "type": "boolean"
+          },
+          "quadrant_correct": {
+            "type": "boolean"
+          },
+          "tooth_position_correct": {
+            "type": "boolean"
+          },
+          "diagnosis_correct": {
+            "type": "boolean"
+          },
+          "exact_match": {
+            "type": "boolean"
+          },
+          "all_exact_match": {
+            "type": "boolean"
+          },
+          "final_answer": {},
+          "raw_output": {
+            "type": "string"
+          },
+          "format_ok": {
+            "type": "boolean"
+          },
+          "finish_reason": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "timestamp": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "image_id",
+          "dataset",
+          "split",
+          "provider",
+          "model",
+          "ground_truth",
+          "predictions",
+          "matched_pairs",
+          "fdi_precision",
+          "fdi_recall",
+          "fdi_f1",
+          "exact_precision",
+          "exact_recall",
+          "exact_f1",
+          "closeness_score",
+          "spatial_proximity",
+          "diagnostic_similarity",
+          "fdi_correct",
+          "quadrant_correct",
+          "tooth_position_correct",
+          "diagnosis_correct",
+          "exact_match",
+          "all_exact_match",
+          "raw_output",
+          "format_ok",
+          "finish_reason"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "runKey",
+    "cases"
+  ]
+}
+```
+
+### IngestEvalRunResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "runCreated": {
+      "type": "boolean"
+    },
+    "dataset": {
+      "type": "string"
+    },
+    "split": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "n": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "cases": {
+      "type": "object",
+      "properties": {
+        "received": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "inserted": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "received",
+        "inserted"
+      ],
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "number"
+      }
+    }
+  },
+  "required": [
+    "runId",
+    "runCreated",
+    "dataset",
+    "split",
+    "provider",
+    "model",
+    "n",
+    "cases",
+    "summary"
   ],
   "additionalProperties": false
 }

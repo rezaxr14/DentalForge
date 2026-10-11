@@ -69,8 +69,8 @@ lease ownership.
 
 ## Deferred (documented, not hidden)
 - **Redis/Upstash fan-out.** SSE reads `job_events` by DB polling; Redis is not used.
-- **Endpoints answering 501** (documented in the contract): `ingest/eval-run` only.
-  (`models/register` and `ingest/metrics`: ADR-0011; `ingest/traces`: ADR-0012.)
+- ~~Endpoints answering 501~~ — none left: `models/register` and `ingest/metrics` (ADR-0011), `ingest/traces` (ADR-0012),
+  `ingest/eval-run` (ADR-0013). The `not_implemented` problem helper stays (unit-tested) for future endpoints.
 - **Image variants:** `GET /images/:id` serves `original` only.
 - ~~Worker-token admin UI~~ — shipped, see ADR-0010 (`pnpm worker:token` remains for `admin` scope / scripting).
 - ~~Features do not consume the ladder yet~~ — Tool Lab, LabelForge "Suggest boxes" and the trace viewer now do (commit `57a9ffb`).

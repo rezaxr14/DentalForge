@@ -6,7 +6,7 @@
  * them and `contract:docs` renders them into docs/worker-openapi.json.
  */
 import { z } from "zod";
-import { VerifiedTrace } from "./traces";
+import { EvalCase, VerifiedTrace } from "./traces";
 
 /** Largest magnitude a Postgres `real` (float4) can hold; beyond it the INSERT would overflow. */
 export const FLOAT4_MAX = 3.4028234663852886e38;
@@ -189,3 +189,53 @@ export const IngestTracesResponse = z.object({
   rejected: z.number().int(),
 });
 export type IngestTracesResponseT = z.infer<typeof IngestTracesResponse>;
+
+// --- POST /ingest/eval-run -------------------------------------------------
+/** A worker-chosen identity for a run, unique within the organization (e.g. `zs-qwen3.5-9b-dentex-test-2026-10-11`). */
+export const RUN_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+export const MAX_EVAL_CASES_PER_REQUEST = 100;
+
+export const IngestEvalRunRequest = z
+  .object({
+    runKey: z.string().regex(RUN_KEY_PATTERN, "letters, digits, . _ : - ; up to 120 characters; must start with a letter or digit"),
+    /** Whether images were resized to the canonical size before inference. Fixed when the run is created. */
+    canonicalResize: z.boolean().default(false),
+    /** One chunk of the run (an eval case is the same record the zero-shot runner writes as a JSONL line). */
+    cases: z.array(EvalCase).min(1).max(MAX_EVAL_CASES_PER_REQUEST),
+  })
+  .superRefine((v, ctx) => {
+    const first = v.cases[0];
+    if (!first) return;
+    const seen = new Map<number, number>();
+    v.cases.forEach((c, i) => {
+      for (const k of ["dataset", "split", "provider", "model"] as const) {
+        if (c[k] !== first[k]) {
+          ctx.addIssue({ code: "custom", path: ["cases", i, k], message: `must equal cases[0].${k} ("${first[k]}"): one run, one ${k}` });
+        }
+      }
+      const prior = seen.get(c.image_id);
+      if (prior !== undefined) {
+        ctx.addIssue({ code: "custom", path: ["cases", i, "image_id"], message: `duplicate of cases[${prior}] (image_id ${c.image_id})` });
+      } else seen.set(c.image_id, i);
+    });
+  });
+export type IngestEvalRunRequestT = z.infer<typeof IngestEvalRunRequest>;
+
+export const IngestEvalRunResponse = z.object({
+  runId: z.string().uuid(),
+  runCreated: z.boolean(),
+  dataset: z.string(),
+  split: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  /** Number of cases stored for the whole run after this request (not just this chunk). */
+  n: z.number().int(),
+  cases: z.object({
+    received: z.number().int(),
+    /** New cases; `received - inserted` already existed and were overwritten (same image, latest value wins). */
+    inserted: z.number().int(),
+  }),
+  /** Means over ALL stored cases of the run (recomputed, never accumulated), as 32-bit-float inputs. */
+  summary: z.record(z.string(), z.number()),
+});
+export type IngestEvalRunResponseT = z.infer<typeof IngestEvalRunResponse>;

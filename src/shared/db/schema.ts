@@ -566,10 +566,16 @@ export const evalRuns = pgTable(
     canonicalResize: boolean("canonical_resize").notNull().default(false),
     n: integer("n").notNull().default(0),
     sourceFile: text("source_file"),
+    /** Worker-chosen identity of an API-ingested run (NULL for file imports); lets chunked uploads retry (ADR-0013). */
+    runKey: text("run_key"),
     summary: jsonb("summary").$type<Record<string, number>>().notNull().default({}),
     createdAt: createdAt(),
   },
-  (t) => [index("eval_runs_org_idx").on(t.orgId)],
+  (t) => [
+    index("eval_runs_org_idx").on(t.orgId),
+    // NULLs are distinct in Postgres, so file-imported runs (run_key NULL) are unaffected.
+    uniqueIndex("eval_runs_org_run_key_uniq").on(t.orgId, t.runKey),
+  ],
 );
 
 export const evalCases = pgTable(
@@ -583,18 +589,28 @@ export const evalCases = pgTable(
       .notNull()
       .references(() => evalRuns.id, { onDelete: "cascade" }),
     imageId: uuid("image_id"),
+    /** The dataset's own image number (`image_id` in the JSONL). NULL for file imports (ADR-0013). */
+    sourceImageId: integer("source_image_id"),
     groundTruth: jsonb("ground_truth").$type<unknown>(),
     predictionsJson: jsonb("predictions").$type<unknown>(),
     matchedPairs: jsonb("matched_pairs").$type<unknown>(),
     fdiF1: real("fdi_f1"),
     exactF1: real("exact_f1"),
     closeness: real("closeness"),
+    /** spatial_proximity / diagnostic_similarity: kept so the run summary can be recomputed from stored cases. */
+    spatial: real("spatial"),
+    diagSim: real("diag_sim"),
     confidence: real("confidence"),
     formatOk: boolean("format_ok"),
     rawOutput: text("raw_output"),
     createdAt: createdAt(),
   },
-  (t) => [index("eval_cases_run_idx").on(t.runId), index("eval_cases_org_idx").on(t.orgId)],
+  (t) => [
+    index("eval_cases_run_idx").on(t.runId),
+    index("eval_cases_org_idx").on(t.orgId),
+    // One case per (run, dataset image) so a retried chunk cannot duplicate rows; NULLs (file imports) stay distinct.
+    uniqueIndex("eval_cases_run_source_uniq").on(t.runId, t.sourceImageId),
+  ],
 );
 
 export const modelRegistry = pgTable(
