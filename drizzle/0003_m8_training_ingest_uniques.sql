@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "reward_samples_run_step_ref_uniq" ON "reward_samples" USING btree ("run_id","step","trajectory_ref");--> statement-breakpoint
+CREATE UNIQUE INDEX "training_runs_org_kind_name_uniq" ON "training_runs" USING btree ("org_id","kind","name");

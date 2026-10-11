@@ -15,7 +15,7 @@ home GPU box behind NAT, a Colab/Kaggle session, or a cloud server all attach to
 | Version | `X-Contract-Version: 1` is **required**. Missing → `400`; unknown major → `426` with `supported: [1]` |
 | Worker identity | Job-write endpoints (`events`, `artifacts/presign`, `complete`, `fail`) require `X-Worker-Id` (the id from `/register`). It fences writes to the current lease holder (ADR-0009) |
 | Errors | RFC 9457 `application/problem+json` with a stable `code` member |
-| Idempotency | `events` are idempotent on `seq`; `complete`/`fail` replay safely for the lease holder; `register` upserts by `name` |
+| Idempotency | `events` are idempotent on `seq`; `complete`/`fail` replay safely for the lease holder; `register` upserts by `name`; `models/register` upserts by `(name, stage)`; `ingest/metrics` upserts the run by `(kind, name)` and rows by `(run, step, name)` / `(run, step, trajectoryRef)` — re-sending a batch is safe |
 
 ### Job lifecycle
 
@@ -47,10 +47,10 @@ home GPU box behind NAT, a Colab/Kaggle session, or a cloud server all attach to
 | POST | `/jobs/{id}/complete` | Complete a job (idempotent for the lease holder) | implemented |
 | POST | `/jobs/{id}/fail` | Fail a job; retryable failures requeue while attempts remain | implemented |
 | GET | `/images/{imageId}` | Short-lived presigned download URL for an image (variant: original) | implemented |
-| POST | `/models/register` | Register a model checkpoint | not implemented (501) |
+| POST | `/models/register` | Register a model checkpoint (upsert by name+stage; omitted optional fields keep their stored value) | implemented |
 | POST | `/ingest/eval-run` | Ingest eval cases | not implemented (501) |
 | POST | `/ingest/traces` | Ingest verified traces | not implemented (501) |
-| POST | `/ingest/metrics` | Ingest training metrics | not implemented (501) |
+| POST | `/ingest/metrics` | Ingest training metrics and reward samples; the run is upserted by (kind, name); idempotent per (run, step, name) | implemented |
 
 Request/response bodies are listed under **Schemas** below.
 
@@ -612,6 +612,300 @@ Request/response bodies are listed under **Schemas** below.
   "required": [
     "ok",
     "attemptsRemaining"
+  ],
+  "additionalProperties": false
+}
+```
+
+### RegisterModelRequest
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "yolo",
+        "vlm",
+        "api"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "zero_shot",
+        "sft",
+        "grpo",
+        "yolo"
+      ]
+    },
+    "hfPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "meta": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "onnxArtifactId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "stage"
+  ]
+}
+```
+
+### RegisterModelResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "modelId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "created": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "yolo",
+        "vlm",
+        "api"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "zero_shot",
+        "sft",
+        "grpo",
+        "yolo"
+      ]
+    }
+  },
+  "required": [
+    "modelId",
+    "created",
+    "name",
+    "kind",
+    "stage"
+  ],
+  "additionalProperties": false
+}
+```
+
+### IngestMetricsRequest
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "run": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "sft",
+            "grpo",
+            "yolo"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "config": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "metrics": {
+      "default": [],
+      "maxItems": 5000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "step",
+          "name",
+          "value"
+        ]
+      }
+    },
+    "rewardSamples": {
+      "default": [],
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "trajectoryRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "components": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "step",
+          "trajectoryRef",
+          "components",
+          "total"
+        ]
+      }
+    }
+  },
+  "required": [
+    "run"
+  ]
+}
+```
+
+### IngestMetricsResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "runCreated": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "received": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "inserted": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "received",
+        "inserted"
+      ],
+      "additionalProperties": false
+    },
+    "rewardSamples": {
+      "type": "object",
+      "properties": {
+        "received": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "inserted": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "received",
+        "inserted"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "runId",
+    "runCreated",
+    "status",
+    "metrics",
+    "rewardSamples"
   ],
   "additionalProperties": false
 }

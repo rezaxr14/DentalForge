@@ -235,6 +235,46 @@ async function main() {
   const sp = await (await api("/status")).text();
   check("/status page renders live workers and the resolved ladder", /py-e2e/.test(sp) && /Capability ladder/.test(sp) && /mock-worker/.test(sp));
   await stop(py2);
+
+  // ---- models/register + ingest/metrics over real HTTP, then the rows in real Postgres ----
+  const wpost = async (path, body, tok = token) => {
+    const res = await fetch(`${BASE}/api/worker/v1${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-contract-version": "1", authorization: `Bearer ${tok}` },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  const m1 = await wpost("/models/register", { name: "e2e-qwen", kind: "vlm", stage: "sft", hfPath: "me/models/sft", meta: { rank: 16 } });
+  const m2 = await wpost("/models/register", { name: "e2e-qwen", kind: "vlm", stage: "sft" });
+  check("models/register creates, then the replay updates the same row", m1.status === 200 && m1.json.created === true && m2.json.created === false && m2.json.modelId === m1.json.modelId, JSON.stringify([m1.json, m2.json]));
+  const mBad = await wpost("/models/register", { name: "x", kind: "vlm", stage: "yolo" });
+  check("models/register rejects an inconsistent kind/stage with 422 problem+json", mBad.status === 422 && mBad.json.code === "validation_failed", JSON.stringify(mBad));
+
+  const batch = {
+    run: { kind: "grpo", name: "e2e-grpo", config: { k: 8 } },
+    metrics: [{ step: 1, name: "loss", value: 0.1 }, { step: 2, name: "loss", value: 1 / 3 }],
+    rewardSamples: [{ step: 1, trajectoryRef: "img1:g0:k0", components: { accuracy: 1 }, total: 0.1 }],
+  };
+  const i1 = await wpost("/ingest/metrics", batch);
+  const i2 = await wpost("/ingest/metrics", batch);
+  check("ingest/metrics creates the run and rows", i1.status === 200 && i1.json.runCreated && i1.json.metrics.inserted === 2 && i1.json.rewardSamples.inserted === 1, JSON.stringify(i1));
+  check("  …and re-sending the same batch inserts nothing (idempotent)", i2.json.runId === i1.json.runId && i2.json.runCreated === false && i2.json.metrics.inserted === 0 && i2.json.rewardSamples.inserted === 0, JSON.stringify(i2));
+  const dup = await wpost("/ingest/metrics", { ...batch, run: { kind: "sft", name: "e2e-dup" }, metrics: [batch.metrics[0], batch.metrics[0]] });
+  check("ingest/metrics rejects duplicate keys in a batch with 422", dup.status === 422, JSON.stringify(dup));
+
+  const dbp = new pg.Pool({ connectionString: DB_URL });
+  try {
+    const rows = await dbp.query(
+      "SELECT m.step, m.name, m.value FROM training_metrics m JOIN training_runs r ON r.id = m.run_id JOIN organizations o ON o.id = r.org_id WHERE o.slug = $1 AND r.name = 'e2e-grpo' ORDER BY m.step",
+      [SLUG],
+    );
+    check("the metric rows are really in Postgres as float32 (0.1 and 0.33333334)", rows.rows.length === 2 && rows.rows[0].value === 0.1 && rows.rows[1].value === 0.33333334, JSON.stringify(rows.rows));
+    const abort = await dbp.query("SELECT count(*)::int AS n FROM training_runs r JOIN organizations o ON o.id = r.org_id WHERE o.slug = $1 AND r.name = 'e2e-dup'", [SLUG]);
+    check("a rejected batch left no run behind", abort.rows[0].n === 0, JSON.stringify(abort.rows));
+  } finally {
+    await dbp.end();
+  }
 }
 
 try {

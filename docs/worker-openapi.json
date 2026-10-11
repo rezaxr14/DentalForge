@@ -491,6 +491,280 @@
         ],
         "additionalProperties": false
       },
+      "RegisterModelRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "yolo",
+              "vlm",
+              "api"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "zero_shot",
+              "sft",
+              "grpo",
+              "yolo"
+            ]
+          },
+          "hfPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "meta": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "onnxArtifactId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "stage"
+        ]
+      },
+      "RegisterModelResponse": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "yolo",
+              "vlm",
+              "api"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "zero_shot",
+              "sft",
+              "grpo",
+              "yolo"
+            ]
+          }
+        },
+        "required": [
+          "modelId",
+          "created",
+          "name",
+          "kind",
+          "stage"
+        ],
+        "additionalProperties": false
+      },
+      "IngestMetricsRequest": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "sft",
+                  "grpo",
+                  "yolo"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "config": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "succeeded",
+                  "failed"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ]
+          },
+          "metrics": {
+            "default": [],
+            "maxItems": 5000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "step",
+                "name",
+                "value"
+              ]
+            }
+          },
+          "rewardSamples": {
+            "default": [],
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "trajectoryRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "components": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "additionalProperties": {
+                    "type": "number"
+                  }
+                },
+                "total": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "step",
+                "trajectoryRef",
+                "components",
+                "total"
+              ]
+            }
+          }
+        },
+        "required": [
+          "run"
+        ]
+      },
+      "IngestMetricsResponse": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "runCreated": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "received": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "inserted": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "received",
+              "inserted"
+            ],
+            "additionalProperties": false
+          },
+          "rewardSamples": {
+            "type": "object",
+            "properties": {
+              "received": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "inserted": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "received",
+              "inserted"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "runId",
+          "runCreated",
+          "status",
+          "metrics",
+          "rewardSamples"
+        ],
+        "additionalProperties": false
+      },
       "CreateJobRequest": {
         "type": "object",
         "properties": {
@@ -2277,11 +2551,91 @@
     },
     "/models/register": {
       "post": {
-        "summary": "Register a model checkpoint",
-        "x-implemented": false,
+        "summary": "Register a model checkpoint (upsert by name+stage; omitted optional fields keep their stored value)",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterModelRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "501": {
-            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterModelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2290,7 +2644,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
       }
     },
     "/ingest/eval-run": {
@@ -2331,11 +2690,91 @@
     },
     "/ingest/metrics": {
       "post": {
-        "summary": "Ingest training metrics",
-        "x-implemented": false,
+        "summary": "Ingest training metrics and reward samples; the run is upserted by (kind, name); idempotent per (run, step, name)",
+        "parameters": [
+          {
+            "name": "X-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestMetricsRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "501": {
-            "description": "Documented in v1, not implemented in this build (ADR-0009)",
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestMetricsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or missing header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked worker token",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or unknown worker",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Unsupported contract version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable — retry after the Retry-After delay",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2344,7 +2783,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "workerToken": []
+          }
+        ]
       }
     }
   },

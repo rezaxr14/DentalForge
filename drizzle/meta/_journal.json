@@ -22,6 +22,13 @@
       "when": 1791539091134,
       "tag": "0002_m8_jobs_artifacts_worker_upsert",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791661523681,
+      "tag": "0003_m8_training_ingest_uniques",
+      "breakpoints": true
     }
   ]
 }

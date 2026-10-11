@@ -1,8 +1,10 @@
-import { notImplemented } from "@/shared/jobs/worker-handlers";
+import { resolveWorkerDeps } from "@/shared/jobs/deps";
+import * as h from "@/shared/jobs/worker-handlers";
 
 export const dynamic = "force-dynamic";
 
-// Documented in contract v1 §10.1; scheduled after M8 (ADR-0009).
-export async function POST() {
-  return notImplemented("POST /api/worker/v1/ingest/metrics");
+export async function POST(req: Request) {
+  const d = await resolveWorkerDeps();
+  if (d instanceof Response) return d;
+  return h.ingestMetrics(req, d);
 }

@@ -192,6 +192,73 @@ export interface ArtifactRecord {
   createdAt: Date;
 }
 
+/** A registered model checkpoint (plan §7 `model_registry`), unique per (org, name, stage). */
+export interface ModelRecord {
+  id: string;
+  orgId: string;
+  name: string;
+  kind: "yolo" | "vlm" | "api";
+  stage: "zero_shot" | "sft" | "grpo" | "yolo";
+  hfPath: string | null;
+  onnxArtifactId: string | null;
+  meta: Record<string, unknown>;
+  createdAt: Date;
+}
+
+export interface RegisterModelInput {
+  name: string;
+  kind: ModelRecord["kind"];
+  stage: ModelRecord["stage"];
+  /** `undefined` = keep the stored value on a re-register. */
+  hfPath?: string;
+  onnxArtifactId?: string;
+  meta?: Record<string, unknown>;
+}
+
+/** A training run (plan §7 `training_runs`), unique per (org, kind, name). */
+export interface TrainingRunRecord {
+  id: string;
+  orgId: string;
+  kind: "sft" | "grpo" | "yolo";
+  name: string;
+  config: Record<string, unknown>;
+  status: "queued" | "running" | "succeeded" | "failed";
+  createdAt: Date;
+}
+
+export interface TrainingMetricRecord {
+  runId: string;
+  step: number;
+  name: string;
+  /** Postgres `real`: 32-bit precision (both stores round identically). */
+  value: number;
+}
+
+export interface RewardSampleRecord {
+  id: string;
+  orgId: string;
+  runId: string;
+  step: number;
+  trajectoryRef: string;
+  components: Record<string, number>;
+  total: number;
+  createdAt: Date;
+}
+
+export interface IngestTrainingInput {
+  run: { kind: TrainingRunRecord["kind"]; name: string; config?: Record<string, unknown>; status?: TrainingRunRecord["status"] };
+  metrics: { step: number; name: string; value: number }[];
+  rewardSamples: { step: number; trajectoryRef: string; components: Record<string, number>; total: number }[];
+}
+
+export interface IngestTrainingResult {
+  run: TrainingRunRecord;
+  runCreated: boolean;
+  /** Rows that did not exist before; the remainder of the batch overwrote existing keys. */
+  metricsInserted: number;
+  rewardSamplesInserted: number;
+}
+
 /**
  * Why a worker-side job write was refused. Expected conditions are DATA, not
  * exceptions (plan §9.4 rule 2): the route layer maps each to a problem+json.
@@ -305,6 +372,23 @@ export interface ScopedRepos {
   getWorkerTokenByHash(tokenHash: string): Promise<WorkerTokenRecord | null>;
   listWorkerTokens(): Promise<WorkerTokenRecord[]>;
   revokeWorkerToken(tokenId: string): Promise<boolean>;
+
+  /** Upsert by (org, name, stage); omitted optional fields keep their stored value. */
+  registerModel(input: RegisterModelInput): Promise<{ model: ModelRecord; created: boolean }>;
+  listModels(): Promise<ModelRecord[]>;
+
+  /**
+   * ONE atomic write: upsert the run by (org, kind, name) — status never moves backwards —
+   * then upsert metrics by (run, step, name) and reward samples by (run, step, trajectoryRef).
+   * Re-sending a batch is a no-op in effect (idempotent); duplicate keys INSIDE a batch are the
+   * caller's bug (the HTTP contract rejects them) and make this throw.
+   */
+  ingestTraining(input: IngestTrainingInput): Promise<IngestTrainingResult>;
+  listTrainingRuns(): Promise<TrainingRunRecord[]>;
+  /** Ordered by (step, name). Empty when the run is unknown OR belongs to another org. */
+  listTrainingMetrics(runId: string): Promise<TrainingMetricRecord[]>;
+  /** Ordered by (step, trajectoryRef). Empty when the run is unknown OR belongs to another org. */
+  listRewardSamples(runId: string): Promise<RewardSampleRecord[]>;
 }
 
 /** Top-level store: orgs, memberships, and the `scoped()` entry point. */

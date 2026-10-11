@@ -740,7 +740,11 @@ export const trainingRuns = pgTable(
       .default("queued"),
     createdAt: createdAt(),
   },
-  (t) => [index("training_runs_org_idx").on(t.orgId)],
+  (t) => [
+    index("training_runs_org_idx").on(t.orgId),
+    // A run is identified by its (kind, name) so a worker can retry `ingest/metrics` idempotently (ADR-0011).
+    uniqueIndex("training_runs_org_kind_name_uniq").on(t.orgId, t.kind, t.name),
+  ],
 );
 
 export const trainingMetrics = pgTable(
@@ -779,6 +783,8 @@ export const rewardSamples = pgTable(
   (t) => [
     index("reward_samples_run_idx").on(t.runId),
     index("reward_samples_org_idx").on(t.orgId),
+    // One sample per (run, step, trajectory) so a retried batch cannot duplicate rows (ADR-0011).
+    uniqueIndex("reward_samples_run_step_ref_uniq").on(t.runId, t.step, t.trajectoryRef),
   ],
 );
 

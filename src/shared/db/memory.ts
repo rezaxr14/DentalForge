@@ -15,21 +15,38 @@ import {
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type IngestTrainingInput,
+  type IngestTrainingResult,
   type InviteRecord,
   type JobEventRecord,
   type JobRecord,
   type JobWrite,
   type MembershipRecord,
+  type ModelRecord,
   type OrgRecord,
   type OrgStore,
+  type RegisterModelInput,
+  type RewardSampleRecord,
   type ScopedRepos,
   type TraceRecord,
+  type TrainingMetricRecord,
+  type TrainingRunRecord,
   type WorkerRecord,
   type WorkerTokenRecord,
 } from "./repos";
+import { mergeRunStatus, toFloat4 } from "./ingest-rules";
 
 function uid(): string {
   return randomUUID();
+}
+
+/** Code-unit order == Postgres `COLLATE "C"` for the ASCII names the contract carries; keeps both stores' list order identical. */
+function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function assertNoDuplicates(keys: string[], what: string): void {
+  if (new Set(keys).size !== keys.length) throw new Error(`duplicate ${what} keys inside one batch`);
 }
 
 class ScopedMemory implements ScopedRepos {
@@ -503,6 +520,116 @@ class ScopedMemory implements ScopedRepos {
     t.revokedAt = new Date();
     return true;
   }
+
+  async registerModel(input: RegisterModelInput): Promise<{ model: ModelRecord; created: boolean }> {
+    const existing = [...this.root.models.values()].find(
+      (m) => m.orgId === this.orgId && m.name === input.name && m.stage === input.stage,
+    );
+    if (existing) {
+      existing.kind = input.kind;
+      if (input.hfPath !== undefined) existing.hfPath = input.hfPath;
+      if (input.onnxArtifactId !== undefined) existing.onnxArtifactId = input.onnxArtifactId;
+      if (input.meta !== undefined) existing.meta = structuredClone(input.meta);
+      return { model: structuredClone(existing), created: false };
+    }
+    const rec: ModelRecord = {
+      id: uid(),
+      orgId: this.orgId,
+      name: input.name,
+      kind: input.kind,
+      stage: input.stage,
+      hfPath: input.hfPath ?? null,
+      onnxArtifactId: input.onnxArtifactId ?? null,
+      meta: structuredClone(input.meta ?? {}),
+      createdAt: new Date(),
+    };
+    this.root.models.set(rec.id, rec);
+    return { model: structuredClone(rec), created: true };
+  }
+
+  async listModels(): Promise<ModelRecord[]> {
+    return [...this.root.models.values()]
+      .filter((m) => m.orgId === this.orgId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || cmp(a.name, b.name))
+      .map((m) => structuredClone(m));
+  }
+
+  async ingestTraining(input: IngestTrainingInput): Promise<IngestTrainingResult> {
+    // Validate first, mutate after: the whole call is atomic (all or nothing), like the SQL transaction.
+    assertNoDuplicates(input.metrics.map((m) => `${m.step}\u0000${m.name}`), "metric");
+    assertNoDuplicates(input.rewardSamples.map((r) => `${r.step}\u0000${r.trajectoryRef}`), "reward sample");
+
+    let run = [...this.root.trainingRuns.values()].find(
+      (r) => r.orgId === this.orgId && r.kind === input.run.kind && r.name === input.run.name,
+    );
+    const runCreated = run === undefined;
+    if (!run) {
+      run = {
+        id: uid(),
+        orgId: this.orgId,
+        kind: input.run.kind,
+        name: input.run.name,
+        config: structuredClone(input.run.config ?? {}),
+        status: input.run.status ?? "running",
+        createdAt: new Date(),
+      };
+      this.root.trainingRuns.set(run.id, run);
+    } else {
+      if (input.run.config !== undefined) run.config = structuredClone(input.run.config);
+      run.status = mergeRunStatus(run.status, input.run.status);
+    }
+
+    let metricsInserted = 0;
+    for (const m of input.metrics) {
+      const key = `${run.id}\u0000${m.step}\u0000${m.name}`;
+      if (!this.root.trainingMetrics.has(key)) metricsInserted++;
+      this.root.trainingMetrics.set(key, { runId: run.id, step: m.step, name: m.name, value: toFloat4(m.value) });
+    }
+    let rewardSamplesInserted = 0;
+    for (const r of input.rewardSamples) {
+      const key = `${run.id}\u0000${r.step}\u0000${r.trajectoryRef}`;
+      const prior = this.root.rewardSamples.get(key);
+      if (!prior) rewardSamplesInserted++;
+      this.root.rewardSamples.set(key, {
+        id: prior?.id ?? uid(),
+        orgId: this.orgId,
+        runId: run.id,
+        step: r.step,
+        trajectoryRef: r.trajectoryRef,
+        components: structuredClone(r.components),
+        total: toFloat4(r.total),
+        createdAt: prior?.createdAt ?? new Date(),
+      });
+    }
+    return { run: structuredClone(run), runCreated, metricsInserted, rewardSamplesInserted };
+  }
+
+  async listTrainingRuns(): Promise<TrainingRunRecord[]> {
+    return [...this.root.trainingRuns.values()]
+      .filter((r) => r.orgId === this.orgId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || cmp(a.name, b.name))
+      .map((r) => structuredClone(r));
+  }
+
+  private ownsRun(runId: string): boolean {
+    return this.root.trainingRuns.get(runId)?.orgId === this.orgId;
+  }
+
+  async listTrainingMetrics(runId: string): Promise<TrainingMetricRecord[]> {
+    if (!this.ownsRun(runId)) return [];
+    return [...this.root.trainingMetrics.values()]
+      .filter((m) => m.runId === runId)
+      .sort((a, b) => a.step - b.step || cmp(a.name, b.name))
+      .map((m) => ({ ...m }));
+  }
+
+  async listRewardSamples(runId: string): Promise<RewardSampleRecord[]> {
+    if (!this.ownsRun(runId)) return [];
+    return [...this.root.rewardSamples.values()]
+      .filter((r) => r.runId === runId)
+      .sort((a, b) => a.step - b.step || cmp(a.trajectoryRef, b.trajectoryRef))
+      .map((r) => structuredClone(r));
+  }
 }
 
 export class MemoryStore implements OrgStore {
@@ -521,6 +648,10 @@ export class MemoryStore implements OrgStore {
   readonly jobEvents = new Map<string, JobEventRecord[]>();
   readonly workerTokens = new Map<string, WorkerTokenRecord>();
   readonly artifacts = new Map<string, ArtifactRecord>();
+  readonly models = new Map<string, ModelRecord>();
+  readonly trainingRuns = new Map<string, TrainingRunRecord>();
+  readonly trainingMetrics = new Map<string, TrainingMetricRecord>();
+  readonly rewardSamples = new Map<string, RewardSampleRecord>();
 
   async createOrg(input: { slug: string; name: string }): Promise<OrgRecord> {
     if (this.bySlug.has(input.slug)) throw new Error(`org slug taken: ${input.slug}`);

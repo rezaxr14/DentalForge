@@ -7,6 +7,12 @@
  * it and a test fails if either committed file is stale.
  */
 import { z } from "zod";
+import {
+  IngestMetricsRequest,
+  IngestMetricsResponse,
+  RegisterModelRequest,
+  RegisterModelResponse,
+} from "./ingest";
 import { JOB_DEFINITIONS, JobDto, JobEventDto, JobEventsPage, CreateJobRequest } from "./jobs";
 import {
   CONTRACT_VERSION,
@@ -72,6 +78,10 @@ export function buildWorkerOpenApi(): Json {
     CompleteJobResponse: output(CompleteJobResponse),
     FailJobRequest: input(FailJobRequest),
     FailJobResponse: output(FailJobResponse),
+    RegisterModelRequest: input(RegisterModelRequest),
+    RegisterModelResponse: output(RegisterModelResponse),
+    IngestMetricsRequest: input(IngestMetricsRequest),
+    IngestMetricsResponse: output(IngestMetricsResponse),
     CreateJobRequest: input(CreateJobRequest),
     Job: output(JobDto),
     JobEvent: output(JobEventDto),
@@ -146,10 +156,18 @@ export function buildWorkerOpenApi(): Json {
           security: [{ workerToken: [] }],
         },
       },
-      "/models/register": notImpl("Register a model checkpoint"),
+      "/models/register": post(
+        "Register a model checkpoint (upsert by name+stage; omitted optional fields keep their stored value)",
+        "RegisterModelRequest",
+        "RegisterModelResponse",
+      ),
       "/ingest/eval-run": notImpl("Ingest eval cases"),
       "/ingest/traces": notImpl("Ingest verified traces"),
-      "/ingest/metrics": notImpl("Ingest training metrics"),
+      "/ingest/metrics": post(
+        "Ingest training metrics and reward samples; the run is upserted by (kind, name); idempotent per (run, step, name)",
+        "IngestMetricsRequest",
+        "IngestMetricsResponse",
+      ),
     },
     "x-job-types": Object.fromEntries(
       Object.keys(JOB_DEFINITIONS).map((t) => {
