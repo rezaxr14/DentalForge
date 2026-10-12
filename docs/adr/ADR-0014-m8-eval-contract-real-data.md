@@ -43,6 +43,9 @@ confidence range and quadrant are still enforced; skipped lines are counted, num
 untouched. Mutation-checked: 9 changes (predictions validated strictly again, lenient ground truth, lenient matched `gt`, uncounted invalid lines, string echo, per-issue counting, replace without
 the org filter, replace without the API-run guard, stale detection off) each fail the tests.
 
+## Verified on the owner's real data (reported by the owner's local agent, 2026-10-12)
+`pnpm diagnose:data`: **all 20 real files validate**, including the 12 Qwen3.5-9B lines that failed before, so the two reported causes were the whole story. `pnpm import:local --replace-evals` exited 0 and
+the Qwen file imported `49 lines, 49 valid` (it had been 37). Not re-run by the author of this ADR.
+
 ## Not verified
-That the relaxed contract accepts **all 12** of the real lines: the reported causes are the two above, but only `pnpm diagnose:data` on the real files can show every failing path.
-Run it and send the output if anything remains. Traces were not re-diagnosed here beyond the M7 count gate.
+Whether an eval run already in a database OTHER than the owner's local one is truncated (the stale-run report and `--replace-evals` exist for exactly that).
