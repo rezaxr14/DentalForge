@@ -47,8 +47,8 @@ const EnvShape = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
-  UPSTASH_REDIS_REST_URL: z.string().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  /** Optional realtime wake-up bus (ADR-0015): `redis://` or `rediss://` (Upstash offers a TCP/TLS URL). Absent = database polling. */
+  REDIS_URL: z.string().optional(),
   WORKER_MODE: z.enum(["off", "mock", "live"]).default("off"),
   DEMO_ORG_SLUG: z.string().optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -163,7 +163,7 @@ export function capabilities(env: AppEnv = getEnv()): Capabilities {
     // Only an EXPLICITLY configured database counts: the dev-default URL must
     // not claim a database exists (it detects nothing).
     db: env.dbConfigured,
-    redis: Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN),
+    redis: Boolean(env.REDIS_URL?.trim()),
     r2:
       env.STORAGE_PROVIDER === "r2" &&
       Boolean(env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET),
