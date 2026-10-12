@@ -17,5 +17,19 @@ services:
       timeout: 3s
       retries: 10
 
+  # Optional realtime wake-up bus (ADR-0015). Needed to run tests/m8-bus-redis.test.ts and `E2E_REDIS_URL=redis://localhost:6379 pnpm e2e:worker`.
+  redis:
+    image: redis:7-alpine
+    container_name: traceforge-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   traceforge-pgdata:

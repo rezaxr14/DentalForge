@@ -8,6 +8,9 @@
  */
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer } from "node:net";
 import { createClient } from "@redis/client";
 import { MemoryStore } from "@/shared/db/memory";
@@ -17,6 +20,7 @@ import { RedisBus } from "@/shared/realtime/redis-bus";
 import { createEventBus } from "@/shared/realtime";
 import { jobChannel, openWake, safePublish, type EventBus } from "@/shared/realtime/bus";
 import { sseReader, stays } from "./helpers/sse-reader";
+import { startLegacyRedis } from "./helpers/legacy-redis";
 
 const URL = process.env.REDIS_TEST_URL ?? "redis://127.0.0.1:6379";
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -167,6 +171,48 @@ describe("RedisBus with no server", () => {
   });
 });
 
+describe("RedisBus against a Redis that predates HELLO (5.0-style)", () => {
+  it("PREMISE: the client's default protocol (RESP3 → `HELLO 3`) cannot connect to such a server", async () => {
+    const legacy = await startLegacyRedis();
+    const raw = createClient({ url: legacy.url, socket: { reconnectStrategy: false, connectTimeout: 1000 } });
+    raw.on("error", () => undefined);
+    try {
+      await expect(raw.connect()).rejects.toThrow();
+      expect(legacy.commands.some((c) => c[0] === "HELLO")).toBe(true); // it did try, and was refused
+    } finally {
+      try {
+        raw.destroy();
+      } catch {
+        /* already closed by the failed connect */
+      }
+      await legacy.close();
+    }
+  });
+
+  it("the bus (RESP2 pinned) connects, publishes and delivers hints, and never sends HELLO", async () => {
+    const legacy = await startLegacyRedis();
+    try {
+      const watcher = bus(legacy.url);
+      const worker = bus(legacy.url);
+      let hints = 0;
+      const unsub = await watcher.subscribe(ch("legacy"), () => void (hints += 1));
+      expect(await worker.ping()).toBe(true);
+      await worker.publish(ch("legacy"));
+      await eventually(() => hints === 1, 2000, "the hint");
+      expect(watcher.healthy()).toBe(true);
+
+      await unsub();
+      await worker.publish(ch("legacy"));
+      await delay(100);
+      expect(hints).toBe(1);
+      expect(legacy.commands.some((c) => c[0] === "HELLO")).toBe(false);
+    } finally {
+      await Promise.all(opened.splice(0).map((b) => b.close()));
+      await legacy.close();
+    }
+  });
+});
+
 describe.skipIf(!hasBinary)("RedisBus survives a Redis restart", () => {
   let proc: ChildProcess | null = null;
   afterEach(() => {
@@ -183,8 +229,15 @@ describe.skipIf(!hasBinary)("RedisBus survives a Redis restart", () => {
         srv.close(() => resolve(port));
       });
     });
+  const confDirs: string[] = [];
+  afterAll(() => confDirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
   const startRedis = async (port: number) => {
-    proc = spawn("redis-server", ["--port", String(port), "--bind", "127.0.0.1", "--save", "", "--appendonly", "no"], { stdio: "ignore" });
+    // A config FILE rather than argv flags: the Windows port of Redis 5 rejects `--save ""` on the command line.
+    const dir = mkdtempSync(join(tmpdir(), "tf-redis-"));
+    confDirs.push(dir);
+    const conf = join(dir, "redis.conf");
+    writeFileSync(conf, `port ${port}\nbind 127.0.0.1\nsave ""\nappendonly no\n`);
+    proc = spawn("redis-server", [conf], { stdio: "ignore", cwd: dir });
     const probeBus = new RedisBus(`redis://127.0.0.1:${port}`);
     try {
       await eventually(async () => await probeBus.ping(), 5000, "redis-server to accept connections");

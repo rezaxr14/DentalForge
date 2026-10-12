@@ -5,20 +5,38 @@
  * core `@redis/client` only. Two connections per process: one publishes, one holds ALL subscriptions
  * (multiplexed, one `SUBSCRIBE` per channel regardless of how many SSE streams watch it).
  *
+ * Protocol: RESP2, pinned. `@redis/client` 6.x defaults to RESP3 and then sends `HELLO 3` on every connect, which Redis < 6
+ * rejects — every command would fail and the bus would look permanently down. Pub/sub, PUBLISH and PING need nothing from
+ * RESP3, so we pin the version that works on every Redis (found on a Redis 5.0 build, ADR-0015).
+ *
  * Failure model: operations fail FAST when disconnected (`disableOfflineQueue`) instead of queueing,
  * reconnection is automatic with capped backoff, and the client restores its subscriptions after a
  * reconnect. Hints sent while disconnected are simply lost — which the database safety poll covers.
  */
-import { createClient, type RedisClientType } from "@redis/client";
+import { createClient } from "@redis/client";
 import type { EventBus, Unsubscribe } from "./bus";
 
 const READY_WAIT_MS = 300;
 
+function makeClient(url: string) {
+  return createClient({
+    url,
+    RESP: 2 as const,
+    disableOfflineQueue: true,
+    socket: {
+      connectTimeout: 2000,
+      // 250 ms, 500 ms, 1 s … capped at 15 s; never gives up (a restarted Redis is picked up again)
+      reconnectStrategy: (retries: number) => Math.min(250 * 2 ** retries, 15_000),
+    },
+  });
+}
+type Client = ReturnType<typeof makeClient>;
+
 export class RedisBus implements EventBus {
   readonly kind = "redis" as const;
-  private readonly pub: RedisClientType;
-  private readonly sub: RedisClientType;
-  private readonly connecting = new Map<RedisClientType, Promise<void>>();
+  private readonly pub: Client;
+  private readonly sub: Client;
+  private readonly connecting = new Map<Client, Promise<void>>();
   /** channel → hint callbacks of every local waiter */
   private readonly listeners = new Map<string, Set<() => void>>();
   /** channel → in-flight/complete SUBSCRIBE, so concurrent first subscribers share one */
@@ -26,23 +44,14 @@ export class RedisBus implements EventBus {
   private closed = false;
 
   constructor(url: string) {
-    const options = {
-      url,
-      disableOfflineQueue: true,
-      socket: {
-        connectTimeout: 2000,
-        // 250 ms, 500 ms, 1 s … capped at 15 s; never gives up (a restarted Redis is picked up again)
-        reconnectStrategy: (retries: number) => Math.min(250 * 2 ** retries, 15_000),
-      },
-    };
-    this.pub = createClient(options) as RedisClientType;
-    this.sub = createClient(options) as RedisClientType;
+    this.pub = makeClient(url);
+    this.sub = makeClient(url);
     // An 'error' event with no listener would crash the process; connection trouble is expected and handled.
     this.pub.on("error", () => undefined);
     this.sub.on("error", () => undefined);
   }
 
-  private async ready(client: RedisClientType, waitMs: number): Promise<boolean> {
+  private async ready(client: Client, waitMs: number): Promise<boolean> {
     if (this.closed) return false;
     if (client.isReady) return true;
     let attempt = this.connecting.get(client);
