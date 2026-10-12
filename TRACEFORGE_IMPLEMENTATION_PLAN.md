@@ -549,7 +549,7 @@ Each milestone ends with: typecheck, lint, unit, e2e green in CI; docs updated; 
 | `INVITE_SIGNING_SECRET` | yes | signs invite links |
 | `STORAGE_PROVIDER` | no | `r2` \| `blob` \| `local` (default `local`) |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | when `r2` | |
-| `UPSTASH_REDIS_REST_URL/TOKEN` | no | missing → polling mode |
+| `REDIS_URL` | no | `redis://` / `rediss://` (Upstash: its TCP/TLS URL); missing or down → polling mode. Replaced `UPSTASH_REDIS_REST_*`, see ADR-0015 |
 | `WORKER_MODE` | no | `off` (default on Vercel) \| `mock` \| `live` |
 | `DEMO_ORG_SLUG` | no | enables the demo-org invite flow and daily reset |
 | `HF_TOKEN` | **never on Vercel** | local import scripts only |

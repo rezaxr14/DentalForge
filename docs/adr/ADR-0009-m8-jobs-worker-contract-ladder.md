@@ -68,7 +68,7 @@ lease ownership.
   in (11).
 
 ## Deferred (documented, not hidden)
-- **Redis/Upstash fan-out.** SSE reads `job_events` by DB polling; Redis is not used.
+- ~~Redis/Upstash fan-out~~ — optional wake-up bus implemented, see ADR-0015 (DB polling remains the default and the fallback).
 - ~~Endpoints answering 501~~ — none left: `models/register` and `ingest/metrics` (ADR-0011), `ingest/traces` (ADR-0012),
   `ingest/eval-run` (ADR-0013). The `not_implemented` problem helper stays (unit-tested) for future endpoints.
 - **Image variants:** `GET /images/:id` serves `original` only.

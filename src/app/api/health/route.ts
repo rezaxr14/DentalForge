@@ -2,6 +2,7 @@ import { capabilities, tryGetEnv } from "@/shared/config/env";
 import { CONTRACT_VERSION } from "@/shared/contracts/worker";
 import { isDegradedStore, selectOrgStore } from "@/shared/db";
 import { getStorageAdapter } from "@/shared/jobs/deps";
+import { getBusState } from "@/shared/realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export async function GET() {
       db = "down";
     }
   }
+  // "absent" (no REDIS_URL) | "up" | "down" (configured but unreachable: polling is in effect). Bounded: never slows the probe.
+  const redis = caps.redis ? await getBusState() : "absent";
   let storage = "unavailable";
   try {
     storage = getStorageAdapter().provider;
@@ -41,7 +44,7 @@ export async function GET() {
       status: db === "down" ? "degraded" : "ok",
       contractVersion: CONTRACT_VERSION,
       db,
-      redis: caps.redis ? "configured" : "absent",
+      redis,
       storage,
       workerMode: env.WORKER_MODE,
     },

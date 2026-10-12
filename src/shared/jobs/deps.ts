@@ -9,6 +9,7 @@
 import { capabilities, getEnv } from "@/shared/config/env";
 import { selectOrgStore, isDegradedStore } from "@/shared/db";
 import { LocalStorageAdapter, R2StorageAdapter, type StorageAdapter } from "@/shared/storage/adapter";
+import { getEventBus } from "@/shared/realtime";
 import { problem } from "./problem";
 import type { WorkerDeps } from "./worker-handlers";
 import type { Actor, UserDeps } from "./user-handlers";
@@ -28,7 +29,8 @@ export async function resolveWorkerDeps(): Promise<WorkerDeps | Response> {
   if (isDegradedStore(store)) {
     return problem(503, "unavailable", "Worker API is unavailable", "The database is unreachable; retry shortly.", {}, { "retry-after": "15" });
   }
-  return { store, storage: getStorageAdapter() };
+  const bus = await getEventBus(); // never throws; undefined = database polling only (ADR-0015)
+  return { store, storage: getStorageAdapter(), ...(bus ? { bus } : {}) };
 }
 
 export async function getActor(): Promise<Actor | null> {
@@ -51,5 +53,6 @@ export async function resolveUserDeps(): Promise<UserDeps | Response> {
   if (isDegradedStore(store)) {
     return problem(503, "unavailable", "Jobs are unavailable", "The database is unreachable; retry shortly.", {}, { "retry-after": "15" });
   }
-  return { store, actor: await getActor(), workerMode: getEnv().WORKER_MODE };
+  const bus = await getEventBus();
+  return { store, actor: await getActor(), workerMode: getEnv().WORKER_MODE, ...(bus ? { bus } : {}) };
 }

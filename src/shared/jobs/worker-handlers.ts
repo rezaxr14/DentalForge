@@ -24,17 +24,20 @@ import { authenticateWorker, requireWorker } from "./worker-auth";
 import { json, jobWriteProblem, problem, readJson, validationProblem } from "./problem";
 import { toClaimedJob } from "./mappers";
 import { prepareTrace } from "./trace-ingest";
+import { jobChannel, openWake, queueChannel, safePublish, type EventBus } from "@/shared/realtime/bus";
 import { evalCaseRow } from "@/shared/lib/import/parse";
 
 export const LEASE_SECONDS = 60;
 export const POLL_INTERVAL_MS = 5000;
-/** How often a waiting long-poll re-checks the queue (DB-poll; Redis is optional, plan §5.1). */
+/** How often a waiting long-poll re-checks the queue when no wake-up bus is live (with one it polls only as a safety net, ADR-0015). */
 export const CLAIM_POLL_MS = 750;
 const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024;
 
 export interface WorkerDeps {
   store: OrgStore;
   storage: StorageAdapter;
+  /** Optional wake-up bus (ADR-0015). Absent = database polling only. */
+  bus?: EventBus;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -94,23 +97,30 @@ export async function heartbeat(req: Request, deps: WorkerDeps): Promise<Respons
 }
 
 // ---- POST /jobs/claim (long-poll) -----------------------------------------
-async function claimLoop(repos: ScopedRepos, req: ClaimJobsRequestT, deps: WorkerDeps) {
+async function claimLoop(repos: ScopedRepos, req: ClaimJobsRequestT, deps: WorkerDeps, orgId: string) {
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
   const deadline = now() + req.waitMs;
   let lastBeat = now();
-  for (;;) {
-    await repos.reapJobs();
-    const jobs = await repos.claimJobs(req.workerId, req.accepts, req.max, LEASE_SECONDS);
-    if (jobs.length > 0) return jobs;
-    const left = deadline - now();
-    if (left <= 0) return [];
-    // A parked long-poll is proof of life: keep the worker `online`.
-    if (now() - lastBeat >= 10_000) {
-      await repos.heartbeatWorker(req.workerId);
-      lastBeat = now();
+  // With a live bus, a parked long-poll is woken the moment a job is queued for this org and only polls the database as a
+  // safety net; without one it polls every CLAIM_POLL_MS exactly as before. Subscribed BEFORE the first claim attempt.
+  const wake = await openWake(deps.bus, queueChannel(orgId));
+  try {
+    for (;;) {
+      await repos.reapJobs();
+      const jobs = await repos.claimJobs(req.workerId, req.accepts, req.max, LEASE_SECONDS);
+      if (jobs.length > 0) return jobs;
+      const left = deadline - now();
+      if (left <= 0) return [];
+      // A parked long-poll is proof of life: keep the worker `online`.
+      if (now() - lastBeat >= 10_000) {
+        await repos.heartbeatWorker(req.workerId);
+        lastBeat = now();
+      }
+      await wake.wait(CLAIM_POLL_MS, (ms) => sleep(Math.min(ms, left)));
     }
-    await sleep(Math.min(CLAIM_POLL_MS, left));
+  } finally {
+    await wake.close();
   }
 }
 
@@ -124,7 +134,9 @@ export async function claim(req: Request, deps: WorkerDeps): Promise<Response> {
   // Claiming doubles as a heartbeat; also validates the worker belongs to this org.
   const w = await auth.repos.heartbeatWorker(parsed.data.workerId);
   if (!w) return problem(403, "unknown_worker", "Unknown worker", "Register again to obtain a workerId.");
-  const jobs = await claimLoop(auth.repos, parsed.data, deps);
+  const jobs = await claimLoop(auth.repos, parsed.data, deps, auth.org.id);
+  // Claiming changes status/attempt: tell anyone watching these jobs.
+  await Promise.all(jobs.map((j) => safePublish(deps.bus, jobChannel(j.id))));
   return json({ jobs: jobs.map(toClaimedJob) });
 }
 
@@ -140,6 +152,7 @@ export async function postEvents(req: Request, deps: WorkerDeps, jobId: string):
   if (!parsed.success) return validationProblem(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
   const res = await auth.repos.appendJobEvents(jobId, worker.id, parsed.data.events, LEASE_SECONDS);
   if (!res.ok) return jobWriteProblem(res.code);
+  await safePublish(deps.bus, jobChannel(jobId));
   return json({
     accepted: res.value.accepted,
     leaseExtendedUntil: (res.value.leaseExpiresAt ?? new Date()).toISOString(),
@@ -212,6 +225,7 @@ export async function complete(req: Request, deps: WorkerDeps, jobId: string): P
   }
   const res = await auth.repos.completeJob(jobId, worker.id, result.value, parsed.data.artifactIds);
   if (!res.ok) return jobWriteProblem(res.code);
+  await safePublish(deps.bus, jobChannel(jobId));
   return json({ ok: true });
 }
 
@@ -227,6 +241,8 @@ export async function fail(req: Request, deps: WorkerDeps, jobId: string): Promi
   if (!parsed.success) return validationProblem(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
   const res = await auth.repos.failJob(jobId, worker.id, parsed.data.error);
   if (!res.ok) return jobWriteProblem(res.code);
+  // A failed job may go back to the queue (attempts remain): wake watchers AND parked claimers.
+  await Promise.all([safePublish(deps.bus, jobChannel(jobId)), safePublish(deps.bus, queueChannel(auth.org.id))]);
   return json({ ok: true, attemptsRemaining: res.value.attemptsRemaining });
 }
 

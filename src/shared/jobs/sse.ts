@@ -1,11 +1,14 @@
 /**
  * Job event streaming (plan §5.1).
  *
- * Source of truth is the append-only `job_events` table; Redis is an optional
- * accelerator that is NOT required (deferred, see ADR-0009). So the stream is
- * a bounded DB poll: it forwards new events, emits a `status` frame whenever
- * the job's status/attempt changes, and closes with `end` once the job is
- * terminal and drained.
+ * Source of truth is the append-only `job_events` table. The stream is a bounded
+ * DB read loop: it forwards new events, emits a `status` frame whenever the job's
+ * status/attempt changes, and closes with `end` once the job is terminal and drained.
+ *
+ * Between reads it waits. Without a bus it sleeps `pollMs`. With the optional wake-up bus
+ * (ADR-0015) it waits for a hint ("this job changed") and only polls every `safetyPollMs` as
+ * a safety net, so events appear immediately and an idle stream costs almost no database
+ * reads. A lost hint costs latency only: the next read always returns exactly what is stored.
  *
  * Serverless-safe: it closes itself after `maxMs` with a `reconnect` frame so
  * `EventSource` resumes (via `Last-Event-ID`) before the platform kills the
@@ -14,6 +17,7 @@
  */
 import { TERMINAL_STATUSES, type JobEventsPageT } from "@/shared/contracts/jobs";
 import type { ScopedRepos } from "@/shared/db/repos";
+import { SAFETY_POLL_MS, jobChannel, openWake, type EventBus, type Wake } from "@/shared/realtime/bus";
 import { toEventDto, toJobDto } from "./mappers";
 
 export interface SseOptions {
@@ -25,6 +29,10 @@ export interface SseOptions {
   sleep: (ms: number) => Promise<void>;
   now: () => number;
   signal?: AbortSignal;
+  /** Optional wake-up bus. Absent (the default) = pure polling. */
+  bus?: EventBus;
+  /** While the bus is healthy, how rarely to poll the database as a safety net. Default {@link SAFETY_POLL_MS}. */
+  safetyPollMs?: number;
 }
 
 export const DEFAULT_SSE: Omit<SseOptions, "afterSeq" | "signal"> = {
@@ -49,6 +57,7 @@ export function sseFrame(parts: { id?: number; event?: string; data?: unknown; c
 export function jobEventStream(repos: ScopedRepos, jobId: string, opts: SseOptions): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
   let cancelled = false;
+  let wake: Wake | null = null;
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (s: string) => controller.enqueue(enc.encode(s));
@@ -58,6 +67,10 @@ export function jobEventStream(repos: ScopedRepos, jobId: string, opts: SseOptio
       let lastSent = started;
       try {
         send(sseFrame({ retry: 2000 }));
+        // Subscribe BEFORE the first read: a change after this point yields a hint, a change before it is read below.
+        wake = await openWake(opts.bus, jobChannel(jobId));
+        if (cancelled) await wake.close();
+        opts.signal?.addEventListener("abort", () => wake?.poke(), { once: true });
         while (!cancelled && !opts.signal?.aborted) {
           await repos.reapJobs(); // a dead worker's job flips back to `queued` while we watch
           const job = await repos.getJob(jobId);
@@ -91,7 +104,7 @@ export function jobEventStream(repos: ScopedRepos, jobId: string, opts: SseOptio
             lastSent = opts.now();
           }
           if (!drained) continue;
-          await opts.sleep(opts.pollMs);
+          await wake.wait(opts.pollMs, opts.sleep, opts.safetyPollMs ?? SAFETY_POLL_MS);
         }
       } catch {
         try {
@@ -100,6 +113,7 @@ export function jobEventStream(repos: ScopedRepos, jobId: string, opts: SseOptio
           /* controller already closed */
         }
       } finally {
+        await wake?.close(); // release the subscription however the stream ended
         try {
           controller.close();
         } catch {
@@ -109,6 +123,7 @@ export function jobEventStream(repos: ScopedRepos, jobId: string, opts: SseOptio
     },
     cancel() {
       cancelled = true;
+      void wake?.close(); // ends a pending wait now instead of after the safety interval
     },
   });
 }

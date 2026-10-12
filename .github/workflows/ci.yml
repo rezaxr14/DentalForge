@@ -41,10 +41,22 @@ jobs:
       - run: pnpm lint
       # Full §5.2 cross-tenant + Better Auth suites need the schema.
       - run: pnpm exec drizzle-kit push
+      # The realtime bus suite (tests/m8-bus-redis.test.ts) needs a REAL Redis and its binary (it kills and restarts one).
+      # Like Postgres, a missing Redis FAILS the suite in CI instead of skipping it. It deliberately uses REDIS_TEST_URL,
+      # not REDIS_URL, so the app under test stays in polling mode for smoke and the other steps.
+      - name: Install and start Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          sudo service redis-server start || true
+          redis-cli ping
       - run: pnpm test
       - run: pnpm build
       # Degradation + worker pipeline against the PRODUCTION build and the CI Postgres.
       - run: pip install httpx
       - run: pnpm smoke
+      # The pipeline runs with the Redis wake-up bus ENABLED (and asserts wake-ups beat the 5 s safety poll).
       - run: pnpm e2e:worker
+        env:
+          E2E_REDIS_URL: redis://127.0.0.1:6379
 

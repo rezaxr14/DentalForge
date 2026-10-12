@@ -34,7 +34,10 @@ const ENV = {
   BETTER_AUTH_SECRET: "e2e-better-auth-secret-0123456789abcdefghij",
   INVITE_SIGNING_SECRET: "e2e-invite-secret-0123456789",
   WORKER_MODE: "live",
+  // Optional realtime bus (ADR-0015): with it the WHOLE pipeline below also runs on the bus-enabled code path.
+  ...(process.env.E2E_REDIS_URL ? { REDIS_URL: process.env.E2E_REDIS_URL } : {}),
 };
+const REDIS = Boolean(process.env.E2E_REDIS_URL);
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -124,6 +127,11 @@ async function main() {
   if (!up) throw new Error(`server did not start:\n${server.out}`);
   const health = await (await fetch(`${BASE}/api/health`)).json();
   check("server up with a real database", health.db === "up" && health.workerMode === "live", JSON.stringify(health));
+  check(
+    REDIS ? "health reports the Redis bus as up" : "health reports no Redis bus (polling mode)",
+    health.redis === (REDIS ? "up" : "absent"),
+    JSON.stringify(health),
+  );
 
   // ---- a real user + org through Better Auth ------------------------------
   const su = await api("/api/auth/sign-up/email", { method: "POST", body: { email: EMAIL, password: "e2e-password-123", name: "E2E User" } });
@@ -346,6 +354,58 @@ async function main() {
     );
   } finally {
     await ep.end();
+  }
+
+  // ---- realtime bus: wake-ups must beat the 5 s safety poll by a wide margin (only possible if the bus works) ----
+  if (!REDIS) {
+    console.log("  note realtime bus checks NOT run (set E2E_REDIS_URL to run them)");
+  } else {
+    const reg = await wpost("/register", { name: "e2e-rt", runtime: "local-gpu", capabilities: [{ job: "system.ping" }] });
+    const rtWorker = reg.json.workerId;
+    const claimBody = (waitMs) => ({ workerId: rtWorker, accepts: ["system.ping"], max: 1, waitMs });
+    const enqueue = async () => (await (await api("/api/jobs", { method: "POST", body: { type: "system.ping", payload: {} } })).json()).id;
+
+    // 1. an open SSE stream sees a claim almost immediately
+    const watched = await enqueue();
+    const res = await fetch(`${BASE}/api/jobs/${watched}/events`, { headers: { cookie, accept: "text/event-stream" }, signal: AbortSignal.timeout(20_000) });
+    const rd = res.body.getReader();
+    const dec = new TextDecoder();
+    let raw = "";
+    const readUntil = async (needle, ms) => {
+      const end = Date.now() + ms;
+      while (!raw.includes(needle) && Date.now() < end) {
+        const r = await Promise.race([rd.read(), sleep(Math.max(1, end - Date.now())).then(() => null)]);
+        if (r === null) break;
+        if (r.done) break;
+        raw += dec.decode(r.value);
+      }
+      return raw.includes(needle);
+    };
+    await readUntil('"status":"queued"', 5000);
+    await sleep(300); // let the stream settle into its wait
+    const tClaim = Date.now();
+    const claimed = await wpost("/jobs/claim", claimBody(0));
+    const sawClaim = await readUntil('"status":"claimed"', 4000);
+    const sseMs = Date.now() - tClaim;
+    check(
+      `an open SSE stream shows a claim in ${sseMs} ms (< 1500; without the bus it would wait up to the 5000 ms safety poll)`,
+      sawClaim && claimed.json.jobs.length === 1 && sseMs < 1500,
+      JSON.stringify({ sawClaim, sseMs, claimed: claimed.json }),
+    );
+    await rd.cancel().catch(() => {});
+
+    // 2. a parked worker long-poll is woken by a newly queued job
+    const parked = wpost("/jobs/claim", claimBody(15_000));
+    await sleep(400);
+    const tEnqueue = Date.now();
+    const queuedId = await enqueue();
+    const got = await Promise.race([parked, sleep(6000).then(() => null)]);
+    const pollMs = Date.now() - tEnqueue;
+    check(
+      `a parked worker long-poll returns the new job in ${pollMs} ms (< 1500)`,
+      got !== null && got.json.jobs.some((j) => j.id === queuedId) && pollMs < 1500,
+      JSON.stringify({ pollMs, got: got && got.json }),
+    );
   }
 }
 

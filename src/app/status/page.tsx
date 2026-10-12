@@ -6,6 +6,7 @@ import { isDegradedStore, selectOrgStore } from "@/shared/db";
 import { can } from "@/shared/domain/auth";
 import { getActor } from "@/shared/jobs/deps";
 import { getStorageAdapter } from "@/shared/jobs/deps";
+import { getBusState } from "@/shared/realtime";
 
 export const metadata: Metadata = { title: "Status — TraceForge" };
 export const dynamic = "force-dynamic";
@@ -53,6 +54,13 @@ export default async function StatusPage() {
   }
   const { env, caps, dbUp, actor, snap } = loaded;
   const dbLabel = !caps.db ? "not configured" : dbUp ? "connected" : "unreachable (in-memory fallback)";
+  const busState = caps.redis ? await getBusState() : "absent";
+  const realtimeLabel =
+    busState === "up"
+      ? "Redis wake-ups (DB stays the source of truth)"
+      : busState === "down"
+        ? "Redis unreachable — DB polling in effect"
+        : "DB polling (no Redis)";
   const canEnqueue = Boolean(actor && can(actor.role, "job.create")) && env.WORKER_MODE !== "off";
 
   return (
@@ -71,7 +79,7 @@ export default async function StatusPage() {
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ["Database", dbLabel],
-            ["Realtime", caps.redis ? "Redis configured" : "DB polling (no Redis)"],
+            ["Realtime", realtimeLabel],
             ["Object storage", getStorageAdapter().provider],
             ["Worker integration", env.WORKER_MODE],
           ].map(([k, v]) => (

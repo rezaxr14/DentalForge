@@ -15,6 +15,7 @@ import { can, type Role } from "@/shared/domain/auth";
 import { json, problem, readJson, validationProblem } from "./problem";
 import { toJobDto } from "./mappers";
 import { DEFAULT_SSE, jobEventsPage, jobEventStream, type SseOptions } from "./sse";
+import { jobChannel, queueChannel, safePublish, type EventBus } from "@/shared/realtime/bus";
 
 export interface Actor {
   userId: string;
@@ -27,6 +28,8 @@ export interface UserDeps {
   actor: Actor | null;
   workerMode: "off" | "mock" | "live";
   sse?: Partial<Omit<SseOptions, "afterSeq">>;
+  /** Optional wake-up bus (ADR-0015). Absent = database polling only. */
+  bus?: EventBus;
 }
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -60,6 +63,8 @@ export async function createJob(req: Request, deps: UserDeps): Promise<Response>
     idempotencyKey: key,
     createdBy: actor.userId,
   });
+  // A parked worker long-poll for this org can claim it right now instead of at its next poll.
+  await safePublish(deps.bus, queueChannel(actor.orgId));
   return json(toJobDto(job), 201, { location: `/api/jobs/${job.id}` });
 }
 
@@ -98,6 +103,7 @@ export async function cancelJob(_req: Request, deps: UserDeps, id: string): Prom
   if (!can(actor.role, "job.cancel")) return problem(403, "forbidden", "Your role cannot cancel jobs");
   if (!UUID.test(id)) return problem(404, "not_found", "Job not found");
   const job = await deps.store.scoped(actor.orgId).cancelJob(id);
+  if (job) await safePublish(deps.bus, jobChannel(id));
   return job ? json(toJobDto(job)) : problem(404, "not_found", "Job not found");
 }
 
@@ -115,7 +121,7 @@ export async function jobEvents(req: Request, deps: UserDeps, id: string): Promi
     return page ? json(page) : problem(404, "not_found", "Job not found");
   }
   if (!(await repos.getJob(id))) return problem(404, "not_found", "Job not found");
-  const stream = jobEventStream(repos, id, { ...DEFAULT_SSE, ...deps.sse, afterSeq: after, signal: req.signal });
+  const stream = jobEventStream(repos, id, { ...DEFAULT_SSE, bus: deps.bus, ...deps.sse, afterSeq: after, signal: req.signal });
   return new Response(stream, {
     headers: {
       "content-type": "text/event-stream; charset=utf-8",
