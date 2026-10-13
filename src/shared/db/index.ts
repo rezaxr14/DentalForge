@@ -108,7 +108,7 @@ export function selectOrgStore(probe?: StoreProbe): Promise<OrgStore> {
 
 /** True when the store is the in-memory fallback (the database is unreachable). */
 export function isDegradedStore(store: OrgStore): boolean {
-  return store instanceof MemoryStore;
+  return (store as { degraded?: unknown }).degraded === true;
 }
 
 /** Test hook: forget the cached selection (e.g. after closing the pool). */
