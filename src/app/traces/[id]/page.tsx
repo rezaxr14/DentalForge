@@ -71,7 +71,7 @@ function TraceBody({
 
       {/* Tool-image ladder status (plan §9.2): stored artifact → placeholder. */}
       <p
-        className="rounded border border-dashed border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-600"
+        className="rounded border border-dashed border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted px-3 py-2 text-xs text-zinc-600"
         data-capability-reason
       >
         Tool images: <ProvenanceBadge resolution={resolution} />{" "}
@@ -89,7 +89,7 @@ function TraceBody({
             const artifactId = (c as { artifact_id?: string }).artifact_id;
             const img = artifactId ? toolImages.get(artifactId) : undefined;
             return (
-              <div key={j} className="mt-2 rounded bg-zinc-50 p-2 font-mono text-xs">
+              <div key={j} className="mt-2 rounded bg-zinc-50 dark:bg-muted p-2 font-mono text-xs">
                 {c.tool_name}({JSON.stringify(c.tool_args)})
                 {c.true_bbox ? ` · perturb:${c.perturb_tier}` : ""}
                 {isImageOutputTool(c.tool_name) &&
@@ -108,7 +108,7 @@ function TraceBody({
                     </figure>
                   ) : (
                     <div
-                      className="mt-2 rounded border border-dashed border-zinc-300 bg-white p-2 font-sans text-[11px] text-zinc-500"
+                      className="mt-2 rounded border border-dashed border-zinc-300 dark:border-border bg-white dark:bg-card p-2 font-sans text-[11px] text-zinc-500"
                       data-tool-image="placeholder"
                     >
                       <p className="font-medium text-zinc-600">
@@ -124,7 +124,7 @@ function TraceBody({
             );
           })}
           {turn.parsed?.thought && (
-            <p className="mt-2 text-sm text-zinc-700">{turn.parsed.thought.slice(0, 600)}</p>
+            <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{turn.parsed.thought.slice(0, 600)}</p>
           )}
           {turn.parsed?.final_answer && (
             <ul className="mt-2 text-sm">

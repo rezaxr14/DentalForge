@@ -101,7 +101,7 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
             type="button"
             onClick={() => setFormat(f)}
             className={`rounded border px-3 py-1 font-mono ${
-              format === f ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 bg-white"
+              format === f ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 dark:border-border bg-white dark:bg-card"
             }`}
           >
             {f}
@@ -114,7 +114,7 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
             type="button"
             onClick={() => setSource(s)}
             className={`rounded border px-3 py-1 font-mono ${
-              source === s ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 bg-white"
+              source === s ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 dark:border-border bg-white dark:bg-card"
             }`}
           >
             {s === "mine" ? "my sets" : "GT fixtures"}
@@ -142,7 +142,7 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
         <>
           <div className="overflow-x-auto rounded border border-zinc-200">
             <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+              <thead className="bg-zinc-50 dark:bg-muted text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
                   <th className="px-3 py-2">Image</th>
                   <th className="px-3 py-2">Exportable boxes</th>
@@ -176,7 +176,7 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
           >
             Download {format === "yolo" ? "labelforge-yolo.zip" : "labelforge-coco.zip"}
           </button>
-          {msg && <p className="text-sm text-zinc-700">{msg}</p>}
+          {msg && <p className="text-sm text-zinc-700 dark:text-zinc-300">{msg}</p>}
         </>
       )}
     </div>

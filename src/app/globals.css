@@ -36,6 +36,16 @@
   --primary-foreground: #18181b;
   --ring: #52525b;
   --destructive: #f87171;
+
+  /*
+   * axe (e2e/a11y.spec.ts) found muted text unreadable on the near-black background:
+   * Tailwind's zinc-600 is 2.56:1 and zinc-500 is 4.10:1 there (WCAG AA needs 4.5:1).
+   * These two shades are only ever used as TEXT colours in this app (no bg/border/ring
+   * uses), so lift them centrally instead of adding `dark:` pairs to ~115 call sites.
+   * Explicit `dark:text-*` classes still win, so existing pairs are unchanged.
+   */
+  --color-zinc-500: var(--color-zinc-400);
+  --color-zinc-600: var(--color-zinc-400);
 }
 
 @theme inline {

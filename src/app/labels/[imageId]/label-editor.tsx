@@ -30,7 +30,7 @@ import {
 const PATHOLOGIES = ["Caries", "Deep Caries", "Periapical Lesion", "Impacted"] as const;
 
 const STATUS_TONE: Record<AnnotationStatus, string> = {
-  draft: "border-zinc-300 bg-zinc-50 text-zinc-700",
+  draft: "border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted text-zinc-700 dark:text-zinc-300",
   submitted: "border-sky-300 bg-sky-50 text-sky-800",
   approved: "border-emerald-300 bg-emerald-50 text-emerald-800",
   rejected: "border-red-300 bg-red-50 text-red-800",
@@ -369,7 +369,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             <span
               key={h}
               data-handle={h}
-              className={`absolute h-2.5 w-2.5 rounded-sm border border-zinc-900 bg-white ${
+              className={`absolute h-2.5 w-2.5 rounded-sm border border-zinc-900 bg-white dark:bg-card ${
                 h.includes("n") ? "-top-1.5" : "-bottom-1.5"
               } ${h.includes("w") ? "-left-1.5" : "-right-1.5"} cursor-pointer`}
             />
@@ -390,14 +390,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           <button
             type="button"
             onClick={() => setShowGt((v) => !v)}
-            className={`rounded border px-2 py-1 ${showGt ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-zinc-300 bg-white text-zinc-600"}`}
+            className={`rounded border px-2 py-1 ${showGt ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-600"}`}
           >
             GT overlay ({fixture.gt.length})
           </button>
           <button
             type="button"
             onClick={() => setShowPreds((v) => !v)}
-            className={`rounded border px-2 py-1 ${showPreds ? "border-sky-600 bg-sky-50 text-sky-800" : "border-zinc-300 bg-white text-zinc-600"}`}
+            className={`rounded border px-2 py-1 ${showPreds ? "border-sky-600 bg-sky-50 text-sky-800" : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-600"}`}
           >
             Pre-labels ({fixture.predictions?.length ?? 0})
           </button>
@@ -411,7 +411,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                   type="button"
                   disabled
                   title={r.reason}
-                  className="rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-700 opacity-40"
+                  className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 opacity-40"
                   data-suggest="unavailable"
                 >
                   Suggest boxes
@@ -450,7 +450,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                     onClick={importPrelabels}
                     disabled={!fixture.predictions?.length || status !== "draft"}
                     title={r.reason}
-                    className="rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-700 disabled:opacity-40"
+                    className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 disabled:opacity-40"
                     data-suggest="replay"
                   >
                     Suggest boxes (stored)
@@ -471,7 +471,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
               </span>
             )}
           </CapabilityGate>
-          <span className="ml-auto rounded border border-zinc-300 bg-zinc-50 px-2 py-1 text-zinc-600">
+          <span className="ml-auto rounded border border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted px-2 py-1 text-zinc-600">
             {annotations.length} boxes · drag to draw · ⌫ deletes · Esc deselects
           </span>
         </div>
@@ -493,7 +493,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
         {/* Image + overlay */}
         <div
-          className="relative select-none rounded border border-zinc-300 bg-zinc-950"
+          className="relative select-none rounded border border-zinc-300 dark:border-border bg-zinc-950"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -553,7 +553,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       className={`h-8 w-8 rounded border text-xs ${
                         selected.fdi_quadrant === q
                           ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-300 bg-white text-zinc-700"
+                          : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
                       {q}
@@ -572,7 +572,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       className={`h-8 w-8 rounded border text-xs ${
                         selected.fdi_position === p
                           ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-300 bg-white text-zinc-700"
+                          : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
                       {p}
@@ -591,7 +591,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       className={`rounded border px-2 py-1 text-xs ${
                         selected.pathology === p
                           ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-300 bg-white text-zinc-700"
+                          : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
                       {p}
@@ -633,7 +633,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
               type="button"
               onClick={() => persist()}
               disabled={status !== "draft"}
-              className="rounded border border-zinc-400 bg-white px-2 py-1 text-xs disabled:opacity-40"
+              className="rounded border border-zinc-400 dark:border-border bg-white dark:bg-card px-2 py-1 text-xs disabled:opacity-40"
             >
               Save draft
             </button>
@@ -649,7 +649,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           <label className="mt-3 block text-xs text-zinc-600">
             Demo role (no auth yet, ADR-0005 §4)
             <select
-              className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5"
+              className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5"
               value={role}
               onChange={(e) => {
                 const r = e.target.value as "user" | "reviewer" | "admin";
@@ -669,7 +669,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                 value={reviewReason}
                 onChange={(e) => setReviewReason(e.target.value)}
                 placeholder="Reason (optional)"
-                className="w-full rounded border border-zinc-300 px-2 py-1.5 text-xs"
+                className="w-full rounded border border-zinc-300 dark:border-border px-2 py-1.5 text-xs"
               />
               <div className="flex gap-1.5">
                 <button
@@ -693,7 +693,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
               </div>
             </div>
           )}
-          {msg && <p className="mt-2 text-xs text-zinc-700">{msg}</p>}
+          {msg && <p className="mt-2 text-xs text-zinc-700 dark:text-zinc-300">{msg}</p>}
         </section>
 
         {/* Agreement vs GT */}

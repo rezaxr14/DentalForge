@@ -6,7 +6,7 @@ import { resolveDataSource } from "@/shared/lib/resolve-source";
 function ProvenanceBadge({ provenance }: { provenance: string }) {
   const label = provenance === "postgres" ? "postgres" : "fixture replay";
   return (
-    <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-normal text-zinc-600">
+    <span className="ml-2 rounded bg-zinc-100 dark:bg-muted px-1.5 py-0.5 text-xs font-normal text-zinc-600">
       {label}
     </span>
   );
@@ -27,7 +27,7 @@ export async function EvalsTable() {
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.id} className="border-b hover:bg-zinc-50">
+          <tr key={r.id} className="border-b hover:bg-zinc-50 dark:hover:bg-accent">
             <td className="py-2 pr-4">
               <Link href={`/evals/${r.id}`} className="font-medium underline">
                 {r.model}
@@ -63,7 +63,7 @@ export default async function EvalsPage() {
           : "Means over full real JSONL files (verified in M0, see ADR-0001). Fixture holds one case per model for drill-down."}
       </p>
       {fallbackReason && (
-        <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+        <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 dark:bg-muted px-3 py-2 text-xs text-zinc-600">
           {fallbackReason}
         </p>
       )}
