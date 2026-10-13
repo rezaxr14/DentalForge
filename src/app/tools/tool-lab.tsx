@@ -321,7 +321,7 @@ export function ToolLab() {
             className={`rounded border px-3 py-1.5 font-mono text-xs transition-colors ${
               tool === t.id
                 ? "border-zinc-800 bg-zinc-800 text-white"
-                : "border-zinc-300 bg-white hover:bg-zinc-100"
+                : "border-zinc-300 dark:border-border bg-white dark:bg-card hover:bg-zinc-100 dark:hover:bg-accent"
             }`}
           >
             {t.label}
@@ -331,15 +331,15 @@ export function ToolLab() {
 
       <div className="mt-4 grid gap-6 lg:grid-cols-2">
         <section>
-          <h2 className="text-sm font-medium text-zinc-700">
+          <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Source{" "}
-            <span className="font-mono text-xs text-zinc-400">
+            <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
               {src ? `${src.w}×${src.h}` : "loading…"}
             </span>
           </h2>
           <canvas
             ref={srcCanvasRef}
-            className="mt-2 w-full cursor-crosshair touch-none rounded border border-zinc-300"
+            className="mt-2 w-full cursor-crosshair touch-none rounded border border-zinc-300 dark:border-border"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
@@ -358,7 +358,7 @@ export function ToolLab() {
                 <label className="block">
                   <span className="text-xs text-zinc-600">preset</span>
                   <select
-                    className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5 text-sm"
                     value={p.preset}
                     onChange={(e) => {
                       const preset = e.target.value;
@@ -382,7 +382,7 @@ export function ToolLab() {
                 <label className="block">
                   <span className="text-xs text-zinc-600">method</span>
                   <select
-                    className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5 text-sm"
                     value={p.method}
                     onChange={(e) => patch({ method: e.target.value as Params["method"] })}
                   >
@@ -412,7 +412,7 @@ export function ToolLab() {
               <label className="block">
                 <span className="text-xs text-zinc-600">quadrant (FDI)</span>
                 <select
-                  className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                  className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5 text-sm"
                   value={p.quadrant}
                   onChange={(e) => patch({ quadrant: Number(e.target.value) })}
                 >
@@ -426,7 +426,7 @@ export function ToolLab() {
               <label className="block">
                 <span className="text-xs text-zinc-600">position</span>
                 <select
-                  className="mt-1 w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                  className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5 text-sm"
                   value={p.position}
                   onChange={(e) => patch({ position: Number(e.target.value) })}
                 >
@@ -440,7 +440,7 @@ export function ToolLab() {
         </section>
 
         <section>
-          <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Result
             <ProvenanceBadge resolution={capability} />
             {busy && (
@@ -457,8 +457,8 @@ export function ToolLab() {
               feature="tool.execute"
               context={capCtx}
               fallback={(r) => (
-                <div className="mt-2 rounded border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
-                  <p className="font-medium text-zinc-800">
+                <div className="mt-2 rounded border border-dashed border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted p-4 text-sm text-zinc-600">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200">
                     locate_tooth is unavailable: it is the one registry tool with no in-browser port.
                   </p>
                   <p className="mt-2">{r.reason}</p>
@@ -484,7 +484,7 @@ export function ToolLab() {
               )}
             </CapabilityGate>
           ) : tool !== "fdi_label" ? (
-            <canvas ref={outCanvasRef} className="mt-2 w-full rounded border border-zinc-300 bg-zinc-950" />
+            <canvas ref={outCanvasRef} className="mt-2 w-full rounded border border-zinc-300 dark:border-border bg-zinc-950" />
           ) : null}
           <pre className="mt-3 max-h-72 overflow-auto rounded bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
             {JSON.stringify(info, null, 2)}

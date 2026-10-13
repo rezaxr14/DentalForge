@@ -57,7 +57,7 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
             type="button"
             onClick={() => switchRole(r)}
             className={`rounded border px-2 py-1 ${
-              role === r ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 bg-white"
+              role === r ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 dark:border-border bg-white dark:bg-card"
             }`}
           >
             {r}
@@ -73,12 +73,12 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
             setTick((t) => t + 1);
             setMsg("Local annotation state cleared.");
           }}
-          className="ml-auto rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-600"
+          className="ml-auto rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-600"
         >
           Reset local state
         </button>
       </div>
-      {msg && <p className="text-sm text-zinc-700">{msg}</p>}
+      {msg && <p className="text-sm text-zinc-700 dark:text-zinc-300">{msg}</p>}
 
       {refs.map((ref) => {
         const set = sets.find((s) => s.image_id === ref.id);
@@ -96,7 +96,7 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
                 {ref.gt.length} GT boxes · {ref.width}×{ref.height}
               </span>
               {set && (
-                <span className="ml-auto rounded border border-zinc-300 bg-zinc-50 px-2 py-0.5 text-xs">
+                <span className="ml-auto rounded border border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted px-2 py-0.5 text-xs">
                   {set.state} · v{set.version} · {set.annotations.length} boxes
                 </span>
               )}
@@ -139,7 +139,7 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="Reason (optional)"
-                  className="min-w-48 flex-1 rounded border border-zinc-300 px-2 py-1.5 text-xs"
+                  className="min-w-48 flex-1 rounded border border-zinc-300 dark:border-border px-2 py-1.5 text-xs"
                 />
                 <button
                   type="button"

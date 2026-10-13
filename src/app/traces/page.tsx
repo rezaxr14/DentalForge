@@ -4,7 +4,7 @@ import { resolveDataSource } from "@/shared/lib/resolve-source";
 function ProvenanceBadge({ provenance }: { provenance: string }) {
   const label = provenance === "postgres" ? "postgres" : "fixture replay";
   return (
-    <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">
+    <span className="ml-2 rounded bg-zinc-100 dark:bg-muted px-1.5 py-0.5 text-xs text-zinc-600">
       {label}
     </span>
   );
@@ -27,7 +27,7 @@ export default async function TracesPage() {
         {source.provenance === "postgres" ? "imported" : "fixture"} data.
       </p>
       {fallbackReason && (
-        <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+        <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 dark:bg-muted px-3 py-2 text-xs text-zinc-600">
           {fallbackReason}
         </p>
       )}
@@ -45,13 +45,13 @@ export default async function TracesPage() {
         </thead>
         <tbody>
           {traces.map((t) => (
-            <tr key={t.id} className="border-b hover:bg-zinc-50">
+            <tr key={t.id} className="border-b hover:bg-zinc-50 dark:hover:bg-accent">
               <td className="py-2 pr-4">
                 <Link href={`/traces/${t.id}`} className="font-medium underline">
                   {t.id.slice(0, 8)}
                 </Link>
                 {!t.verified && (
-                  <span className="ml-2 rounded bg-zinc-200 px-1 text-xs">unverified</span>
+                  <span className="ml-2 rounded bg-zinc-200 dark:bg-accent px-1 text-xs">unverified</span>
                 )}
               </td>
               <td className="py-2 pr-4">

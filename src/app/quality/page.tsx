@@ -32,7 +32,7 @@ function Bar({ value, max, label }: { value: number; max: number; label: string 
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className="w-44 truncate font-mono text-xs">{label}</span>
-      <div className="h-3 flex-1 rounded bg-zinc-100">
+      <div className="h-3 flex-1 rounded bg-zinc-100 dark:bg-muted">
         <div className="h-3 rounded bg-zinc-700" style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }} />
       </div>
       <span className="w-16 text-right tabular-nums">{value.toLocaleString()}</span>

@@ -27,7 +27,7 @@ export default function Home() {
           <Link
             key={m.href}
             href={m.href}
-            className="rounded-lg border p-4 transition-colors hover:border-zinc-400 hover:bg-zinc-50"
+            className="rounded-lg border p-4 transition-colors hover:border-zinc-400 hover:bg-zinc-50 dark:hover:bg-accent"
           >
             <div className="font-medium">{m.name}</div>
             <div className="mt-1 text-sm text-zinc-600">{m.desc}</div>

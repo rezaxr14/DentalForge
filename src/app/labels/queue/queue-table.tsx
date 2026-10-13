@@ -35,7 +35,7 @@ export function QueueTable({ images }: { images: QueueImage[] }) {
   return (
     <div className="mt-6 overflow-x-auto rounded border border-zinc-200">
       <table className="w-full text-left text-sm">
-        <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+        <thead className="bg-zinc-50 dark:bg-muted text-xs uppercase tracking-wide text-zinc-500">
           <tr>
             <th className="px-3 py-2">Priority</th>
             <th className="px-3 py-2">Image</th>
@@ -53,7 +53,7 @@ export function QueueTable({ images }: { images: QueueImage[] }) {
               <td className="px-3 py-2 font-mono">#{i + 1}</td>
               <td className="px-3 py-2">
                 <span className="font-mono">image {r.id}</span>{" "}
-                <span className="rounded border border-zinc-300 bg-zinc-50 px-1.5 py-0.5 text-xs">
+                <span className="rounded border border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted px-1.5 py-0.5 text-xs">
                   {r.state}
                 </span>
               </td>
