@@ -780,6 +780,12 @@ class ScopedMemory implements ScopedRepos {
 }
 
 export class MemoryStore implements OrgStore {
+  /**
+   * Brand read by `isDegradedStore`. A property, not `instanceof`: the store selector is shared on
+   * `globalThis` across route bundles, and each bundle may hold its own copy of this class, so
+   * `instanceof` is false for a store created by another bundle.
+   */
+  readonly degraded = true as const;
   readonly orgs = new Map<string, OrgRecord>();
   readonly bySlug = new Map<string, string>();
   readonly members = new Map<string, MembershipRecord>();

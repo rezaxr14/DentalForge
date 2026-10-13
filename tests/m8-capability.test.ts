@@ -2,7 +2,7 @@
  * Capability ladder (plan §9.2/9.3), heartbeat-derived worker status, and the
  * hardened store selector (§9.4).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveStrategy } from "@/features/capability/ladder";
 import { FEATURES, FEATURE_KEYS } from "@/features/capability/features";
 import { contextFor, emptySnapshot, loadWorkerSnapshot, resolveFeature } from "@/features/capability/service";
@@ -198,5 +198,24 @@ describe("createStoreSelector — a failed probe must not pin the process foreve
     sel.reset();
     await sel.get();
     expect(probes).toBe(2);
+  });
+});
+
+describe("isDegradedStore — must not depend on class identity", () => {
+  it("recognises an in-memory store built by ANOTHER copy of the MemoryStore module", async () => {
+    // The selector is shared on globalThis across Next route bundles, and each bundle can carry its
+    // own copy of MemoryStore. An `instanceof` check then says "durable" for a store that is not
+    // (found by the browser run: /status claimed "connected" while /api/health said "down").
+    vi.resetModules();
+    const other = await import("@/shared/db/memory");
+    expect(other.MemoryStore).not.toBe(MemoryStore); // really a different class
+    const foreign = new other.MemoryStore();
+    expect(foreign instanceof MemoryStore).toBe(false);
+    expect(isDegradedStore(foreign)).toBe(true);
+    expect(isDegradedStore(new MemoryStore())).toBe(true);
+  });
+
+  it("does not flag a durable store", () => {
+    expect(isDegradedStore({ tag: "durable" } as unknown as OrgStore)).toBe(false);
   });
 });
