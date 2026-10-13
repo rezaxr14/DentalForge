@@ -1,13 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useSyncExternalStore } from "react";
-
-/** Hydration-safe mount check (server snapshot: false, client: true). */
-const emptySubscribe = () => () => {};
-function useMounted(): boolean {
-  return useSyncExternalStore(emptySubscribe, () => true, () => false);
-}
+import { useMounted } from "./use-mounted";
 
 /**
  * Light/dark toggle (plan D9: clean light Vercel/Linear style with a
