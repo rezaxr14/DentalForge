@@ -16,7 +16,8 @@
     "worker:token": "tsx scripts/create-worker-token.ts",
     "mock-worker": "tsx examples/mock-worker/index.ts",
     "smoke": "node scripts/smoke-degradation.mjs",
-    "e2e:worker": "node scripts/e2e-worker.mjs"
+    "e2e:worker": "node scripts/e2e-worker.mjs",
+    "e2e:browser": "playwright test"
   },
   "dependencies": {
     "@redis/client": "6.2.1",
@@ -31,6 +32,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
