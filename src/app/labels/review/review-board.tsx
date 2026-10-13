@@ -7,6 +7,7 @@ import { agreementStats } from "@/shared/domain/annotation";
 import {
   applyDecision, getDecisions, getRole, listSets, resetAll, setRole,
 } from "@/shared/lib/annotationStore";
+import { useMounted } from "@/shared/ui/use-mounted";
 
 export interface GtRef {
   id: string;
@@ -21,15 +22,18 @@ function kappa(v: number | null): string {
 
 export function ReviewBoard({ refs }: { refs: GtRef[] }) {
   const [tick, setTick] = useState(0);
-  // Lazy hydration from localStorage keeps SSR output identical (default "user").
-  const [role, setRoleState] = useState<"user" | "reviewer" | "admin">(() => getRole());
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  const sets = listSets();
+  // Role, sets and decisions live in localStorage. Until mounted the board renders what the
+  // server rendered (default role, no sets); reading the store during the hydrating render
+  // would differ from the server HTML for any returning user (React #418).
+  const mounted = useMounted();
+  const role = mounted ? getRole() : "user";
+  const sets = mounted ? listSets() : [];
   const switchRole = (r: "user" | "reviewer" | "admin"): void => {
-    setRoleState(r);
     setRole(r);
+    setTick((t) => t + 1);
   };
 
   const decide = (imageId: string, decision: "approved" | "rejected"): void => {
@@ -81,7 +85,7 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
         const stats = set
           ? agreementStats(ref.id, set.assignee_id, "gt_import", set.annotations, ref.gt)
           : null;
-        const decisions = getDecisions(ref.id);
+        const decisions = mounted ? getDecisions(ref.id) : [];
         return (
           <section key={ref.id} className="rounded border border-zinc-200 p-4">
             <div className="flex flex-wrap items-baseline gap-2">

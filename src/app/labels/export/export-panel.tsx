@@ -8,6 +8,7 @@ import {
 } from "@/shared/domain/annotation";
 import { buildZip, listZipEntries, zipTextEntries } from "@/shared/domain/zip";
 import { getSet } from "@/shared/lib/annotationStore";
+import { useMounted } from "@/shared/ui/use-mounted";
 
 type Format = "yolo" | "coco";
 type Source = "mine" | "gt";
@@ -24,10 +25,10 @@ function download(bytes: Uint8Array, filename: string, mime: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-function boxRows(images: ExportImage[], onlyApproved: boolean) {
+function boxRows(images: ExportImage[], onlyApproved: boolean, mounted = true) {
   const byImage: Record<string, Annotation[]> = {};
   for (const img of images) {
-    const set = getSet(img.id);
+    const set = mounted ? getSet(img.id) : null;
     const anns = (set?.annotations ?? []) as Annotation[];
     byImage[img.id] = onlyApproved
       ? anns.filter((a) => a.status === "approved")
@@ -42,15 +43,17 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
   const [onlyApproved, setOnlyApproved] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Browser-only store: render the server's (empty) preview until mounted (hydration-safe).
+  const mounted = useMounted();
   const preview = useMemo(() => {
     if (source !== "mine") return null;
-    const byImage = boxRows(images, onlyApproved);
+    const byImage = boxRows(images, onlyApproved, mounted);
     return images.map((img) => ({
       id: img.id,
       lines: yoloLines(byImage[img.id] ?? [], img.width, img.height, false),
       n: (byImage[img.id] ?? []).length,
     }));
-  }, [images, source, onlyApproved]);
+  }, [images, source, onlyApproved, mounted]);
 
   const totalBoxes = preview?.reduce((n, r) => n + r.n, 0) ?? 0;
 
