@@ -24,6 +24,19 @@ pnpm ci          # all three
 pnpm build       # production build (self-hosted Geist, no Google Fonts fetch)
 ```
 
+Browser tests (Playwright + axe, against the production build; each spec boots its own `next start`):
+
+```bash
+pnpm exec playwright install chromium   # once
+pnpm build
+pnpm e2e:browser                        # Postgres on localhost:5433 (or E2E_DATABASE_URL)
+```
+
+They cover: every page under five degraded shapes (DB down, worker off, Redis unreachable, failing storage), the
+worker-token UI (create → shown once → copy → revoke), hydration with existing local state, and an axe WCAG A/AA
+pass in light and dark. Where Playwright's browser download is blocked, set `PW_CHROMIUM_PATH` to any Chromium
+binary (and `PW_CHROMIUM_ARGS`, e.g. `--no-sandbox`, inside a container).
+
 ## Learn More (TraceForge docs)
 
 To learn more about TraceForge, start with the plan and ADRs:
