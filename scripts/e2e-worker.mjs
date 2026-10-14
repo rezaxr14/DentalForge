@@ -10,8 +10,8 @@
  *   Python reference worker (a second language) handles a job on the same wire.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import pg from "pg";
 
 const root = process.cwd();
@@ -243,6 +243,52 @@ async function main() {
   const sp = await (await api("/status")).text();
   check("/status page renders live workers and the resolved ladder", /py-e2e/.test(sp) && /Capability ladder/.test(sp) && /mock-worker/.test(sp));
   await stop(py2);
+
+  // ---- real handlers: tool.execute through VLM-DENTAL's actual tools, validated by the real server ----
+  // Opt-in (CI has no research package): E2E_DENTAL_AGENT_PATH=/path/to/VLM-DENTAL (needs Pillow, numpy, scipy,
+  // scikit-image, huggingface_hub in the Python environment). The server validates every result against the
+  // contract schema on /complete, so a green run here means the wire format is right, not just the unit shapes.
+  if (process.env.E2E_DENTAL_AGENT_PATH) {
+    const dp = new pg.Pool({ connectionString: DB_URL });
+    try {
+      const keyRel = `${orgId}/images/e2e-pano.png`;
+      const pngPath = join(root, "public", "demo-assets", keyRel);
+      mkdirSync(dirname(pngPath), { recursive: true });
+      const gen = spawnSync(PY, ["-c", "import sys\nfrom PIL import Image\nimg = Image.new('RGB', (800, 400), (40, 40, 40))\nfor x in range(0, 800, 25):\n    for y in range(100, 300):\n        v = 40 + (x * 7 + y) % 200\n        img.putpixel((x, y), (v, v, v))\nimg.save(sys.argv[1])", pngPath], { encoding: "utf8" });
+      check("seeded a real 800x400 PNG for the real-tool run", gen.status === 0 && existsSync(pngPath), gen.stderr);
+      const dset = await dp.query("INSERT INTO datasets (id, org_id, name, source) VALUES (gen_random_uuid(), $1, 'E2E-DENTAL', 'dentex') RETURNING id", [orgId]);
+      const img = await dp.query(
+        "INSERT INTO images (id, org_id, dataset_id, source_image_id, content_hash, width, height, storage_key) VALUES (gen_random_uuid(), $1, $2, 77, 'e2e-pano', 800, 400, $3) RETURNING id",
+        [orgId, dset.rows[0].id, keyRel],
+      );
+      const imageId = img.rows[0].id;
+      const dental = run(PY, ["examples/python-worker/worker.py"], {
+        TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-dental", PYTHONPATH: process.env.E2E_DENTAL_AGENT_PATH,
+      }, "python-dental-worker");
+      await waitFor(async () => /registered as/.test(dental.out), { timeoutMs: 30_000 });
+      const adv = /advertising \[([^\]]*)\]/.exec(dental.out)?.[1] ?? "";
+      check("the dental worker advertises tool.execute (and only what it can run)", adv.includes("tool.execute") && !adv.includes("agent.run") && !adv.includes("eval.run"), dental.out.slice(-400));
+
+      const zoom = await finish(await enqueue("tool.execute", { imageId, tool: "zoom_crop", args: { bbox: [100, 120, 80, 100] } }), 40_000);
+      const artifactOnDisk = (id) => existsSync(join(root, "public", "demo-assets", orgId, "artifacts")) && readdirSync(join(root, "public", "demo-assets", orgId, "artifacts"), { recursive: true }).some((f) => String(f).includes("zoom_crop_") || String(f).includes("window_level_"));
+      check("real zoom_crop: succeeded, image result with a stored PNG artifact", zoom?.status === "succeeded" && zoom.result.kind === "image" && zoom.result.width > 0 && zoom.result.artifactId && artifactOnDisk(zoom.result.artifactId), JSON.stringify(zoom));
+      const win = await finish(await enqueue("tool.execute", { imageId, tool: "window_level", args: { preset: "bone" }, view: "canonical" }), 40_000);
+      check("real window_level, canonical view: the 1536x768 FULL canvas", win?.status === "succeeded" && win.result.width === 1536 && win.result.height === 768, JSON.stringify(win));
+      const fdi36 = await finish(await enqueue("tool.execute", { imageId, tool: "fdi_label", args: { quadrant: 3, tooth_position: 6 } }), 40_000);
+      check("real fdi_label: data result \"36\"", fdi36?.status === "succeeded" && fdi36.result.kind === "data" && fdi36.result.data === "36", JSON.stringify(fdi36));
+      const noGround = await finish(await enqueue("tool.execute", { imageId, tool: "locate_tooth", args: { tooth: 38 } }), 40_000);
+      check("locate_tooth without grounding weights fails the job instead of inventing a box", noGround?.status === "failed" && /grounding weights/.test(JSON.stringify(noGround)), JSON.stringify(noGround));
+      check("  …and it is not retried: one attempt, although more were allowed", noGround?.attempts === 1 && noGround.maxAttempts > 1, JSON.stringify(noGround));
+      await stop(dental);
+      // The later ingest checks look up "the" image of this org; leave no trace of this section.
+      await dp.query("DELETE FROM images WHERE id = $1", [imageId]);
+      await dp.query("DELETE FROM datasets WHERE id = $1", [dset.rows[0].id]);
+    } finally {
+      await dp.end();
+    }
+  } else {
+    console.log("  note real-handler checks NOT run (set E2E_DENTAL_AGENT_PATH to the VLM-DENTAL checkout to run them)");
+  }
 
   // ---- models/register + ingest/metrics over real HTTP, then the rows in real Postgres ----
   const wpost = async (path, body, tok = token) => {

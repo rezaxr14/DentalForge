@@ -33,21 +33,9 @@ from typing import Any, Callable
 
 import httpx
 
+from worker_errors import ContractError, NonRetryable
+
 CONTRACT_VERSION = "1"
-
-
-class ContractError(Exception):
-    def __init__(self, status: int, code: str, message: str, retry_after: float | None = None):
-        super().__init__(message)
-        self.status, self.code, self.retry_after = status, code, retry_after
-
-    @property
-    def lost_job(self) -> bool:
-        return self.status == 409
-
-
-class NonRetryable(Exception):
-    """Bad input: failing again will not help (reported as retryable=false)."""
 
 
 @dataclass
@@ -97,6 +85,20 @@ class Client:
         raise ContractError(r.status_code, code, f"POST {path} -> {r.status_code} {code}: {detail}",
                             float(ra) if ra and ra.replace(".", "", 1).isdigit() else None)
 
+    def get(self, path: str) -> dict[str, Any]:
+        r = self.http.get(self.base + path, headers=self._headers())
+        if r.is_success:
+            return r.json()
+        code, detail = "unknown", r.reason_phrase
+        try:
+            p = r.json()
+            code, detail = p.get("code", code), p.get("detail") or p.get("title") or detail
+        except ValueError:
+            pass
+        ra = r.headers.get("retry-after")
+        raise ContractError(r.status_code, code, f"GET {path} -> {r.status_code} {code}: {detail}",
+                            float(ra) if ra and ra.replace(".", "", 1).isdigit() else None)
+
     def register(self, name: str, runtime: str, jobs: list[str]) -> dict[str, Any]:
         r = self.post("/register", {
             "name": name, "runtime": runtime,
@@ -126,27 +128,6 @@ def system_ping(ctx: JobContext) -> dict[str, Any]:
     return {"echo": p.get("message", "ping"), "workerName": WORKER_NAME, "steps": steps}
 
 
-def yolo_prelabel(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Load the YOLO checkpoint and return boxes in native pixels.
-
-    VLM-DENTAL: `dental_agent/tools/grounding.py` (the YOLOv8m grounding tool;
-    best weights under data/models/dentex_grounding_tool_cv_best/). Result shape:
-    {modelId, inferenceMs, boxes:[{bbox:[x,y,w,h], conf, classIdx, fdiQuadrant, fdiPosition}]}
-    with classIdx = (quadrant-1)*8 + (position-1). Fetch pixels via GET /images/{imageId}.
-    """
-    raise NotImplementedError("wire dental_agent.tools.grounding here")
-
-
-def tool_execute(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Run one of the 8 agent tools on the NATIVE image.
-
-    VLM-DENTAL: `dental_agent/tools/registry.py::ToolRegistry.create_default()`.
-    Image tools -> upload the PNG with ctx.upload() and return {kind:"image", artifactId,
-    width, height, durationMs}; data tools -> {kind:"data", data:{...}, durationMs}.
-    """
-    raise NotImplementedError("wire ToolRegistry here")
-
-
 def agent_run(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
     """STUB. Run the agent loop, streaming one `turn` event per turn.
 
@@ -174,6 +155,16 @@ def al_score(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
 HANDLERS: dict[str, Callable[[JobContext], dict[str, Any]]] = {
     "system.ping": system_ping,
 }
+
+
+def _enable_dental_handlers() -> None:
+    """tool.execute / yolo.prelabel from VLM-DENTAL's `dental_agent`, each only if its prerequisites hold."""
+    try:
+        import dental_handlers
+    except ImportError as e:  # pragma: no cover - dental_handlers itself has no hard deps
+        print(f"[worker] dental handlers unavailable: {e}", flush=True)
+        return
+    HANDLERS.update(dental_handlers.discover())
 
 WORKER_NAME = os.environ.get("WORKER_NAME", f"py-{socket.gethostname()}"[:60])
 RUNTIME = os.environ.get("WORKER_RUNTIME", "local-gpu")  # local-gpu | colab | kaggle | cloud
@@ -218,6 +209,7 @@ def main() -> int:
         print("TRACEFORGE_TOKEN is required (pnpm worker:token --org <slug>)", file=sys.stderr)
         return 2
     max_jobs = int(os.environ["MAX_JOBS"]) if os.environ.get("MAX_JOBS") else None
+    _enable_dental_handlers()
 
     client = Client(base, token)
     stop = threading.Event()
