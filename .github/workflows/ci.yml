@@ -3,9 +3,17 @@ on:
   push:
     branches: [main]
   pull_request:
+# The workflow only reads the repository.
+permissions:
+  contents: read
+# A new push to a PR supersedes its running checks; runs on main always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17-alpine
@@ -53,10 +61,67 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       # Degradation + worker pipeline against the PRODUCTION build and the CI Postgres.
-      - run: pip install httpx
+      - run: pip install -r examples/python-worker/requirements.txt
       - run: pnpm smoke
-      # The pipeline runs with the Redis wake-up bus ENABLED (and asserts wake-ups beat the 5 s safety poll).
-      - run: pnpm e2e:worker
+      # The worker pipeline runs twice: default DB-polling mode (no Redis in the app's config) ...
+      - name: e2e:worker (polling mode)
+        run: pnpm e2e:worker
+      # ... and with the Redis wake-up bus ENABLED (asserts wake-ups beat the 5 s safety poll).
+      - name: e2e:worker (Redis bus)
+        run: pnpm e2e:worker
         env:
           E2E_REDIS_URL: redis://127.0.0.1:6379
 
+  # Real-browser tests (Playwright + axe) against the PRODUCTION build: the degradation matrix,
+  # worker-token UI, hydration with existing local state, and WCAG A/AA in light and dark.
+  # A separate job so it runs in parallel with `build`; it needs only Postgres (the specs boot their
+  # own `next start` with an explicit environment per variant; "Redis unreachable" is simulated).
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: traceforge
+          POSTGRES_PASSWORD: traceforge
+          POSTGRES_DB: traceforge
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U traceforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://traceforge:traceforge@localhost:5433/traceforge
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-better-auth-secret-0123456789abcdef0123456789ab
+      INVITE_SIGNING_SECRET: ci-invite-secret-0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.9.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec drizzle-kit push
+      - run: pnpm build
+      # Browser download cache, keyed by the lockfile (which pins the Playwright version).
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      # Always run: downloads Chromium unless cached and installs the OS libraries it needs.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e:browser
+      # Traces and screenshots of failed tests (playwright.config.ts: retain-on-failure).
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
