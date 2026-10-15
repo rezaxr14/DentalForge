@@ -11,14 +11,24 @@
  * handles), delete (key or button), FDI quadrant/position + pathology pickers,
  * GT overlay, pre-label import (replay tier), draft→submit workflow with
  * optimistic versioning via annotationStore.
+ *
+ * M9 (ADR-0018): every change goes through an event-sourced history (undo/redo,
+ * one step per drag), FDI quick entry (digits), Alt+1..4 pathology, mirror,
+ * Tab cycles boxes, odontogram and an accessible table view.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BoxTable } from "./box-table";
+import { Odontogram } from "./odontogram";
 import type { Annotation, AnnotationStatus, LabelFixture } from "@/shared/contracts/labels";
 import { YoloPrelabelResult } from "@/shared/contracts/worker";
 import {
   clampBox, agreementStats, predictionsToAnnotations, prelabelResultToAnnotations, type Bbox,
 } from "@/shared/domain/annotation";
-import { anatomicalName, fdiLabel } from "@/shared/domain/fdi";
+import { anatomicalName, fdiLabel, flipQuadrant } from "@/shared/domain/fdi";
+import {
+  feedDigit, history as H, initialEntry, mirrorAnnotation, nextIndex, pathologyForCode,
+  type AnnotationPatch, type EntryState,
+} from "@/shared/domain/editing";
 import {
   CapabilityGate, ProvenanceBadge, contextFor, resolveStrategy, useWorkerSnapshot,
 } from "@/features/capability";
@@ -49,7 +59,13 @@ type Drag =
 
 export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [hist, setHist] = useState<H.History>(() => H.createHistory([]));
+  const annotations = hist.present;
+  // One id per pointer gesture: all moves of one drag coalesce into a single undo step.
+  const gestureRef = useRef<string | null>(null);
+  const gestureSeq = useRef(0);
+  const entryRef = useRef<EntryState>(initialEntry);
+  const [live, setLive] = useState("");
   const [version, setVersion] = useState(1);
   const [status, setStatus] = useState<AnnotationStatus>("draft");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -90,7 +106,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     const set = ensureSet(fixture.id, fixture.gt.length);
-    setAnnotations(set.annotations);
+    setHist((h) => H.reset(h, set.annotations));
     setVersion(set.version);
     setStatus(set.state);
   }, [fixture.id, fixture.gt.length]);
@@ -122,6 +138,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
     if (handle && selectedId && selected) {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      gestureRef.current = `g${++gestureSeq.current}`;
       setDrag({ kind: "resize", id: selectedId, handle: handle as "nw" | "ne" | "sw" | "se", box: [...selected.bbox] as Bbox });
       return;
     }
@@ -130,6 +147,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       if (box) {
         setSelectedId(boxId);
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        gestureRef.current = `g${++gestureSeq.current}`;
         setDrag({ kind: "move", id: boxId, offX: x - box.bbox[0], offY: y - box.bbox[1] });
         return;
       }
@@ -155,17 +173,17 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       return;
     }
     if (drag.kind === "move") {
-      setAnnotations((prev) =>
-        prev.map((a) => {
-          if (a.id !== drag.id) return a;
-          const clamped = clampBox(
-            [x - drag.offX, y - drag.offY, a.bbox[2], a.bbox[3]],
-            fixture.width,
-            fixture.height,
-          );
-          return clamped ? { ...a, bbox: clamped } : a;
-        }),
+      const current = annotations.find((a) => a.id === drag.id);
+      if (!current) return;
+      const clamped = clampBox(
+        [x - drag.offX, y - drag.offY, current.bbox[2], current.bbox[3]],
+        fixture.width,
+        fixture.height,
       );
+      if (clamped) {
+        const key = gestureRef.current ?? undefined;
+        setHist((h) => H.update(h, drag.id, { bbox: clamped }, { coalesceKey: key }));
+      }
       return;
     }
     // resize
@@ -181,7 +199,8 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       fixture.height,
     );
     if (next) {
-      setAnnotations((prev) => prev.map((a) => (a.id === drag.id ? { ...a, bbox: next } : a)));
+      const key = gestureRef.current ?? undefined;
+      setHist((h) => H.update(h, drag.id, { bbox: next }, { coalesceKey: key }));
     }
   };
 
@@ -189,7 +208,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     if (drag?.kind === "draw" && preview) {
       const box = clampBox(preview, fixture.width, fixture.height);
       if (box) {
-        const id = `ann_${Date.now().toString(36)}_${annotations.length}`;
+        const id = `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`;
         const next: Annotation = {
           id,
           bbox: box,
@@ -202,12 +221,13 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           version: 1,
           author_id: demoAuthorId,
         };
-        setAnnotations((prev) => [...prev, next]);
+        setHist((h) => H.create(h, next));
         setSelectedId(id);
         setMsg(null);
       }
       setPreview(null);
     }
+    gestureRef.current = null;
     setDrag(null);
   };
 
@@ -229,34 +249,133 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     [annotations, fixture.id, version],
   );
 
+  const announce = useCallback((m: string) => setLive(m), []);
+
+  const deleteById = useCallback(
+    (id: string) => {
+      setHist((h) => H.remove(h, id));
+      setSelectedId((cur) => (cur === id ? null : cur));
+      announce("Box deleted.");
+    },
+    [announce],
+  );
   const deleteSelected = useCallback(() => {
-    if (!selectedId) return;
-    setAnnotations((prev) => prev.filter((a) => a.id !== selectedId));
-    setSelectedId(null);
-  }, [selectedId]);
+    if (selectedId) deleteById(selectedId);
+  }, [selectedId, deleteById]);
+
+  const patchBox = useCallback((id: string, patch: AnnotationPatch): void => {
+    setHist((h) => H.update(h, id, { ...patch, status: "draft" }));
+    setMsg(null);
+  }, []);
+  const patchSelected = (patch: AnnotationPatch): void => {
+    if (selectedId) patchBox(selectedId, patch);
+  };
+
+  const undo = useCallback((): void => {
+    const step = hist.past[hist.past.length - 1];
+    if (!step) return;
+    const next = H.undo(hist);
+    setHist(next);
+    setSelectedId((cur) => (cur && next.present.some((a) => a.id === cur) ? cur : null));
+    announce(`Undid ${H.describe(step.command)}.`);
+  }, [hist, announce]);
+  const redo = useCallback((): void => {
+    const step = hist.future[0];
+    if (!step) return;
+    const next = H.redo(hist);
+    setHist(next);
+    setSelectedId((cur) => (cur && next.present.some((a) => a.id === cur) ? cur : null));
+    announce(`Redid ${H.describe(step.command)}.`);
+  }, [hist, announce]);
+
+  const mirrorSelected = useCallback((): void => {
+    const src = annotations.find((a) => a.id === selectedId);
+    if (!src) return;
+    const m = mirrorAnnotation(
+      src,
+      { width: fixture.width, height: fixture.height },
+      { id: `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`, authorId: demoAuthorId },
+    );
+    if (!m) {
+      setMsg("Cannot mirror this box: nothing usable is left inside the image.");
+      return;
+    }
+    const taken = annotations.some((a) => a.fdi_quadrant === m.fdi_quadrant && a.fdi_position === m.fdi_position);
+    setHist((h) => H.create(h, m));
+    setSelectedId(m.id);
+    const tooth = fdiLabel(m.fdi_quadrant, m.fdi_position);
+    setMsg(taken ? `Mirrored to ${tooth}, which already has a box (see the odontogram).` : `Mirrored to ${tooth}. Adjust the box to the tooth.`);
+    announce(`Mirrored to ${tooth}.`);
+  }, [annotations, selectedId, fixture.width, fixture.height, announce]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.altKey && e.code === "KeyZ") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && !e.altKey && !e.shiftKey && e.code === "KeyY") {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedId) {
           e.preventDefault();
           deleteSelected();
         }
       }
-      if (e.key === "Escape") setSelectedId(null);
+      if (e.key === "Escape") {
+        entryRef.current = initialEntry;
+        setSelectedId(null);
+      }
+      if (mod || !selectedId) return;
+      if (e.altKey) {
+        const path = pathologyForCode(e.code);
+        if (path) {
+          e.preventDefault();
+          patchBox(selectedId, { pathology: path });
+          announce(`Pathology ${path}.`);
+        }
+        return;
+      }
+      if (/^[0-9]$/.test(e.key)) {
+        const r = feedDigit(entryRef.current, e.key, Date.now());
+        entryRef.current = r.state;
+        if (!r.consumed) return;
+        e.preventDefault();
+        if (r.commit) {
+          patchBox(selectedId, { fdi_quadrant: r.commit.quadrant, fdi_position: r.commit.position });
+          announce(`Tooth ${fdiLabel(r.commit.quadrant, r.commit.position)}.`);
+        } else {
+          announce(r.state.quadrant ? `Quadrant ${r.state.quadrant}, now the position 1 to 8.` : "");
+        }
+        return;
+      }
+      if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        mirrorSelected();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelected, selectedId]);
+  }, [deleteSelected, selectedId, undo, redo, patchBox, mirrorSelected, announce]);
 
-  const patchSelected = (patch: Partial<Annotation>): void => {
-    if (!selectedId) return;
-    setAnnotations((prev) =>
-      prev.map((a) => (a.id === selectedId ? { ...a, ...patch, status: "draft" } : a)),
-    );
-    setMsg(null);
+  /** Tab / Shift+Tab inside the image area walks the boxes; at either end focus leaves normally (no keyboard trap). */
+  const onRegionKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key !== "Tab" || e.target !== e.currentTarget) return;
+    const at = annotations.findIndex((a) => a.id === selectedId);
+    const next = e.shiftKey ? (at < 0 ? -1 : at - 1) : at + 1;
+    const box = annotations[next];
+    if (!box) return;
+    e.preventDefault();
+    setSelectedId(box.id);
+    announce(`Box ${next + 1} of ${annotations.length}: ${fdiLabel(box.fdi_quadrant, box.fdi_position)}, ${box.pathology}.`);
   };
 
   const importPrelabels = (): void => {
@@ -266,10 +385,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       width: fixture.width,
       height: fixture.height,
       modelId: fixture.prediction_model ?? "unknown",
-      startIdx: annotations.length,
+      startIdx: nextIndex(annotations),
     });
     if (added.length === 0) return;
-    setAnnotations((prev) => [...prev, ...added]);
+    setHist((h) => H.createMany(h, added, "Import pre-labels"));
     setMsg(`Imported pre-labels (provenance: import_replay); review them before submitting.`);
   };
 
@@ -318,9 +437,9 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         width: fixture.width,
         height: fixture.height,
         modelId: parsed.data.modelId,
-        startIdx: annotations.length,
+        startIdx: nextIndex(annotations),
       });
-      setAnnotations((prev) => [...prev, ...added]);
+      setHist((h) => H.createMany(h, added, "Apply worker suggestions"));
       setMsg(`Worker suggested ${added.length} boxes (provenance: worker_exact); review them before submitting.`);
     }
   }
@@ -333,7 +452,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     }
     setVersion(res.value.version);
     setStatus(res.value.state);
-    setAnnotations(res.value.annotations);
+    setHist((h) => H.reset(h, res.value.annotations));
     setReviewReason("");
     setMsg(`Set ${decision}.`);
   };
@@ -387,6 +506,24 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           <span className={`rounded border px-2 py-1 font-medium ${STATUS_TONE[status]}`}>
             {status} · v{version}
           </span>
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!H.canUndo(hist)}
+            title="Undo (Ctrl/Cmd+Z)"
+            className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 disabled:opacity-40"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!H.canRedo(hist)}
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+            className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 disabled:opacity-40"
+          >
+            Redo
+          </button>
           <button
             type="button"
             onClick={() => setShowGt((v) => !v)}
@@ -472,7 +609,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             )}
           </CapabilityGate>
           <span className="ml-auto rounded border border-zinc-300 dark:border-border bg-zinc-50 dark:bg-muted px-2 py-1 text-zinc-600">
-            {annotations.length} boxes · drag to draw · ⌫ deletes · Esc deselects
+            {annotations.length} boxes · drag to draw · ⌫ deletes · Esc deselects · digits set the tooth (4 6 = 46)
           </span>
         </div>
         <p className="mb-2 text-xs text-zinc-500" data-capability-reason>
@@ -492,8 +629,19 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         )}
 
         {/* Image + overlay */}
+        <p id="editor-keys" className="sr-only">
+          Tab and Shift+Tab move between boxes. With a box selected: two digits set the tooth, so 4 then 6 is tooth 46;
+          Alt+1 to Alt+4 set the pathology; M mirrors the box to the opposite tooth; Delete removes it;
+          Ctrl or Cmd+Z undoes. The same boxes are editable in the table below.
+        </p>
+        <p className="sr-only" role="status" aria-live="polite">{live}</p>
         <div
-          className="relative select-none rounded border border-zinc-300 dark:border-border bg-zinc-950"
+          role="group"
+          aria-label="Radiograph annotation area"
+          aria-describedby="editor-keys"
+          tabIndex={0}
+          onKeyDown={onRegionKeyDown}
+          className="relative select-none rounded border border-zinc-300 dark:border-border bg-zinc-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -531,6 +679,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           {preview &&
             overlayBox(preview, "border-2 border-dashed border-amber-400 bg-amber-400/20", "preview", false)}
         </div>
+        <Odontogram annotations={annotations} selectedId={selectedId} onSelect={setSelectedId} />
+        <BoxTable
+          annotations={annotations}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onPatch={patchBox}
+          onDelete={deleteById}
+        />
       </section>
 
       {/* Sidebar */}
@@ -610,13 +766,23 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                   {selected.confidence != null ? ` ${selected.confidence.toFixed(2)}` : ""}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={deleteSelected}
-                className="w-full rounded border border-red-300 bg-red-50 py-1 text-xs text-red-700 hover:bg-red-100"
-              >
-                Delete box
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={mirrorSelected}
+                  title="Copy to the opposite tooth (M)"
+                  className="w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card py-1 text-xs text-zinc-700 dark:text-zinc-300"
+                >
+                  Mirror to {fdiLabel(flipQuadrant(selected.fdi_quadrant), selected.fdi_position)}
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteSelected}
+                  className="w-full rounded border border-red-300 bg-red-50 py-1 text-xs text-red-700 hover:bg-red-100"
+                >
+                  Delete box
+                </button>
+              </div>
             </div>
           ) : (
             <p className="mt-2 text-xs text-zinc-500">
@@ -731,7 +897,13 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         {/* JSON view */}
         <section className="rounded border border-zinc-200 p-3">
           <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Set JSON</h2>
-          <pre className="mt-2 max-h-56 overflow-auto rounded bg-zinc-900 p-2 text-[11px] leading-relaxed text-zinc-100">
+          <pre
+            // Scrolls once there are a few boxes, so keyboard users must be able to focus it (axe: scrollable-region-focusable).
+            tabIndex={0}
+            role="region"
+            aria-label="Annotation set as JSON"
+            className="mt-2 max-h-56 overflow-auto rounded bg-zinc-900 p-2 text-[11px] leading-relaxed text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {JSON.stringify({ image_id: fixture.id, state: status, version, annotations }, null, 1)}
           </pre>
         </section>
