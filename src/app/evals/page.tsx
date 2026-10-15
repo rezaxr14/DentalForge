@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type { EvalCaseT } from "@/shared/contracts/traces";
 import { resolveDataSource } from "@/shared/lib/resolve-source";
+import { PageShell } from "@/shared/ui/page";
 
 function ProvenanceBadge({ provenance }: { provenance: string }) {
   const label = provenance === "postgres" ? "postgres" : "fixture replay";
@@ -48,10 +49,7 @@ export default async function EvalsPage() {
   const { source, fallbackReason } = await resolveDataSource();
   const runs = await source.listEvalRuns();
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
+    <PageShell>
       <h1 className="text-2xl font-semibold tracking-tight">
         Eval Hub
         <ProvenanceBadge provenance={source.provenance} />
@@ -70,7 +68,7 @@ export default async function EvalsPage() {
       <Suspense fallback={<p className="mt-6 text-sm">Loading leaderboard…</p>}>
         <EvalsTable />
       </Suspense>
-    </main>
+    </PageShell>
   );
 }
 

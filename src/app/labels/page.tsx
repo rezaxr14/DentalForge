@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listLabels } from "@/shared/lib/fixtures";
+import { PageShell } from "@/shared/ui/page";
 
 const STATUS_STYLES: Record<string, string> = {
   queue: "border-sky-300 bg-sky-50 text-sky-800",
@@ -22,10 +23,7 @@ export default function LabelsPage() {
   const totalPred = labels.reduce((n, l) => n + l.predCount, 0);
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
+    <PageShell>
       <h1 className="text-2xl font-semibold tracking-tight">LabelForge</h1>
       <p className="mt-1 max-w-3xl text-sm text-zinc-600">
         Draw and resize FDI + pathology boxes, submit sets for review with inter-annotator
@@ -102,6 +100,6 @@ export default function LabelsPage() {
           non-commercial research use.
         </p>
       </section>
-    </main>
+    </PageShell>
   );
 }

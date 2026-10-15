@@ -6,6 +6,8 @@ import { ThemeProvider } from "@/shared/ui/theme-provider";
 import { ThemeToggle } from "@/shared/ui/theme-toggle";
 import { OrgSwitcher } from "@/shared/ui/org-switcher";
 import { SessionHeader } from "@/shared/ui/session-header";
+import { NavLinks } from "@/shared/ui/nav-links";
+import { PrototypeBanner } from "@/shared/ui/page";
 import { WorkerStatusBadge } from "@/features/capability";
 import "./globals.css";
 
@@ -41,13 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="font-semibold tracking-tight">
                 TraceForge
               </Link>
-              <nav aria-label="Modules" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                {nav.map((n) => (
-                  <Link key={n.href} href={n.href} className="text-zinc-600 hover:text-foreground">
-                    {n.label}
-                  </Link>
-                ))}
-              </nav>
+              <NavLinks items={nav} />
               <div className="ms-auto flex items-center gap-3">
                 <WorkerStatusBadge />
                 <OrgSwitcher />
@@ -56,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
           </header>
+          <PrototypeBanner />
           {children}
         </ThemeProvider>
       </body>

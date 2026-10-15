@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTrace } from "@/shared/lib/fixtures";
 import { VerifiedTrace } from "@/shared/contracts/traces";
 import { combineReward } from "@/shared/domain/composite";
+import { BackLink, PageShell } from "@/shared/ui/page";
 
 export default async function RewardsPage({ searchParams }: { searchParams: Promise<{ trace?: string }> }) {
   const { trace: traceId = "verified_with_tools" } = await searchParams;
@@ -9,13 +10,10 @@ export default async function RewardsPage({ searchParams }: { searchParams: Prom
   const parsed = VerifiedTrace.safeParse(raw);
   if (!parsed.success) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-8">
-        <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-          Research prototype, not for clinical use
-        </p>
+      <PageShell>
         <h1 className="text-2xl font-semibold tracking-tight">Reward Inspector</h1>
         <p className="mt-2 text-sm">Trace {traceId} is not a verified trace.</p>
-      </main>
+      </PageShell>
     );
   }
   const t = parsed.data;
@@ -30,12 +28,9 @@ export default async function RewardsPage({ searchParams }: { searchParams: Prom
     ["efficiency × 0.1", components.efficiency, 0.1 * components.efficiency],
   ];
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
-      <Link href="/" className="text-sm underline">← Home</Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Reward Inspector</h1>
+    <PageShell>
+      <BackLink href="/">Home</BackLink>
+      <h1 className="text-2xl font-semibold tracking-tight">Reward Inspector</h1>
       <p className="mt-1 text-sm text-zinc-600">
         GRPO reward recomputed in TypeScript (parity-tested port) for trace{" "}
         <Link href={`/traces/${traceId}`} className="underline">{traceId}</Link>.
@@ -62,7 +57,7 @@ export default async function RewardsPage({ searchParams }: { searchParams: Prom
           ))}
         </tbody>
       </table>
-    </main>
+    </PageShell>
   );
 }
 

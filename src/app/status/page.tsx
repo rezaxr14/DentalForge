@@ -7,6 +7,7 @@ import { can } from "@/shared/domain/auth";
 import { getActor } from "@/shared/jobs/deps";
 import { getStorageAdapter } from "@/shared/jobs/deps";
 import { getBusState } from "@/shared/realtime";
+import { PageShell } from "@/shared/ui/page";
 
 export const metadata: Metadata = { title: "Status — TraceForge" };
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export default async function StatusPage() {
   const loaded = await load();
   if (!loaded.ok) {
     return (
-      <main className="mx-auto max-w-3xl space-y-3 px-6 py-8">
+      <PageShell size="reading" className="space-y-3 py-8">
         <h1 className="text-2xl font-semibold tracking-tight">Misconfigured deployment</h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           The server refused to start with an insecure or incomplete configuration. Fix these variables and redeploy:
@@ -49,7 +50,7 @@ export default async function StatusPage() {
             <li key={p}>{p}</li>
           ))}
         </ul>
-      </main>
+      </PageShell>
     );
   }
   const { env, caps, dbUp, actor, snap } = loaded;
@@ -64,7 +65,7 @@ export default async function StatusPage() {
   const canEnqueue = Boolean(actor && can(actor.role, "job.create")) && env.WORKER_MODE !== "off";
 
   return (
-    <main className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+    <PageShell className="space-y-8 py-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">System status</h1>
         <p className="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
@@ -176,6 +177,6 @@ export default async function StatusPage() {
         <h2 id="ping" className="mb-2 text-lg font-medium">Pipeline check</h2>
         <PingJobPanel canEnqueue={canEnqueue} workerOnline={snap.status === "online"} />
       </section>
-    </main>
+    </PageShell>
   );
 }

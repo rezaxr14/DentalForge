@@ -1,14 +1,11 @@
-import Link from "next/link";
 import { ToolLab } from "./tool-lab";
+import { BackLink, PageShell } from "@/shared/ui/page";
 
 export default function ToolsPage() {
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
-      <Link href="/" className="text-sm underline">← Home</Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Tool Lab</h1>
+    <PageShell>
+      <BackLink href="/">Home</BackLink>
+      <h1 className="text-2xl font-semibold tracking-tight">Tool Lab</h1>
       <p className="mt-1 max-w-3xl text-sm text-zinc-600">
         Run the VLM-DENTAL agent tools entirely client-side on a real sample radiograph
         (Canvas/ImageData, plan §9 browser tier). Each port is parity-tested against
@@ -20,6 +17,6 @@ export default function ToolsPage() {
         — and how each tool would run right now.
       </p>
       <ToolLab />
-    </main>
+    </PageShell>
   );
 }
