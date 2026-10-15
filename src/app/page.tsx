@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageShell } from "@/shared/ui/page";
 
 const modules = [
   { href: "/traces", name: "Trace Explorer", desc: "Browse, replay, compare multi-turn agent traces" },
@@ -13,14 +14,11 @@ const modules = [
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
+    <PageShell className="py-12">
       <h1 className="text-3xl font-semibold tracking-tight">TraceForge</h1>
       <p className="mt-2 max-w-2xl text-sm text-zinc-600">
-        Portfolio + curation workbench over real Dental-Agent artifacts. M0: schemas validated
-        against real VLM-DENTAL traces and evals; every number below is computed from data.
+        Portfolio + curation workbench over real Dental-Agent artifacts. Every number shown is
+        computed from the data behind it.
       </p>
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         {modules.map((m) => (
@@ -34,6 +32,6 @@ export default function Home() {
           </Link>
         ))}
       </div>
-    </main>
+    </PageShell>
   );
 }

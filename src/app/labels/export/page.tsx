@@ -1,18 +1,13 @@
-import Link from "next/link";
 import { listLabels } from "@/shared/lib/fixtures";
 import { ExportPanel } from "./export-panel";
+import { BackLink, PageShell } from "@/shared/ui/page";
 
 export default function ExportPage() {
   const labels = listLabels();
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
-      <Link href="/labels" className="text-sm underline">
-        ← All images
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+    <PageShell>
+      <BackLink href="/labels">All images</BackLink>
+      <h1 className="text-2xl font-semibold tracking-tight">
         Export
         <span className="ml-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 align-middle text-xs font-normal text-amber-800">
           browser tier
@@ -34,6 +29,6 @@ export default function ExportPage() {
           height: l.height,
         }))}
       />
-    </main>
+    </PageShell>
   );
 }

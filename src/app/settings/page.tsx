@@ -11,6 +11,7 @@ import { listTokensForAdmin, type WorkerTokenSummary } from "@/shared/jobs/token
 import { InviteCreator } from "./invite-creator";
 import OrgFormClient from "./org-form-client";
 import { WorkerTokenManager } from "./worker-tokens";
+import { PageShell } from "@/shared/ui/page";
 
 interface OrgRow {
   id: string;
@@ -36,7 +37,7 @@ export default async function SettingsPage() {
   }
   if (!auth || !session) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-12">
+      <PageShell size="form">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-2 text-sm text-zinc-600">
           <a href="/sign-in" className="underline">
@@ -44,7 +45,7 @@ export default async function SettingsPage() {
           </a>{" "}
           to manage organizations and invite links.
         </p>
-      </main>
+      </PageShell>
     );
   }
 
@@ -75,10 +76,7 @@ export default async function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
+    <PageShell size="form">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       <p className="mt-2 text-sm text-zinc-600">
         Signed in as <strong className="font-medium text-foreground">{session.user.email}</strong>.
@@ -117,6 +115,6 @@ export default async function SettingsPage() {
           </div>
         </section>
       )}
-    </main>
+    </PageShell>
   );
 }

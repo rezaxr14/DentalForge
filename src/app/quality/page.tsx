@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { BackLink, PageShell } from "@/shared/ui/page";
 
 interface FileStats {
   n: number;
@@ -48,12 +48,9 @@ export default function QualityPage() {
   const totalScaffold = Object.values(s.per_file).reduce((a, f) => a + (f.teacher_scaffold ?? 0), 0);
   const totalFp = Object.values(s.per_file).reduce((a, f) => a + f.healthy_false_positives, 0);
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
-      <Link href="/" className="text-sm underline">← Home</Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Data Quality</h1>
+    <PageShell>
+      <BackLink href="/">Home</BackLink>
+      <h1 className="text-2xl font-semibold tracking-tight">Data Quality</h1>
       <p className="mt-1 text-sm text-zinc-600">
         Scanned from {s.n_traces.toLocaleString()} trace rows across {s.n_files} files with
         VLM-DENTAL&apos;s assistant-only LEAK_PATTERNS (zero leaks — see ADR-0006). The
@@ -133,7 +130,7 @@ export default function QualityPage() {
           ))}
         </tbody>
       </table>
-    </main>
+    </PageShell>
   );
 }
 

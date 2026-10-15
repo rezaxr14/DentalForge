@@ -8,6 +8,7 @@ import Link from "next/link";
 import { verifyInvite } from "@/shared/lib/invites";
 import { getEnv } from "@/shared/config/env";
 import { AcceptButton } from "./accept-button";
+import { PageShell } from "@/shared/ui/page";
 
 const REASONS: Record<string, string> = {
   "bad-prefix": "This link is malformed.",
@@ -28,10 +29,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   }
 
   return (
-    <main className="mx-auto max-w-md px-6 py-16">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
+    <PageShell size="narrow">
       <h1 className="text-2xl font-semibold tracking-tight">Organization invite</h1>
       {!verified.ok ? (
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -51,6 +49,6 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           </p>
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }

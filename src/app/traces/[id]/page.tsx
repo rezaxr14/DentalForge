@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import type { VerifiedTraceT } from "@/shared/contracts/traces";
 import { isImageOutputTool } from "@/shared/domain/toolImage";
@@ -7,6 +6,7 @@ import { loadPageSnapshot } from "@/features/capability/server";
 import type { ArtifactImageRef, DataSource } from "@/shared/lib/datasource";
 import { resolveDataSource } from "@/shared/lib/resolve-source";
 import { getStorageAdapter } from "@/shared/jobs/deps";
+import { BackLink, PageShell } from "@/shared/ui/page";
 
 interface ToolImageInfo {
   url: string;
@@ -150,14 +150,9 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
   const resolution = resolveFeature("trace.render_artifacts", await loadPageSnapshot());
   const toolImages = detail ? await loadToolImages(source, detail.trace) : new Map<string, ToolImageInfo>();
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <p className="mb-2 inline-block rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-        Research prototype, not for clinical use
-      </p>
-      <Link href="/traces" className="text-sm underline">
-        ← All traces
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Trace {id.slice(0, 8)}</h1>
+    <PageShell>
+      <BackLink href="/traces">All traces</BackLink>
+      <h1 className="text-2xl font-semibold tracking-tight">Trace {id.slice(0, 8)}</h1>
       <Suspense fallback={<p className="mt-6 text-sm">Loading trace…</p>}>
         {detail ? (
           <TraceBody trace={detail.trace} resolution={resolution} toolImages={toolImages} />
@@ -167,6 +162,6 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
           </p>
         )}
       </Suspense>
-    </main>
+    </PageShell>
   );
 }
