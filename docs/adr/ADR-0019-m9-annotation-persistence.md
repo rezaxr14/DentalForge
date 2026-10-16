@@ -1,6 +1,6 @@
 # ADR-0019 — M9 slice 2: server persistence for annotation sets
 
-Date: 2026-10-16 · Status: **repository layer implemented and tested; API routes and editor wiring proposed** (next patches) · Scope: second slice of M9 (plan §11.3 "Persistence"). Not canvas, not autosave tuning (slice 3).
+Date: 2026-10-16 · Status: **repository layer and HTTP API implemented and tested; editor wiring proposed** (next patch) · Scope: second slice of M9 (plan §11.3 "Persistence"). Not canvas, not autosave tuning (slice 3).
 
 ## Context
 Editing is browser-local: `annotationStore.ts` keeps whole sets in `localStorage` under a stand-in author (`demo_user`) and a demo role switcher (ADR-0005 §4).
@@ -35,11 +35,16 @@ Fixture images are `"1"`…`"5"` (strings) while `images.id` is a UUID.
 7. **One shared test suite.** `describeAnnotationRepo`-style: `tests/helpers/annotation-repo-suite.ts` runs the same 21 tests against MemoryStore and DrizzleOrgStore, including two orgs using the same image key and
    the same box ids, a model-based comparison with the editor's `apply` over a seeded random sequence, concurrent opens and concurrent batches, and the real fixture-1 predictions. Under `CI=1` a missing Postgres fails instead of skipping.
 
-### Proposed (next patches)
-8. **HTTP API.** `GET /api/labels/{image}` (read-only, 404 until opened), `POST …/open`, `POST …/ops` (`{ baseVersion, ops }`, Zod-validated, 256 KB body), `POST …/submit`, `POST …/decision`.
-   401 signed out, 403 forbidden, 404 unknown image (a foreign org's image is also 404), 409 `{ code, version, set }`, 422 invalid op, 503 no durable store. The org comes from the session, never the request.
-9. **Rebase without an op log.** On 409 the client takes the server snapshot and replays its unacknowledged commands over it with the tolerant `apply`; within a field the last writer wins.
-10. **Degradation.** Signed out, or the selector fell back to the in-memory store: the editor keeps `annotationStore.ts` and says so with a visible badge. A set is either server-backed or local, never both.
+8. **HTTP API** (`src/shared/labels/handlers.ts`, thin routes under `src/app/api/labels/[image]/`, same shape as `/api/jobs`: route → `resolveLabelDeps()` → framework-free handler). The image id is the fixture id
+   (`1`…`5`); dimensions and licence come from the fixture, never the request. `GET /api/labels/{image}` (read-only; 404 until opened), `POST …/open`, `POST …/ops` (`{ baseVersion, ops }`),
+   `POST …/transition` (`{ transition: submit | approve | reject | reopen, baseVersion, reason? }`; one route instead of one per transition). Errors are problem+json: 401 signed out or no active organisation,
+   403 role/self-review, 404 unknown image or not opened, 409 `{ code: "conflict", reason: "version" | "state", set }`, 413 over 256 KB, 415 not `application/json`, 422 invalid request or op, 503 + `Retry-After`
+   when the store is the in-memory fallback or unreachable. Writes accept only `application/json`, so a cross-site form cannot reach a cookie-authenticated endpoint even if SameSite handling changes.
+   The org and role come from the session's membership (`getActor`), never from the request. The DTO has no internal UUIDs and no org id.
+
+### Proposed (next patch)
+9. **Rebase without an op log** (client). On 409 the client takes the server snapshot and replays its unacknowledged commands over it with the tolerant `apply`; within a field the last writer wins.
+10. **Degradation** (client). The API answers 401/503 in those cases; the editor then keeps `annotationStore.ts` and says so with a visible badge. A set is either server-backed or local, never both.
     With a durable store the demo role switcher is replaced by the signed-in role (needs the owner's confirmation; local mode keeps the switcher).
 
 ## Not in this slice
