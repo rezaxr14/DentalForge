@@ -708,7 +708,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       onClick={() => patchSelected({ fdi_quadrant: q })}
                       className={`h-8 w-8 rounded border text-xs ${
                         selected.fdi_quadrant === q
-                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                           : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
@@ -727,7 +727,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       onClick={() => patchSelected({ fdi_position: p })}
                       className={`h-8 w-8 rounded border text-xs ${
                         selected.fdi_position === p
-                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                           : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
@@ -746,7 +746,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       onClick={() => patchSelected({ pathology: p })}
                       className={`rounded border px-2 py-1 text-xs ${
                         selected.pathology === p
-                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                           : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
