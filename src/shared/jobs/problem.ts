@@ -17,6 +17,7 @@ export type ProblemCode =
   | "job_cancelled"
   | "job_terminal"
   | "run_mismatch"
+  | "conflict"
   | "worker_integration_off"
   | "unavailable"
   | "not_implemented"

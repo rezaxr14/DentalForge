@@ -158,6 +158,20 @@ async function api(base, { dbUp, mode }) {
     check("GET /api/jobs with DB down → 503 (not a crash)", jobs.status === 503, `${jobs.status}`);
   }
 
+  // LabelForge persistence (ADR-0019): never a crash, never HTML, always problem+json; a client treats 401/503 as "keep the local store".
+  const labelCalls = [
+    ["GET  /api/labels/1", "/api/labels/1", {}],
+    ["POST /api/labels/1/open", "/api/labels/1/open", { method: "POST" }],
+    ["POST /api/labels/1/ops", "/api/labels/1/ops", { method: "POST", headers: { "content-type": "application/json" }, body: '{"baseVersion":1,"ops":[]}' }],
+    ["POST /api/labels/1/transition", "/api/labels/1/transition", { method: "POST", headers: { "content-type": "application/json" }, body: '{"transition":"submit","baseVersion":1}' }],
+  ];
+  for (const [name, path, init] of labelCalls) {
+    const r = await get(base, path, init);
+    const problemJson = r.headers.get("content-type")?.includes("problem+json");
+    if (dbUp) check(`${name} signed out → 401 problem+json`, r.status === 401 && problemJson, `${r.status}`);
+    else check(`${name} with DB down → 503 problem+json + Retry-After`, r.status === 503 && problemJson && Boolean(r.headers.get("retry-after")), `${r.status}`);
+  }
+
   const unsigned = await get(base, "/api/storage/org/x.png");
   check("GET /api/storage/… without a signature → 403", unsigned.status === 403, `${unsigned.status}`);
   const put = await get(base, "/api/storage/org/x.png", { method: "PUT", body: "x" });
