@@ -10,11 +10,15 @@ import {
   DEFAULT_QUEUE_TTL_MS,
   gateJobWrite,
   type AnnotationRecord,
+  type AnnotationSetRecord,
+  type AnnotationSetSnapshot,
+  type ApplyOpsOutcome,
   type ArtifactRecord,
   type AuditRecord,
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type ImageSourceKey,
   type EvalCaseRecord,
   type IngestEvalInput,
   type IngestEvalResult,
@@ -28,6 +32,8 @@ import {
   type JobWrite,
   type MembershipRecord,
   type ModelRecord,
+  type NewAnnotation,
+  type OpenImageInput,
   type OrgRecord,
   type OrgStore,
   type RegisterModelInput,
@@ -37,9 +43,14 @@ import {
   type TraceTurnRecord,
   type TrainingMetricRecord,
   type TrainingRunRecord,
+  type TransitionOutcome,
   type WorkerRecord,
   type WorkerTokenRecord,
 } from "./repos";
+import { byEditorOrder, canonicalAnnotation, sameRowFields, toAnnotation, toRowFields } from "./annotation-map";
+import { applyOpsToSet, canTransition, transitionTarget, type SetTransition } from "@/shared/domain/editing/persist";
+import type { Command } from "@/shared/domain/editing/history";
+import type { Role } from "@/shared/domain/auth";
 import { mergeRunStatus, toFloat4 } from "./ingest-rules";
 import { summarizeEval } from "@/shared/lib/import/parse";
 
@@ -129,12 +140,190 @@ class ScopedMemory implements ScopedRepos {
     return [...this.root.annotations.values()].filter((a) => a.imageId === imageId && a.orgId === this.orgId);
   }
 
-  async createAnnotation(input: Omit<AnnotationRecord, "id" | "orgId" | "updatedAt">): Promise<AnnotationRecord> {
+  async createAnnotation(input: NewAnnotation): Promise<AnnotationRecord> {
     const img = this.root.images.get(input.imageId);
     if (!img || img.orgId !== this.orgId) throw new Error("image not found in org");
-    const rec: AnnotationRecord = { ...input, id: uid(), orgId: this.orgId, updatedAt: new Date() };
+    const id = uid();
+    const rec: AnnotationRecord = {
+      ...input,
+      id,
+      orgId: this.orgId,
+      updatedAt: new Date(),
+      confidence: input.confidence ?? null,
+      modelId: input.modelId ?? null,
+      clientId: id,
+      position: 0,
+    };
     this.root.annotations.set(rec.id, rec);
     return rec;
+  }
+
+  // ------------------------------------------------------------ annotation sets (ADR-0019)
+  // Every method below is synchronous between its checks and its writes: no `await` in the critical section,
+  // so concurrent callers cannot interleave (the Postgres store gets the same guarantee from one transaction).
+
+  /** Datasets of a source, oldest first (the one an import created wins over a lazily registered one). */
+  private datasetsOf(source: ImageSourceKey["source"]) {
+    return [...this.root.datasets.values()]
+      .filter((d) => d.orgId === this.orgId && d.source === source)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || cmp(a.id, b.id));
+  }
+
+  private findImage(key: ImageSourceKey): ImageRecord | null {
+    for (const ds of this.datasetsOf(key.source)) {
+      for (const img of this.root.images.values()) {
+        if (img.orgId === this.orgId && img.datasetId === ds.id && img.sourceImageId === key.sourceImageId) return img;
+      }
+    }
+    return null;
+  }
+
+  private setOf(imageId: string): AnnotationSetRecord | null {
+    for (const s of this.root.annotationSets.values()) if (s.orgId === this.orgId && s.imageId === imageId) return s;
+    return null;
+  }
+
+  private rowsOf(setId: string): AnnotationRecord[] {
+    return [...this.root.annotations.values()].filter((a) => a.orgId === this.orgId && a.setId === setId).sort(byEditorOrder);
+  }
+
+  private snapshotOf(set: AnnotationSetRecord, image: ImageRecord): AnnotationSetSnapshot {
+    return structuredClone({ set, image, annotations: this.rowsOf(set.id).map(toAnnotation) });
+  }
+
+  async openAnnotationSet(input: OpenImageInput & { assigneeId: string }): Promise<AnnotationSetSnapshot> {
+    let image = this.findImage(input);
+    if (!image) {
+      let ds = this.datasetsOf(input.source)[0];
+      if (!ds) {
+        ds = {
+          id: uid(),
+          orgId: this.orgId,
+          name: input.datasetName,
+          source: input.source,
+          licenseNote: input.licenseNote ?? null,
+          createdAt: new Date(),
+        };
+        this.root.datasets.set(ds.id, ds);
+      }
+      image = {
+        id: uid(),
+        orgId: this.orgId,
+        datasetId: ds.id,
+        sourceImageId: input.sourceImageId,
+        contentHash: input.contentHash,
+        width: input.width,
+        height: input.height,
+        storageKey: input.storageKey,
+        split: input.split,
+      };
+      this.root.images.set(image.id, image);
+    }
+    let set = this.setOf(image.id);
+    if (!set) {
+      set = {
+        id: uid(),
+        orgId: this.orgId,
+        imageId: image.id,
+        assigneeId: input.assigneeId,
+        state: "draft",
+        version: 1,
+        submittedAt: null,
+      };
+      this.root.annotationSets.set(set.id, set);
+    }
+    return this.snapshotOf(set, image);
+  }
+
+  async getAnnotationSet(key: ImageSourceKey): Promise<AnnotationSetSnapshot | null> {
+    const image = this.findImage(key);
+    const set = image ? this.setOf(image.id) : null;
+    return image && set ? this.snapshotOf(set, image) : null;
+  }
+
+  async applyAnnotationOps(
+    input: ImageSourceKey & { baseVersion: number; ops: Command[]; actorId: string },
+  ): Promise<ApplyOpsOutcome> {
+    const image = this.findImage(input);
+    const set = image ? this.setOf(image.id) : null;
+    if (!image || !set) return { kind: "not_found" };
+    const current = this.snapshotOf(set, image);
+    if (set.version !== input.baseVersion) return { kind: "conflict", reason: "version", snapshot: current };
+    if (set.state !== "draft") return { kind: "conflict", reason: "state", snapshot: current };
+
+    const res = applyOpsToSet(current.annotations, input.ops, {
+      width: image.width,
+      height: image.height,
+      actorId: input.actorId,
+      normalize: canonicalAnnotation,
+    });
+    if (!res.ok) return { kind: "invalid", message: res.message };
+    if (!res.changed) return { kind: "ok", snapshot: current };
+
+    const existing = new Map(this.rowsOf(set.id).map((r) => [r.clientId, r]));
+    const keep = new Set(res.annotations.map((a) => a.id));
+    for (const [clientId, row] of existing) if (!keep.has(clientId)) this.root.annotations.delete(row.id);
+    const now = new Date();
+    res.annotations.forEach((a, position) => {
+      const fields = toRowFields(a, position);
+      const row = existing.get(a.id);
+      if (row) {
+        if (!sameRowFields(row, fields)) Object.assign(row, fields, { updatedAt: now });
+      } else {
+        const id = uid();
+        this.root.annotations.set(id, {
+          ...fields,
+          id,
+          orgId: this.orgId,
+          imageId: image.id,
+          setId: set.id,
+          clientId: a.id,
+          modelId: null,
+          updatedAt: now,
+        });
+      }
+    });
+    set.version += 1;
+    return { kind: "ok", snapshot: this.snapshotOf(set, image) };
+  }
+
+  async transitionAnnotationSet(
+    input: ImageSourceKey & {
+      baseVersion: number;
+      transition: SetTransition;
+      actorId: string;
+      role: Role;
+      reason?: string;
+    },
+  ): Promise<TransitionOutcome> {
+    const image = this.findImage(input);
+    const set = image ? this.setOf(image.id) : null;
+    if (!image || !set) return { kind: "not_found" };
+    const current = this.snapshotOf(set, image);
+    if (!canTransition(input.role, input.transition, input.actorId, set.assigneeId, current.annotations)) {
+      return { kind: "forbidden" };
+    }
+    if (set.version !== input.baseVersion) return { kind: "conflict", reason: "version", snapshot: current };
+    const target = transitionTarget(set.state, input.transition);
+    if (!target) return { kind: "conflict", reason: "state", snapshot: current };
+
+    const now = new Date();
+    for (const row of this.rowsOf(set.id)) Object.assign(row, { status: target, updatedAt: now });
+    set.state = target;
+    set.version += 1;
+    if (input.transition === "submit") set.submittedAt = now;
+    if (input.transition === "reopen") set.submittedAt = null;
+    const auditId = uid();
+    this.root.audit.set(auditId, {
+      id: auditId,
+      orgId: this.orgId,
+      actorId: input.actorId,
+      action: `annotation_set.${input.transition}`,
+      resource: set.id,
+      meta: { imageId: image.id, sourceImageId: image.sourceImageId, version: set.version, reason: input.reason ?? null },
+      createdAt: now,
+    });
+    return { kind: "ok", snapshot: this.snapshotOf(set, image) };
   }
 
   async appendAudit(input: {
@@ -794,6 +983,7 @@ export class MemoryStore implements OrgStore {
   readonly traces = new Map<string, TraceRecord>();
   readonly evalRuns = new Map<string, EvalRunRecord>();
   readonly annotations = new Map<string, AnnotationRecord>();
+  readonly annotationSets = new Map<string, AnnotationSetRecord>();
   readonly audit = new Map<string, AuditRecord>();
   readonly invites = new Map<string, InviteRecord>();
   readonly workers = new Map<string, WorkerRecord>();

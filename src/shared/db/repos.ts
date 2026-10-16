@@ -9,6 +9,10 @@
  * Cross-tenant isolation suite: tests/m6-platform.test.ts.
  */
 import { z } from "zod";
+import type { Annotation, AnnotationStatus } from "../contracts/labels";
+import type { Role } from "../domain/auth";
+import type { Command } from "../domain/editing/history";
+import type { SetTransition } from "../domain/editing/persist";
 
 export const OrgId = z.string().min(1);
 export type OrgId = z.infer<typeof OrgId>;
@@ -98,7 +102,63 @@ export interface AnnotationRecord {
   version: number;
   authorId: string | null;
   updatedAt: Date;
+  /** Model boxes keep their confidence and model (ADR-0019: the old record dropped both). */
+  confidence: number | null;
+  modelId: string | null;
+  /** The id the editor uses for this box (`pred_1_3`, `new_...`); `id` is the internal UUID and never leaves the server. */
+  clientId: string;
+  /** Order inside the set (the editor's array order: Tab walk, undo re-insertion). */
+  position: number;
 }
+
+/** Input of the legacy single-box insert: the new fields are optional so existing callers stay valid. */
+export type NewAnnotation = Omit<AnnotationRecord, "id" | "orgId" | "updatedAt" | "clientId" | "position" | "confidence" | "modelId"> & {
+  confidence?: number | null;
+  modelId?: string | null;
+};
+
+export interface AnnotationSetRecord {
+  id: string;
+  orgId: string;
+  imageId: string;
+  assigneeId: string | null;
+  state: AnnotationStatus;
+  /** Optimistic-concurrency token: +1 per accepted op batch that changed something and per state transition. */
+  version: number;
+  submittedAt: Date | null;
+}
+
+/** How the editor names an image: the dataset source plus the number in the file name (`train_673.png` -> 673). */
+export interface ImageSourceKey {
+  source: DatasetRecord["source"];
+  sourceImageId: number;
+}
+
+export interface OpenImageInput extends ImageSourceKey {
+  datasetName: string;
+  licenseNote?: string;
+  contentHash: string;
+  width: number;
+  height: number;
+  storageKey: string;
+  split: string | null;
+}
+
+export interface AnnotationSetSnapshot {
+  set: AnnotationSetRecord;
+  image: ImageRecord;
+  /** In editor order, with the editor's own ids. */
+  annotations: Annotation[];
+}
+
+export type ApplyOpsOutcome =
+  | { kind: "ok"; snapshot: AnnotationSetSnapshot }
+  /** `version`: the batch was built on a stale set; `state`: the set is no longer a draft. Nothing was written. */
+  | { kind: "conflict"; reason: "version" | "state"; snapshot: AnnotationSetSnapshot }
+  | { kind: "invalid"; message: string }
+  | { kind: "not_found" };
+
+export type TransitionOutcome = ApplyOpsOutcome | { kind: "forbidden" };
 
 export interface AuditRecord {
   id: string;
@@ -411,7 +471,22 @@ export interface ScopedRepos {
   listEvalRuns(): Promise<EvalRunRecord[]>;
   createEvalRun(input: Omit<EvalRunRecord, "id" | "orgId" | "createdAt">): Promise<EvalRunRecord>;
   listAnnotations(imageId: string): Promise<AnnotationRecord[]>;
-  createAnnotation(input: Omit<AnnotationRecord, "id" | "orgId" | "updatedAt">): Promise<AnnotationRecord>;
+  createAnnotation(input: NewAnnotation): Promise<AnnotationRecord>;
+  /**
+   * LabelForge persistence (ADR-0019). All four are org-scoped like everything here and are implemented once per store
+   * behind ONE shared test suite (tests/helpers/annotation-repo-suite.ts).
+   *
+   * `openAnnotationSet` registers the dataset/image on first use (idempotent) and creates the empty draft set;
+   * `getAnnotationSet` never writes. `applyAnnotationOps` is atomic: a stale `baseVersion`, a non-draft set or any invalid op
+   * leaves the stored set untouched. `transitionAnnotationSet` checks the role INSIDE the same critical section that
+   * reads the authors, so "nobody decides their own work" cannot race with a concurrent edit.
+   */
+  openAnnotationSet(input: OpenImageInput & { assigneeId: string }): Promise<AnnotationSetSnapshot>;
+  getAnnotationSet(key: ImageSourceKey): Promise<AnnotationSetSnapshot | null>;
+  applyAnnotationOps(input: ImageSourceKey & { baseVersion: number; ops: Command[]; actorId: string }): Promise<ApplyOpsOutcome>;
+  transitionAnnotationSet(
+    input: ImageSourceKey & { baseVersion: number; transition: SetTransition; actorId: string; role: Role; reason?: string },
+  ): Promise<TransitionOutcome>;
   appendAudit(input: { actorId: string | null; action: string; resource?: string; meta?: Record<string, unknown> }): Promise<AuditRecord>;
   listAudit(): Promise<AuditRecord[]>;
   /**

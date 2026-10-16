@@ -36,6 +36,13 @@
       "when": 1791716690713,
       "tag": "0004_m8_eval_ingest",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792140507026,
+      "tag": "0005_annotation_client_id_position",
+      "breakpoints": true
     }
   ]
 }
