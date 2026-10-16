@@ -289,6 +289,10 @@ export const annotations = pgTable(
       .notNull()
       .references(() => images.id, { onDelete: "cascade" }),
     setId: uuid("set_id").references(() => annotationSets.id, { onDelete: "set null" }),
+    /** The id the editor uses for this box (`pred_1_3`, `new_...`); `id` stays the internal UUID (ADR-0019). */
+    clientId: text("client_id").notNull(),
+    /** Order inside the set: the editor's array order (Tab walk, undo re-insertion). */
+    position: integer("position").notNull().default(0),
     bboxX: real("bbox_x").notNull(),
     bboxY: real("bbox_y").notNull(),
     bboxW: real("bbox_w").notNull(),
@@ -312,6 +316,8 @@ export const annotations = pgTable(
     index("annotations_org_idx").on(t.orgId),
     index("annotations_image_idx").on(t.imageId),
     index("annotations_status_idx").on(t.orgId, t.status),
+    // Rows without a set (legacy single-box inserts) have a NULL set_id and are not constrained.
+    uniqueIndex("annotations_set_client_uniq").on(t.setId, t.clientId),
   ],
 );
 

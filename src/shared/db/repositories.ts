@@ -8,9 +8,11 @@
  *   - tests/m6-platform.test.ts      (memory)
  *   - tests/m6-repos.test.ts         (drizzle, requires Docker Postgres)
  */
+import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "./pg";
 import {
+  annotationSets,
   annotations,
   artifacts,
   auditLog,
@@ -37,11 +39,15 @@ import {
   DEFAULT_QUEUE_TTL_MS,
   gateJobWrite,
   type AnnotationRecord,
+  type AnnotationSetRecord,
+  type AnnotationSetSnapshot,
+  type ApplyOpsOutcome,
   type ArtifactRecord,
   type AuditRecord,
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
+  type ImageSourceKey,
   type EvalCaseRecord,
   type IngestEvalInput,
   type IngestEvalResult,
@@ -55,6 +61,8 @@ import {
   type JobWrite,
   type MembershipRecord,
   type ModelRecord,
+  type NewAnnotation,
+  type OpenImageInput,
   type OrgRecord,
   type OrgStore,
   type RegisterModelInput,
@@ -64,10 +72,15 @@ import {
   type TraceTurnRecord,
   type TrainingMetricRecord,
   type TrainingRunRecord,
+  type TransitionOutcome,
   type WorkerRecord,
   type WorkerTokenRecord,
 } from "./repos";
 import { mergeRunStatus } from "./ingest-rules";
+import { canonicalAnnotation, sameRowFields, toAnnotation, toRowFields } from "./annotation-map";
+import { applyOpsToSet, canTransition, transitionTarget, type SetTransition } from "@/shared/domain/editing/persist";
+import type { Command } from "@/shared/domain/editing/history";
+import type { Role } from "@/shared/domain/auth";
 import { summarizeEval } from "@/shared/lib/import/parse";
 
 /** Rows per INSERT: 1000 × 4 params stays far below Postgres' 65 535-parameter limit. */
@@ -216,20 +229,222 @@ class ScopedPg implements ScopedRepos {
       .orderBy(asc(annotations.createdAt));
   }
 
-  async createAnnotation(
-    input: Omit<AnnotationRecord, "id" | "orgId" | "updatedAt">,
-  ): Promise<AnnotationRecord> {
+  async createAnnotation(input: NewAnnotation): Promise<AnnotationRecord> {
     const img = await this.db
       .select({ id: images.id })
       .from(images)
       .where(and(eq(images.id, input.imageId), eq(images.orgId, this.orgId)))
       .limit(1);
     if (!img.length) throw new Error("image not found in org");
+    const id = randomUUID();
     const rows = await this.db
       .insert(annotations)
-      .values({ ...input, orgId: this.orgId })
+      .values({ ...input, id, clientId: id, orgId: this.orgId })
       .returning();
     return rows[0]!;
+  }
+
+  // ------------------------------------------------------------ annotation sets (ADR-0019)
+
+  private async imageByKey(tx: Tx, key: ImageSourceKey): Promise<ImageRecord | null> {
+    const rows = await tx
+      .select({ image: images })
+      .from(images)
+      .innerJoin(datasets, eq(images.datasetId, datasets.id))
+      .where(
+        and(
+          eq(images.orgId, this.orgId),
+          eq(datasets.orgId, this.orgId),
+          eq(datasets.source, key.source),
+          eq(images.sourceImageId, key.sourceImageId),
+        ),
+      )
+      // The oldest dataset of the source wins (an import's dataset over a lazily registered one), same as MemoryStore.
+      .orderBy(asc(datasets.createdAt), asc(datasets.id))
+      .limit(1);
+    const r = rows[0]?.image;
+    // Explicit mapping: the row also carries `createdAt`, which is not part of ImageRecord and must not leak into snapshots.
+    return r
+      ? { id: r.id, orgId: r.orgId, datasetId: r.datasetId, sourceImageId: r.sourceImageId, contentHash: r.contentHash, width: r.width, height: r.height, storageKey: r.storageKey, split: r.split }
+      : null;
+  }
+
+  private async setRowFor(tx: Tx, imageId: string, lock: boolean): Promise<AnnotationSetRecord | null> {
+    const q = tx
+      .select()
+      .from(annotationSets)
+      .where(and(eq(annotationSets.imageId, imageId), eq(annotationSets.orgId, this.orgId)))
+      .limit(1);
+    const rows = await (lock ? q.for("update") : q);
+    const r = rows[0];
+    return r
+      ? { id: r.id, orgId: r.orgId, imageId: r.imageId, assigneeId: r.assigneeId, state: r.state, version: r.version, submittedAt: r.submittedAt }
+      : null;
+  }
+
+  private boxRows(tx: Tx, setId: string) {
+    return tx
+      .select()
+      .from(annotations)
+      .where(and(eq(annotations.setId, setId), eq(annotations.orgId, this.orgId)))
+      // COLLATE "C" = the code-unit order MemoryStore uses for ties, so both stores list identically.
+      .orderBy(asc(annotations.position), sql`${annotations.clientId} COLLATE "C"`);
+  }
+
+  private async snapshotOf(tx: Tx, set: AnnotationSetRecord, image: ImageRecord): Promise<AnnotationSetSnapshot> {
+    const rows = await this.boxRows(tx, set.id);
+    return { set, image, annotations: rows.map(toAnnotation) };
+  }
+
+  async openAnnotationSet(input: OpenImageInput & { assigneeId: string }): Promise<AnnotationSetSnapshot> {
+    return this.db.transaction(async (tx) => {
+      // Two first-time opens of the same org must not register two datasets (datasets have no unique key).
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`annotation-open:${this.orgId}`}))`);
+      let image = await this.imageByKey(tx, input);
+      if (!image) {
+        let ds = (
+          await tx
+            .select()
+            .from(datasets)
+            .where(and(eq(datasets.orgId, this.orgId), eq(datasets.source, input.source)))
+            .orderBy(asc(datasets.createdAt), asc(datasets.id))
+            .limit(1)
+        )[0];
+        if (!ds) {
+          ds = (
+            await tx
+              .insert(datasets)
+              .values({ orgId: this.orgId, name: input.datasetName, source: input.source, licenseNote: input.licenseNote ?? null })
+              .returning()
+          )[0]!;
+        }
+        const inserted = await tx
+          .insert(images)
+          .values({
+            orgId: this.orgId,
+            datasetId: ds.id,
+            sourceImageId: input.sourceImageId,
+            contentHash: input.contentHash,
+            width: input.width,
+            height: input.height,
+            storageKey: input.storageKey,
+            split: input.split,
+          })
+          .returning();
+        const row = inserted[0]!;
+        image = { id: row.id, orgId: row.orgId, datasetId: row.datasetId, sourceImageId: row.sourceImageId, contentHash: row.contentHash, width: row.width, height: row.height, storageKey: row.storageKey, split: row.split };
+      }
+      let set = await this.setRowFor(tx, image.id, false);
+      if (!set) {
+        await tx.insert(annotationSets).values({ orgId: this.orgId, imageId: image.id, assigneeId: input.assigneeId });
+        set = (await this.setRowFor(tx, image.id, false))!;
+      }
+      return this.snapshotOf(tx, set, image);
+    });
+  }
+
+  async getAnnotationSet(key: ImageSourceKey): Promise<AnnotationSetSnapshot | null> {
+    return this.db.transaction(async (tx) => {
+      const image = await this.imageByKey(tx, key);
+      const set = image ? await this.setRowFor(tx, image.id, false) : null;
+      return image && set ? this.snapshotOf(tx, set, image) : null;
+    });
+  }
+
+  async applyAnnotationOps(
+    input: ImageSourceKey & { baseVersion: number; ops: Command[]; actorId: string },
+  ): Promise<ApplyOpsOutcome> {
+    return this.db.transaction(async (tx) => {
+      const image = await this.imageByKey(tx, input);
+      // FOR UPDATE: concurrent batches on one set queue here, so the version check below cannot be raced.
+      const set = image ? await this.setRowFor(tx, image.id, true) : null;
+      if (!image || !set) return { kind: "not_found" } as const;
+      const existing = await this.boxRows(tx, set.id);
+      const current: AnnotationSetSnapshot = { set, image, annotations: existing.map(toAnnotation) };
+      if (set.version !== input.baseVersion) return { kind: "conflict", reason: "version", snapshot: current } as const;
+      if (set.state !== "draft") return { kind: "conflict", reason: "state", snapshot: current } as const;
+
+      const res = applyOpsToSet(current.annotations, input.ops, {
+        width: image.width,
+        height: image.height,
+        actorId: input.actorId,
+        normalize: canonicalAnnotation,
+      });
+      if (!res.ok) return { kind: "invalid", message: res.message } as const;
+      if (!res.changed) return { kind: "ok", snapshot: current } as const;
+
+      const byClient = new Map(existing.map((r) => [r.clientId, r]));
+      const keep = new Set(res.annotations.map((a) => a.id));
+      const removed = existing.filter((r) => !keep.has(r.clientId)).map((r) => r.id);
+      if (removed.length) await tx.delete(annotations).where(and(eq(annotations.orgId, this.orgId), inArray(annotations.id, removed)));
+
+      const inserts: (typeof annotations.$inferInsert)[] = [];
+      const moved: { clientId: string; position: number }[] = [];
+      for (const [position, a] of res.annotations.entries()) {
+        const fields = toRowFields(a, position);
+        const row = byClient.get(a.id);
+        if (!row) {
+          inserts.push({ ...fields, orgId: this.orgId, imageId: image.id, setId: set.id, clientId: a.id, createdBy: input.actorId });
+        } else if (!sameRowFields(row, fields)) {
+          if (sameRowFields({ ...fields, position: row.position }, row)) moved.push({ clientId: a.id, position });
+          else await tx.update(annotations).set({ ...fields, updatedAt: new Date() }).where(and(eq(annotations.id, row.id), eq(annotations.orgId, this.orgId)));
+        }
+      }
+      if (inserts.length) await tx.insert(annotations).values(inserts);
+      if (moved.length) {
+        // Position-only changes (everything after an insert/delete shifts) in ONE statement instead of one per row.
+        const values = sql.join(moved.map((m) => sql`(${m.clientId}, ${m.position}::int)`), sql`, `);
+        await tx.execute(
+          sql`update annotations a set position = v.pos from (values ${values}) as v(cid, pos)
+              where a.set_id = ${set.id} and a.org_id = ${this.orgId} and a.client_id = v.cid`,
+        );
+      }
+      await tx.update(annotationSets).set({ version: sql`${annotationSets.version} + 1` }).where(eq(annotationSets.id, set.id));
+      // Re-read instead of building the result in JS: what the caller sees is what was written.
+      return { kind: "ok", snapshot: await this.snapshotOf(tx, (await this.setRowFor(tx, image.id, false))!, image) } as const;
+    });
+  }
+
+  async transitionAnnotationSet(
+    input: ImageSourceKey & {
+      baseVersion: number;
+      transition: SetTransition;
+      actorId: string;
+      role: Role;
+      reason?: string;
+    },
+  ): Promise<TransitionOutcome> {
+    return this.db.transaction(async (tx) => {
+      const image = await this.imageByKey(tx, input);
+      const set = image ? await this.setRowFor(tx, image.id, true) : null;
+      if (!image || !set) return { kind: "not_found" } as const;
+      const current = await this.snapshotOf(tx, set, image);
+      if (!canTransition(input.role, input.transition, input.actorId, set.assigneeId, current.annotations)) {
+        return { kind: "forbidden" } as const;
+      }
+      if (set.version !== input.baseVersion) return { kind: "conflict", reason: "version", snapshot: current } as const;
+      const target = transitionTarget(set.state, input.transition);
+      if (!target) return { kind: "conflict", reason: "state", snapshot: current } as const;
+
+      const now = new Date();
+      await tx.update(annotations).set({ status: target, updatedAt: now }).where(and(eq(annotations.setId, set.id), eq(annotations.orgId, this.orgId)));
+      await tx
+        .update(annotationSets)
+        .set({
+          state: target,
+          version: sql`${annotationSets.version} + 1`,
+          ...(input.transition === "submit" ? { submittedAt: now } : input.transition === "reopen" ? { submittedAt: null } : {}),
+        })
+        .where(eq(annotationSets.id, set.id));
+      await tx.insert(auditLog).values({
+        orgId: this.orgId,
+        actorId: input.actorId,
+        action: `annotation_set.${input.transition}`,
+        resource: set.id,
+        meta: { imageId: image.id, sourceImageId: image.sourceImageId, version: set.version + 1, reason: input.reason ?? null },
+      });
+      return { kind: "ok", snapshot: await this.snapshotOf(tx, (await this.setRowFor(tx, image.id, false))!, image) } as const;
+    });
   }
 
   async appendAudit(input: {
