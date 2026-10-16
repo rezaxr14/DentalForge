@@ -165,6 +165,41 @@ test("the table edits the same history as the canvas, and the odontogram follows
   await expect(rows(page)).toHaveCount(1);
 });
 
+/** WCAG contrast ratio of two sRGB colours given as [r, g, b] bytes. */
+function contrast(a: number[], b: number[]): number {
+  const lum = ([r, g, bl]: number[]) => {
+    const [R, G, B] = [r, g, bl].map((v) => {
+      const x = (v ?? 0) / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * R! + 0.7152 * G! + 0.0722 * B!;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+test("the chosen quadrant is visibly different from the others, in both themes (non-text contrast 3:1)", async ({ page }) => {
+  await open(page);
+  await draw(page, 0.2, 0.3, 0.3, 0.5);
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((t) => {
+      document.documentElement.classList.toggle("dark", t === "dark");
+      document.documentElement.style.colorScheme = t;
+    }, theme);
+    // Computed colours come back as lab()/oklch() in Tailwind v4; a 1x1 canvas turns any CSS colour into sRGB bytes.
+    const bg = (n: string) =>
+      page.getByRole("button", { name: n, exact: true }).first().evaluate((el) => {
+        const ctx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d")!;
+        ctx.fillStyle = getComputedStyle(el).backgroundColor;
+        ctx.fillRect(0, 0, 1, 1);
+        return Array.from(ctx.getImageData(0, 0, 1, 1).data).slice(0, 3);
+      });
+    const chosen = await bg("3"); // new boxes start on quadrant 3
+    const other = await bg("1");
+    expect(contrast(chosen, other), `${theme}: selected rgb(${chosen}) vs unselected rgb(${other})`).toBeGreaterThanOrEqual(3);
+  }
+});
+
 test("no WCAG A/AA violations with boxes, a conflict and the table, in both themes", async ({ page }) => {
   await open(page);
   await draw(page, 0.2, 0.3, 0.3, 0.5);
