@@ -41,8 +41,13 @@ export interface PrelabelTarget {
   /** Native image dimensions for clamping (plan §4.3). */
   width: number;
   height: number;
-  /** Model id stamped into `author_id` (`yolo:<model>`). */
+  /** The model that produced the boxes: stored as `model_id` on every box and, by default, stamped into `author_id` (`yolo:<model>`). */
   modelId: string;
+  /**
+   * Who the boxes are attributed to. Set it to the signed-in user for boxes that go to the server (ADR-0020): the server
+   * refuses any other author, because the person who imports and then submits model boxes is accountable for them.
+   */
+  authorId?: string;
   /** Id suffix start — pass the current annotation count to avoid collisions. */
   startIdx: number;
 }
@@ -70,7 +75,8 @@ export function predictionsToAnnotations(
       confidence: p.confidence,
       status: "draft",
       version: 1,
-      author_id: `yolo:${target.modelId}`,
+      author_id: target.authorId ?? `yolo:${target.modelId}`,
+      model_id: target.modelId,
     });
   }
   return out;

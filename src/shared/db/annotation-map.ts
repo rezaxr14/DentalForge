@@ -11,7 +11,7 @@ export type RowFields = Pick<
   AnnotationRecord,
   | "bboxX" | "bboxY" | "bboxW" | "bboxH"
   | "fdiQuadrant" | "fdiPosition" | "pathology" | "source"
-  | "confidence" | "status" | "version" | "authorId" | "position"
+  | "confidence" | "status" | "version" | "authorId" | "modelId" | "position"
 >;
 
 /** Boxes and confidence are `real` (float32) columns; the memory store canonicalises the same way so reads agree. */
@@ -37,6 +37,7 @@ export function toRowFields(a: Annotation, position: number): RowFields {
     status: a.status,
     version: a.version,
     authorId: a.author_id,
+    modelId: a.model_id ?? null,
     position,
   };
 }
@@ -56,6 +57,8 @@ export function toAnnotation(r: RowLike): Annotation {
     version: r.version,
     // Legacy rows written before authorship was recorded have none; the contract requires one.
     author_id: r.authorId ?? "unknown",
+    // Only model boxes carry one; the key is absent otherwise so human boxes keep their exact wire shape.
+    ...(r.modelId ? { model_id: r.modelId } : {}),
   };
 }
 

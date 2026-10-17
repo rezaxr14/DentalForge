@@ -36,6 +36,8 @@ export const Annotation = z.object({
   status: AnnotationStatus.default("draft"),
   version: z.number().int().min(1).default(1),
   author_id: z.string().min(1),
+  /** The model behind a `source: "model"` box (ADR-0020); absent on human boxes. Immutable after creation (patches are strict). */
+  model_id: z.string().min(1).max(200).optional(),
 });
 export type Annotation = z.infer<typeof Annotation>;
 

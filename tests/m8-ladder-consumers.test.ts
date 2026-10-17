@@ -63,8 +63,15 @@ describe("LabelForge pre-label mappings (worker + replay tiers)", () => {
         status: "draft",
         version: 1,
         author_id: "yolo:yolo_cv_best",
+        model_id: "yolo_cv_best",
       },
     ]);
+  });
+
+  it("attributes the boxes to the signed-in user when asked (they go to the server), keeping the model id (ADR-0020)", () => {
+    const anns = prelabelResultToAnnotations([{ bbox: [5, 5, 50, 50], conf: 0.87, fdiQuadrant: 1, fdiPosition: 4 }], { ...target, authorId: "alice" });
+    expect(anns).toHaveLength(1);
+    expect(anns[0]).toMatchObject({ author_id: "alice", model_id: "yolo_cv_best", source: "model", confidence: 0.87 });
   });
 });
 
