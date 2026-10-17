@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 TraceForge
               </Link>
               <NavLinks items={nav} />
-              <div className="ms-auto flex items-center gap-3">
+              <div className="ms-auto flex flex-wrap items-center gap-x-3 gap-y-1">
                 <WorkerStatusBadge />
                 <OrgSwitcher />
                 <SessionHeader />
