@@ -9,12 +9,12 @@
  * The organisation always comes from the actor, never from the request.
  */
 import { z } from "zod";
-import { Annotation, type AnnotationStatus } from "@/shared/contracts/labels";
 import type { AnnotationSetSnapshot, OpenImageInput, OrgStore, TransitionOutcome } from "@/shared/db/repos";
-import { can, type Role } from "@/shared/domain/auth";
+import { can } from "@/shared/domain/auth";
 import { CommandSchema, MAX_OPS_PER_REQUEST } from "@/shared/domain/editing/persist";
 import { json, problem, validationProblem } from "@/shared/jobs/problem";
 import type { Actor } from "@/shared/jobs/user-handlers";
+import type { SetDto } from "./dto";
 import { resolveFixtureImage } from "./image-source";
 
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -26,20 +26,7 @@ export interface LabelDeps {
   resolveImage?: (id: string) => OpenImageInput | null;
 }
 
-/**
- * What the editor receives: no internal UUIDs, no org id. `viewer` is the caller's own id and role in the active org
- * (ADR-0020): the editor needs the id to author boxes (the server refuses any other `author_id`) and the role to decide
- * which controls to offer, and a second session fetch could disagree with the session that answered this request.
- */
-export interface SetDto {
-  viewer: { userId: string; role: Role };
-  version: number;
-  state: AnnotationStatus;
-  assigneeId: string | null;
-  submittedAt: string | null;
-  image: { width: number; height: number };
-  annotations: Annotation[];
-}
+export type { SetDto };
 
 export function toSetDto(s: AnnotationSetSnapshot, viewer: Actor): SetDto {
   return {
