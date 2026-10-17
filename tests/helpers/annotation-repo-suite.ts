@@ -225,6 +225,20 @@ export function defineAnnotationRepoSuite(
       expect(await ops(repo, 3, [drag])).toMatchObject({ kind: "invalid" });
     });
 
+    it("accepts a human box clamped to the image edge although its float32 form overhangs by rounding, and still refuses a visible overhang (ADR-0020)", async () => {
+      const { repo } = await setup();
+      // float64: x + w === 2744 and y + h === 1316 exactly (what the editor's clamp produces); float32 canonical: 2744.0001 / 1316.00005
+      const right = box("edge_r", { bbox: [2437.26490489207, 100.5, 306.7350951079302, 80.25] });
+      const bottom = box("edge_b", { bbox: [100, 1111.3666507248845, 50, 204.6333492751155] });
+      const snap = ok(await ops(repo, 1, [create(right, 0), create(bottom, 1)]));
+      expect(snap.annotations.map((a) => a.id)).toEqual(["edge_r", "edge_b"]);
+      expect(snap.annotations[0]!.bbox[0]).toBeCloseTo(2437.265, 3); // stored in its canonical float32 form
+      // half a hundredth of a pixel is rounding; five hundredths is a box that really leaves the image
+      ok(await ops(repo, 2, [create(box("slack", { bbox: [2693.995, 10, 50, 10] }), 2)]));
+      expect(await ops(repo, 3, [create(box("over_r", { bbox: [2694.05, 10, 50, 10] }), 3)])).toMatchObject({ kind: "invalid" });
+      expect(await ops(repo, 3, [create(box("over_b", { bbox: [10, 1306.05, 10, 10] }), 3)])).toMatchObject({ kind: "invalid" });
+    });
+
     it("keeps the real stored model predictions of fixture 1 intact, including the 5 that overhang the image", async () => {
       const { repo } = await setup();
       const fx = JSON.parse(readFileSync(resolve(__dirname, "../../fixtures/labels/1.json"), "utf8")) as {

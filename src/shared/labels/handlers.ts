@@ -11,7 +11,7 @@
 import { z } from "zod";
 import { Annotation, type AnnotationStatus } from "@/shared/contracts/labels";
 import type { AnnotationSetSnapshot, OpenImageInput, OrgStore, TransitionOutcome } from "@/shared/db/repos";
-import { can } from "@/shared/domain/auth";
+import { can, type Role } from "@/shared/domain/auth";
 import { CommandSchema, MAX_OPS_PER_REQUEST } from "@/shared/domain/editing/persist";
 import { json, problem, validationProblem } from "@/shared/jobs/problem";
 import type { Actor } from "@/shared/jobs/user-handlers";
@@ -26,8 +26,13 @@ export interface LabelDeps {
   resolveImage?: (id: string) => OpenImageInput | null;
 }
 
-/** What the editor receives: no internal UUIDs, no org id. */
+/**
+ * What the editor receives: no internal UUIDs, no org id. `viewer` is the caller's own id and role in the active org
+ * (ADR-0020): the editor needs the id to author boxes (the server refuses any other `author_id`) and the role to decide
+ * which controls to offer, and a second session fetch could disagree with the session that answered this request.
+ */
 export interface SetDto {
+  viewer: { userId: string; role: Role };
   version: number;
   state: AnnotationStatus;
   assigneeId: string | null;
@@ -36,8 +41,9 @@ export interface SetDto {
   annotations: Annotation[];
 }
 
-export function toSetDto(s: AnnotationSetSnapshot): SetDto {
+export function toSetDto(s: AnnotationSetSnapshot, viewer: Actor): SetDto {
   return {
+    viewer: { userId: viewer.userId, role: viewer.role },
     version: s.set.version,
     state: s.set.state,
     assigneeId: s.set.assigneeId,
@@ -90,10 +96,10 @@ async function readBody(req: Request): Promise<{ ok: true; value: unknown } | { 
   }
 }
 
-function outcomeResponse(o: TransitionOutcome): Response {
+function outcomeResponse(o: TransitionOutcome, actor: Actor): Response {
   switch (o.kind) {
     case "ok":
-      return json(toSetDto(o.snapshot));
+      return json(toSetDto(o.snapshot, actor));
     case "conflict":
       return problem(
         409,
@@ -102,7 +108,7 @@ function outcomeResponse(o: TransitionOutcome): Response {
         o.reason === "version"
           ? "Rebase your edits onto the returned set and resend."
           : "Reopen it (after a rejection) before editing.",
-        { reason: o.reason, set: toSetDto(o.snapshot) },
+        { reason: o.reason, set: toSetDto(o.snapshot, actor) },
       );
     case "invalid":
       return problem(422, "validation_failed", "The edit was refused", o.message);
@@ -117,7 +123,7 @@ export async function getSet(deps: LabelDeps, imageId: string): Promise<Response
   const r = resolve(deps, imageId);
   if (r instanceof Response) return r;
   const snap = await deps.store.scoped(r.actor.orgId).getAnnotationSet(r.image);
-  return snap ? json(toSetDto(snap)) : problem(404, "not_found", "Image not opened yet", "POST /api/labels/:image/open first.");
+  return snap ? json(toSetDto(snap, r.actor)) : problem(404, "not_found", "Image not opened yet", "POST /api/labels/:image/open first.");
 }
 
 export async function openSet(deps: LabelDeps, imageId: string): Promise<Response> {
@@ -125,7 +131,7 @@ export async function openSet(deps: LabelDeps, imageId: string): Promise<Respons
   if (r instanceof Response) return r;
   if (!can(r.actor.role, "annotation.create")) return problem(403, "forbidden", "Your role cannot open images for labelling");
   const snap = await deps.store.scoped(r.actor.orgId).openAnnotationSet({ ...r.image, assigneeId: r.actor.userId });
-  return json(toSetDto(snap));
+  return json(toSetDto(snap, r.actor));
 }
 
 export async function postOps(req: Request, deps: LabelDeps, imageId: string): Promise<Response> {
@@ -143,7 +149,7 @@ export async function postOps(req: Request, deps: LabelDeps, imageId: string): P
     ops: parsed.data.ops,
     actorId: r.actor.userId,
   });
-  return outcomeResponse(out);
+  return outcomeResponse(out, r.actor);
 }
 
 export async function postTransition(req: Request, deps: LabelDeps, imageId: string): Promise<Response> {
@@ -162,5 +168,5 @@ export async function postTransition(req: Request, deps: LabelDeps, imageId: str
     role: r.actor.role,
     ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
   });
-  return outcomeResponse(out);
+  return outcomeResponse(out, r.actor);
 }

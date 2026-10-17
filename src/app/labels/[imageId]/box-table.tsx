@@ -2,7 +2,7 @@
 
 import type { Annotation } from "@/shared/contracts/labels";
 import { PATHOLOGY_LABELS } from "@/shared/contracts/labels";
-import type { AnnotationPatch } from "@/shared/domain/editing";
+import type { EditPatch } from "@/shared/domain/editing";
 
 const cell = "border-b border-zinc-100 px-2 py-1 dark:border-border";
 const select = "rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-border dark:bg-card";
@@ -21,7 +21,7 @@ export function BoxTable({
   annotations: Annotation[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onPatch: (id: string, patch: AnnotationPatch) => void;
+  onPatch: (id: string, patch: EditPatch) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -69,7 +69,7 @@ export function BoxTable({
                         aria-label={`Quadrant for box ${n}`}
                         className={select}
                         value={a.fdi_quadrant}
-                        onChange={(e) => onPatch(a.id, { fdi_quadrant: Number(e.target.value), status: "draft" })}
+                        onChange={(e) => onPatch(a.id, { fdi_quadrant: Number(e.target.value) })}
                       >
                         {[1, 2, 3, 4].map((q) => (
                           <option key={q} value={q}>{q}</option>
@@ -81,7 +81,7 @@ export function BoxTable({
                         aria-label={`Position for box ${n}`}
                         className={select}
                         value={a.fdi_position}
-                        onChange={(e) => onPatch(a.id, { fdi_position: Number(e.target.value), status: "draft" })}
+                        onChange={(e) => onPatch(a.id, { fdi_position: Number(e.target.value) })}
                       >
                         {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
                           <option key={p} value={p}>{p}</option>
@@ -93,7 +93,7 @@ export function BoxTable({
                         aria-label={`Pathology for box ${n}`}
                         className={select}
                         value={a.pathology}
-                        onChange={(e) => onPatch(a.id, { pathology: e.target.value as Annotation["pathology"], status: "draft" })}
+                        onChange={(e) => onPatch(a.id, { pathology: e.target.value as Annotation["pathology"] })}
                       >
                         {PATHOLOGY_LABELS.map((p) => (
                           <option key={p} value={p}>{p}</option>

@@ -10,6 +10,7 @@ import { MemoryStore } from "@/shared/db/memory";
 import { DrizzleOrgStore } from "@/shared/db/repositories";
 import type { OrgStore } from "@/shared/db/repos";
 import type { Command } from "@/shared/domain/editing/history";
+import { diffToCommands, history as H, mirrorAnnotation } from "@/shared/domain/editing";
 import type { Role } from "@/shared/domain/auth";
 import type { Actor } from "@/shared/jobs/user-handlers";
 import * as h from "@/shared/labels/handlers";
@@ -93,6 +94,62 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       const again = await h.openSet(as("bob", orgA), "1");
       expect((await body(again)).assigneeId).toBe("alice");
       expect(await body(await h.getSet(d, "1"))).toEqual(dto);
+    });
+
+    it("tells the editor who is asking: viewer is the caller's own id and role on every endpoint, never the assignee's (ADR-0020)", async () => {
+      const { orgA, as } = await world();
+      const opened = await body(await h.openSet(as("alice", orgA, "annotator"), "1"));
+      expect(opened.viewer).toEqual({ userId: "alice", role: "annotator" });
+      // somebody else reading the same set sees THEIR identity while the assignee stays alice
+      const read = await body(await h.getSet(as("rita", orgA, "reviewer"), "1"));
+      expect(read.viewer).toEqual({ userId: "rita", role: "reviewer" });
+      expect(read.assigneeId).toBe("alice");
+      const admin = as("root", orgA, "admin");
+      const written = await body(await h.postOps(post("1/ops", { baseVersion: 1, ops: [create(box("n1", { author_id: "root" }), 0)] }), admin, "1"));
+      expect(written.viewer).toEqual({ userId: "root", role: "admin" });
+      const stale = await h.postOps(post("1/ops", { baseVersion: 1, ops: [create(box("n2", { author_id: "root" }), 1)] }), admin, "1");
+      expect(stale.status).toBe(409);
+      expect((await body(stale)).set.viewer).toEqual({ userId: "root", role: "admin" });
+      const submitted = await body(await h.postTransition(post("1/transition", { transition: "submit", baseVersion: 2 }), admin, "1"));
+      expect(submitted.viewer).toEqual({ userId: "root", role: "admin" });
+      expect(Object.keys(submitted.viewer).sort()).toEqual(["role", "userId"]);
+    });
+
+    it("accepts what the editor's own diff produces for a realistic session, end to end through the handler (ADR-0020)", async () => {
+      const { orgA, as } = await world();
+      const d = as("alice", orgA);
+      let set = await body(await h.openSet(d, "1"));
+      let hist = H.createHistory([]);
+      const flush = async (): Promise<void> => {
+        const pending = diffToCommands(set.annotations, hist.present);
+        expect(pending.length).toBeGreaterThan(0);
+        const res = await h.postOps(post("1/ops", { baseVersion: set.version, ops: pending }), d, "1");
+        expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+        set = await body(res);
+        expect(set.annotations.map((a: { id: string }) => a.id)).toEqual(hist.present.map((a) => a.id));
+        expect(diffToCommands(set.annotations, hist.present)).toEqual([]); // acknowledged: nothing left to send
+      };
+      const mine = (id: string, bbox: [number, number, number, number]) => box(id, { bbox, author_id: "alice" });
+      // draw three (one dragged onto the right edge, which the editor clamps in float64), label one, drag one
+      hist = H.create(hist, mine("ann_1_0", [100.123456789, 200.987654321, 50.5555555, 60.4444444]));
+      hist = H.create(hist, mine("ann_1_1", [2437.26490489207, 100.5, 306.7350951079302, 80.25]));
+      hist = H.create(hist, mine("ann_1_2", [900, 300, 120, 140]));
+      hist = H.update(hist, "ann_1_0", { fdi_quadrant: 4, fdi_position: 6 });
+      hist = H.update(hist, "ann_1_2", { bbox: [910, 305, 120, 140] }, { coalesceKey: "g1" });
+      hist = H.update(hist, "ann_1_2", { bbox: [930, 320, 120, 140] }, { coalesceKey: "g1" });
+      await flush();
+      expect(set.version).toBe(2);
+      // mirror, delete, undo the delete (re-insertion), relabel: a second batch
+      const m = mirrorAnnotation(hist.present[0]!, { width: 2744, height: 1316 }, { id: "ann_2_3", authorId: "alice" });
+      hist = H.create(hist, m!);
+      hist = H.remove(hist, "ann_1_2");
+      hist = H.undo(hist);
+      hist = H.update(hist, "ann_1_1", { pathology: "Impacted" });
+      await flush();
+      expect(set.version).toBe(3);
+      hist = H.remove(hist, "ann_1_0");
+      await flush();
+      expect(set.annotations.map((a: { id: string }) => a.id)).toEqual(["ann_1_1", "ann_1_2", "ann_2_3"]);
     });
 
     it("applies ops, returns the new set, and answers 409 with the current set for a stale baseVersion", async () => {

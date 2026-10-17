@@ -12,6 +12,13 @@ import type { Annotation } from "@/shared/contracts/labels";
 
 export type AnnotationPatch = Partial<Pick<Annotation, "bbox" | "fdi_quadrant" | "fdi_position" | "pathology" | "status">>;
 
+/**
+ * What an edit may change (ADR-0020): geometry and label only. `status` is deliberately absent: it changes through the set's
+ * state machine (submit/approve/reject/reopen), never through a box edit, and the server's `after` patches are strict, so a
+ * `status` key in an edit would be answered with 422. `AnnotationPatch` stays wider because a stored `before` may carry it.
+ */
+export type EditPatch = Partial<Pick<Annotation, "bbox" | "fdi_quadrant" | "fdi_position" | "pathology">>;
+
 export type Command =
   | { type: "create"; annotation: Annotation; index: number }
   | { type: "delete"; annotation: Annotation; index: number }
@@ -138,7 +145,7 @@ export function remove(h: History, id: string): History {
 }
 
 /** Change fields of one box. Label edits become `setLabel`, geometry/other edits `update`. */
-export function update(h: History, id: string, patch: AnnotationPatch, opts: { coalesceKey?: string } = {}): History {
+export function update(h: History, id: string, patch: EditPatch, opts: { coalesceKey?: string } = {}): History {
   const a = h.present.find((x) => x.id === id);
   if (!a) return h;
   const before = beforeOf(a, patch);
