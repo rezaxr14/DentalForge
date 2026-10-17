@@ -72,17 +72,17 @@ describe("history: create / delete / undo / redo", () => {
 describe("history: labels and batches", () => {
   it("records label edits as setLabel and geometry as update", () => {
     let h = H.createHistory([ann("a")]);
-    h = H.update(h, "a", { fdi_quadrant: 4, fdi_position: 6, status: "draft" });
+    h = H.update(h, "a", { fdi_quadrant: 4, fdi_position: 6 });
     h = H.update(h, "a", { bbox: [1, 2, 30, 40] });
     expect(h.past.map((e) => e.command.type)).toEqual(["setLabel", "update"]);
   });
 
-  it("undo restores every changed field, including status", () => {
+  it("undo restores every changed field, and an edit never touches status (ADR-0020)", () => {
     let h = H.createHistory([ann("a", { status: "approved" })]);
-    h = H.update(h, "a", { pathology: "Impacted", status: "draft" });
-    expect(h.present[0]).toMatchObject({ pathology: "Impacted", status: "draft" });
+    h = H.update(h, "a", { pathology: "Impacted", fdi_position: 2 });
+    expect(h.present[0]).toMatchObject({ pathology: "Impacted", fdi_position: 2, status: "approved" });
     h = H.undo(h);
-    expect(h.present[0]).toMatchObject({ pathology: "Caries", status: "approved" });
+    expect(h.present[0]).toMatchObject({ pathology: "Caries", fdi_position: 6, status: "approved" });
   });
 
   it("createMany is ONE undo step and skips ids that already exist", () => {

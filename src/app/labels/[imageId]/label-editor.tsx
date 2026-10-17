@@ -27,7 +27,7 @@ import {
 import { anatomicalName, fdiLabel, flipQuadrant } from "@/shared/domain/fdi";
 import {
   feedDigit, history as H, initialEntry, mirrorAnnotation, nextIndex, pathologyForCode,
-  type AnnotationPatch, type EntryState,
+  type EditPatch, type EntryState,
 } from "@/shared/domain/editing";
 import {
   CapabilityGate, ProvenanceBadge, contextFor, resolveStrategy, useWorkerSnapshot,
@@ -263,11 +263,11 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     if (selectedId) deleteById(selectedId);
   }, [selectedId, deleteById]);
 
-  const patchBox = useCallback((id: string, patch: AnnotationPatch): void => {
-    setHist((h) => H.update(h, id, { ...patch, status: "draft" }));
+  const patchBox = useCallback((id: string, patch: EditPatch): void => {
+    setHist((h) => H.update(h, id, patch));
     setMsg(null);
   }, []);
-  const patchSelected = (patch: AnnotationPatch): void => {
+  const patchSelected = (patch: EditPatch): void => {
     if (selectedId) patchBox(selectedId, patch);
   };
 

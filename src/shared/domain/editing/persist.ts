@@ -67,6 +67,14 @@ export function leafCommands(ops: readonly Command[], depth = 0): Command[] | nu
   return out;
 }
 
+/**
+ * Slack, in image pixels, on the inside-the-image rule for human boxes (ADR-0020). The editor clamps a dragged box to the
+ * edge in float64 (x + w === width), but boxes are validated in their canonical float32 form where x and w are rounded
+ * independently, so x + w can land up to ~1e-3 px past the edge: 671 of 18,862 random edge-touching boxes failed without
+ * this slack. A hundredth of a pixel is far below anything a person can draw and far above that rounding.
+ */
+export const BOUNDS_EPSILON_PX = 0.01;
+
 const finite4 = (b: readonly number[]): boolean => b.length === 4 && b.every((n) => Number.isFinite(n));
 
 function sameList(a: readonly Annotation[], b: readonly Annotation[]): boolean {
@@ -105,7 +113,7 @@ export function applyOpsToSet(current: readonly Annotation[], ops: readonly Comm
     seen.add(a.id);
     const [x, y, w, h] = a.bbox;
     if (!finite4(a.bbox) || w <= 0 || h <= 0) return { ok: false, message: `box ${a.id} has an invalid size` };
-    if (a.source === "human" && (x < 0 || y < 0 || x + w > ctx.width || y + h > ctx.height)) {
+    if (a.source === "human" && (x < 0 || y < 0 || x + w > ctx.width + BOUNDS_EPSILON_PX || y + h > ctx.height + BOUNDS_EPSILON_PX)) {
       return { ok: false, message: `box ${a.id} lies outside the ${ctx.width}x${ctx.height} image` };
     }
   }
