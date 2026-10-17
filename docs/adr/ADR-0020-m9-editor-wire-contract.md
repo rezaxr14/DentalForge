@@ -1,6 +1,6 @@
 # ADR-0020 — M9 slice 2, part 3: what the editor sends and receives
 
-Date: 2026-10-17 · Status: **layers 1, 2 and 3a implemented and tested (viewer identity, edit patches, snapshot diff, bounds slack, model-box authorship, restored foreign boxes, typed client, sync engine); the React wiring (layer 3b) is NOT built** · Refines ADR-0018 (edit history) and ADR-0019 §4 and §8.
+Date: 2026-10-17 · Status: **layers 1, 2, 3a and 3b implemented and tested (viewer identity, edit patches, snapshot diff, bounds slack, model-box authorship, restored foreign boxes, typed client, sync engine, editor wiring); the Review and Export pages still read the browser store (layer 3c)** · Refines ADR-0018 (edit history) and ADR-0019 §4 and §8.
 
 ## Context
 Before wiring the editor to `/api/labels`, every command the real editing core can produce was driven through the server's own `CommandSchema` and `applyOpsToSet`
@@ -36,19 +36,32 @@ Reading the code and running that walk found four things that would each have br
    `src/shared/labels/client.ts` turns every answer into a typed result and checks bodies with `SetDtoSchema` (`dto.ts`); a handler test parses real server output with `.strict()` so the two cannot drift.
    Contract with the editor: `getPresent()` must return the newest boxes synchronously, including right after `onRemote` (a ref updated inside the callback).
 
+### Built in layer 3b: the editor on the server
+9. **Start is `GET /api/labels/status`, then `POST …/open`.** `status` always answers 200 (`{ available, reason }`): the editor asks on every load, and a 401 (signed out) or 503 (no database) would show up as a failed request in the console of every
+   such visitor and break every strict-console browser spec. `open` is idempotent (the first opener becomes the assignee), so there is no GET/404 probe. A session without an active organization is "signed out" for this purpose
+   (a fresh sign-in has none until the header's organization switcher sets it).
+10. **One gate, `canEdit`**, in `label-editor.tsx`: connected, set is a draft, the sync engine is not read-only, the role may edit. It guards pointer (selecting a box still works), keyboard, undo/redo, sidebar pickers, the box table (`readOnly`), imports and worker suggestions.
+    Before this, only the buttons were disabled: on a submitted set the pointer and keyboard still edited.
+11. **Where the numbers come from.** Server-backed: version, state and role come from the engine's view (`viewer.role` annotator → "user"); local: from the browser store as before, with the demo role read after mount (a render-time `localStorage` read is a hydration error for a returning user).
+    New boxes, mirrors and imports are authored by the viewer (`authorId`). A visible badge says where the boxes live (`Saved to server`, `Unsaved changes`, `Saving…`, `Saved · merged with others' changes`, `Offline · will retry` with a countdown, `Not saved`, `Read-only · submitted`, `Saved in this browser only`) and a line under the toolbar says why.
+12. **Leaving the page**: `beforeunload` prompts while edits are unsaved, `pagehide`/`visibilitychange` send them with `keepalive`.
+13. Two layout bugs surfaced only with realistic signed-in state on a 390 px phone and are fixed here: the site header's right-hand group did not wrap (603 px wide), and the box table's `sr-only` cells are absolutely positioned inside a scroller that was not `relative`, so they escaped it and widened the whole page by 81 px.
+
 ### Built in layer 2 (was open in layer 1)
 6. **Model boxes ("Suggest boxes") are authored by the viewer and name their model.** The authorship rule is unchanged: an exception for `yolo:` authors would let an admin create boxes that count as nobody's work and then decide the set,
    bypassing the self-review rule. `Annotation` gets an optional `model_id` (max 200, only on `source: "model"` boxes, immutable after creation because patches are strict), stored in the existing `annotations.model_id` column by both stores
    and returned only when set. `predictionsToAnnotations` / `prelabelResultToAnnotations` take `authorId` (the viewer, for boxes that go to the server) and always set `model_id`; without `authorId` the local-mode default `yolo:<model>` author stays.
 7. **Restoring a box someone else drew** (undo of a deletion that was already flushed) is re-authored to the viewer by `diffToCommands(acked, present, { authorId })`: the restorer is drawing it again. Boxes already on the server are never touched.
 
-### Open (layer 3b, the React wiring)
-8. Not gated yet: pointer and keyboard edits are not disabled when the set is not a draft (only buttons are), so on a submitted set the editor lets the user change boxes that the server will refuse. To be fixed with the wiring.
+### Open (layer 3c and later)
+14. The Review and Export pages still read the browser store; they should read with `GET /api/labels/{image}` (which never writes and answers 404 until the image is opened) and say so. A returning user's browser-only draft is not offered for import after signing in.
+15. Canvas `EditorEngine` and a measured frame budget (slice 3); the overlay is DOM today.
 
 ## Consequences
 - 21 hand-made mutants over the viewer field, the diff and the bounds rule (layer 1) and 11 over `model_id`, the model-only rule, `authorId` and re-authoring (layer 2) were all killed; two layer-2 survivors were equivalent clauses (a `model_id` comparison for a field that cannot change, a `!==` guard before a no-op copy) and were deleted after the mutation harness itself was fixed (its first run reported every mutant as surviving: the exit code was lost in nested shell quoting).
 - One existing expectation changed shape: the worker-result mapping test now also expects `model_id` (a field was added, nothing was loosened).
 - The editing-core test that asserted status in patches changed; reviewers should read that diff.
-- Nothing in the editor calls the API yet; the app still saves to the browser.
+- The editor now saves to the server when a session with an active organization exists; the Review and Export pages still read the browser store and the Review page still says "no auth exists yet" (layer 3c: read with GET, never write).
 - The engine and client have 41 + 3 tests that run against the REAL handlers on both stores; 31 mutants over engine, client and schema were all killed (two survivors were test gaps and are closed).
+- Not covered by any browser test: a reviewer deciding on someone else's set (the browser spec has one admin who drew the boxes, so it shows the self-review refusal only); a role that cannot edit (all roles can today).
 - Known gap: a returning user who has a local draft of an image and then signs in sees the server's set; the local draft is not merged or offered for import.

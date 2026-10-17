@@ -106,6 +106,16 @@ function outcomeResponse(o: TransitionOutcome, actor: Actor): Response {
   }
 }
 
+/**
+ * "Can this browser use the server for labels?" Always answers 200: the editor asks on every load, and a 401 or 503 would be
+ * logged as a failed request in the console of every signed-out visitor and of every deployment without a database.
+ */
+export function labelStatus(d: LabelDeps | Response): Response {
+  if (d instanceof Response) return json({ available: false, reason: "unavailable" });
+  if (!d.actor) return json({ available: false, reason: "signed-out" });
+  return json({ available: true, reason: null });
+}
+
 export async function getSet(deps: LabelDeps, imageId: string): Promise<Response> {
   const r = resolve(deps, imageId);
   if (r instanceof Response) return r;

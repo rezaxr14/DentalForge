@@ -28,7 +28,9 @@ export function newWorld(store: OrgStore, actor: () => Actor | null): LabelWorld
 export function labelFetch(world: LabelWorld): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input), "http://localhost");
-    const [, , imageId, action = "get"] = url.pathname.split("/").filter(Boolean).map(decodeURIComponent) as [string, string, string, string?];
+    const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    const isStatus = parts[2] === "status" && parts.length === 3;
+    const [, , imageId = "", action = isStatus ? "status" : "get"] = parts;
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : null;
     world.log.push({ method, action, body, keepalive: init?.keepalive === true });
@@ -40,6 +42,7 @@ export function labelFetch(world: LabelWorld): typeof fetch {
       if (pre) return pre;
       const deps: h.LabelDeps = { store: world.store, actor: world.actor() };
       const req = new Request(url, init);
+      if (action === "status") return h.labelStatus(deps);
       if (action === "get") return await h.getSet(deps, imageId);
       if (action === "open") return await h.openSet(deps, imageId);
       if (action === "ops") return await h.postOps(req, deps, imageId);

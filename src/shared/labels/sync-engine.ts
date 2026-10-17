@@ -44,6 +44,10 @@ export interface SyncView {
   assigneeId: string | null;
 }
 
+/** A view of a server-backed set: the viewer is known. */
+export type ServerView = SyncView & { mode: "server"; viewer: Viewer };
+export const isServerView = (v: SyncView | null): v is ServerView => v !== null && v.mode === "server" && v.viewer !== null;
+
 export interface Scheduler {
   set(fn: () => void, ms: number): unknown;
   clear(handle: unknown): void;
@@ -131,8 +135,13 @@ export function createSyncEngine(o: SyncOptions): SyncEngine {
 
   async function start(): Promise<void> {
     emit({ mode: "connecting", status: "loading" });
-    let r = await o.client.get(o.imageId);
-    if (r.kind === "notFound") r = await o.client.open(o.imageId);
+    // Ask first: "status" always answers 200, so a signed-out visitor or a deployment without a database does not fill
+    // the console with failed requests. `open` is idempotent (the first opener becomes the assignee), so no GET/404 probe.
+    const st = await o.client.status();
+    if (stopped) return;
+    if (st.kind === "signed-out") return goLocal("signed-out", null);
+    if (st.kind === "unavailable") return goLocal("server-unavailable", st.message);
+    const r = await o.client.open(o.imageId);
     if (stopped) return;
     switch (r.kind) {
       case "ok":
