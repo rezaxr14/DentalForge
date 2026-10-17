@@ -184,3 +184,26 @@ describe("rebase without an op log (ADR-0019 §8, ADR-0020)", () => {
     expect(res.annotations.some((x) => x.id === "b")).toBe(false); // their delete wins over my label edit
   });
 });
+
+describe("restoring a box someone else drew (undo of a flushed deletion)", () => {
+  it("is re-authored to the viewer, which the server accepts; without that option it is refused", () => {
+    const bobs = human("b1", [10, 10, 100, 100], { author_id: "bob" });
+    let h = H.createHistory([bobs]);
+    h = H.remove(h, "b1"); // flushed: the server no longer has it
+    h = H.undo(h);
+    expect(h.present[0]!.author_id).toBe("bob");
+    expect(send([], diffToCommands([], h.present))).toMatchObject({ ok: false }); // negative control
+    const res = send([], diffToCommands([], h.present, { authorId: ME }));
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.annotations[0]).toMatchObject({ id: "b1", bbox: [10, 10, 100, 100], author_id: ME });
+  });
+
+  it("leaves everyone's boxes that are already on the server alone, and the viewer's own creates unchanged", () => {
+    const bobs = human("b1", [10, 10, 100, 100], { author_id: "bob" });
+    expect(diffToCommands([bobs], [bobs], { authorId: ME })).toEqual([]);
+    const mine = human("m1", [10, 10, 100, 100]);
+    const ops = diffToCommands([], [mine], { authorId: ME });
+    expect(ops[0]).toMatchObject({ type: "create" });
+    expect((ops[0] as { annotation: Annotation }).annotation).toEqual(mine);
+  });
+});

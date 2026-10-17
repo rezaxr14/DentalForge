@@ -239,6 +239,19 @@ export function defineAnnotationRepoSuite(
       expect(await ops(repo, 3, [create(box("over_b", { bbox: [10, 1306.05, 10, 10] }), 3)])).toMatchObject({ kind: "invalid" });
     });
 
+    it("stores a model box's model id and confidence, keeps the key off human boxes, replays as a no-op, and refuses a model id on a human box (ADR-0020)", async () => {
+      const { repo } = await setup();
+      const m = box("pred_1_0", { source: "model", confidence: 0.87, model_id: "yolo_cv_best" });
+      const snap = ok(await ops(repo, 1, [create(m, 0), create(box("h1"), 1)]));
+      expect(snap.annotations[0]).toMatchObject({ source: "model", model_id: "yolo_cv_best", confidence: 0.87 });
+      expect("model_id" in snap.annotations[1]!).toBe(false);
+      const again = ok(await ops(repo, snap.set.version, [create(m, 0)]));
+      expect(again.set.version).toBe(snap.set.version); // same box, same model: nothing changed
+      expect(await ops(repo, again.set.version, [create(box("bad", { model_id: "yolo_cv_best" }), 2)])).toMatchObject({ kind: "invalid" });
+      const reread = await repo.getAnnotationSet(IMAGE);
+      expect(reread!.annotations.map((a) => a.model_id)).toEqual(["yolo_cv_best", undefined]);
+    });
+
     it("keeps the real stored model predictions of fixture 1 intact, including the 5 that overhang the image", async () => {
       const { repo } = await setup();
       const fx = JSON.parse(readFileSync(resolve(__dirname, "../../fixtures/labels/1.json"), "utf8")) as {

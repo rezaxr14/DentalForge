@@ -10,6 +10,7 @@ import { MemoryStore } from "@/shared/db/memory";
 import { DrizzleOrgStore } from "@/shared/db/repositories";
 import type { OrgStore } from "@/shared/db/repos";
 import type { Command } from "@/shared/domain/editing/history";
+import { predictionsToAnnotations } from "@/shared/domain/annotation";
 import { diffToCommands, history as H, mirrorAnnotation } from "@/shared/domain/editing";
 import type { Role } from "@/shared/domain/auth";
 import type { Actor } from "@/shared/jobs/user-handlers";
@@ -152,6 +153,32 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       expect(set.annotations.map((a: { id: string }) => a.id)).toEqual(["ann_1_1", "ann_1_2", "ann_2_3"]);
     });
 
+    it("imports pre-labels through the server when they are authored by the viewer, and refuses the default model author (ADR-0020)", async () => {
+      const { orgA, as } = await world();
+      const d = as("alice", orgA);
+      const open = await body(await h.openSet(d, "1"));
+      const preds = [
+        { bbox: [10, 20, 300, 400], fdi_quadrant: 2, fdi_position: 7, confidence: 0.9 },
+        { bbox: [600, 20, 100, 100], fdi_quadrant: 1, fdi_position: 1, confidence: 0.4 },
+      ];
+      const target = { imageId: "1", width: 2744, height: 1316, modelId: "yolo_cv_best", startIdx: 0 };
+      const sendImport = async (authorId?: string) => {
+        const hist = H.createMany(H.createHistory([]), predictionsToAnnotations(preds, { ...target, ...(authorId ? { authorId } : {}) }), "Import pre-labels");
+        return h.postOps(post("1/ops", { baseVersion: open.version, ops: diffToCommands([], hist.present) }), d, "1");
+      };
+      const refused = await sendImport(); // author_id "yolo:yolo_cv_best": the old shape
+      expect(refused.status).toBe(422);
+      expect((await body(await h.getSet(d, "1"))).version).toBe(1); // nothing written
+      const ok = await sendImport("alice");
+      expect(ok.status).toBe(200);
+      const set = await body(ok);
+      expect(set.annotations).toHaveLength(2);
+      expect(set.annotations.map((a: Record<string, unknown>) => [a.author_id, a.source, a.model_id, a.confidence])).toEqual([
+        ["alice", "model", "yolo_cv_best", 0.9],
+        ["alice", "model", "yolo_cv_best", 0.4],
+      ]);
+    });
+
     it("applies ops, returns the new set, and answers 409 with the current set for a stale baseVersion", async () => {
       const { orgA, as } = await world();
       const d = as("alice", orgA);
@@ -189,6 +216,8 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       await bad(post("1/ops", { baseVersion: 1, ops: Array.from({ length: 201 }, (_, i) => create(box(`b${i}`), i)) }), 422, "201 ops");
       await bad(post("1/ops", { baseVersion: 1, ops: [{ type: "update", id: "x", before: {}, after: { status: "approved" } }] }), 422, "status in a patch");
       await bad(post("1/ops", { baseVersion: 1, ops: [{ type: "update", id: "x", before: {}, after: { author_id: "eve" } }] }), 422, "author in a patch");
+      await bad(post("1/ops", { baseVersion: 1, ops: [{ type: "update", id: "x", before: {}, after: { model_id: "yolo" } }] }), 422, "model id in a patch");
+      await bad(post("1/ops", { baseVersion: 1, ops: [create(box("long", { source: "model", confidence: 0.5, model_id: "x".repeat(201) }), 0)] }), 422, "201-character model id");
       await bad(post("1/ops", { baseVersion: 1, ops: [{ type: "explode" }] }), 422, "unknown command");
       let deep: Command = create(box("deep"), 0);
       for (let i = 0; i < 6; i++) deep = { type: "batch", label: "x", commands: [deep] };

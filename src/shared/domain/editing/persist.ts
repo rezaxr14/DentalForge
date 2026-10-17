@@ -101,6 +101,9 @@ export function applyOpsToSet(current: readonly Annotation[], ops: readonly Comm
     if (c.type !== "create") continue;
     if (c.annotation.author_id !== ctx.actorId) return { ok: false, message: "a created box must be authored by the signed-in user" };
     if (c.annotation.status !== "draft") return { ok: false, message: "a created box must start as a draft" };
+    if (c.annotation.model_id !== undefined && c.annotation.source !== "model") {
+      return { ok: false, message: "only a model box can name a model" };
+    }
   }
 
   const applied = ops.reduce<Annotation[]>(apply, current.slice());

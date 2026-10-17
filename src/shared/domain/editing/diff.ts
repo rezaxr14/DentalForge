@@ -9,6 +9,7 @@
  *
  * Only what the server accepts is produced: creates, deletes and `update`/`setLabel` patches of bbox / FDI / pathology.
  * Everything else (status, source, confidence, author, version) moves only through the set's state machine, never here.
+ * `opts.authorId` (the viewer) re-authors boxes that are created here but were drawn by someone else (a restored deletion).
  * Two boxes are equal when their float32 values are, because the server stores `real` and returns canonical float32:
  * comparing float64 would re-send every freshly drawn box after each acknowledgement, forever.
  */
@@ -19,7 +20,11 @@ const f = Math.fround;
 const sameBox = (a: Annotation["bbox"], b: Annotation["bbox"]): boolean => a.every((v, i) => f(v) === f(b[i] as number));
 
 /** Order is deletes, then updates, then creates in editor order, so the final array order is the present order. */
-export function diffToCommands(acked: readonly Annotation[], present: readonly Annotation[]): Command[] {
+export function diffToCommands(
+  acked: readonly Annotation[],
+  present: readonly Annotation[],
+  opts: { authorId?: string } = {},
+): Command[] {
   const before = new Map(acked.map((a, i) => [a.id, { a, i }]));
   const now = new Set(present.map((a) => a.id));
   const ops: Command[] = [];
@@ -52,7 +57,11 @@ export function diffToCommands(acked: readonly Annotation[], present: readonly A
   }
 
   present.forEach((p, index) => {
-    if (!before.has(p.id)) ops.push({ type: "create", annotation: p, index });
+    if (before.has(p.id)) return;
+    // Undoing the deletion of a box someone else drew brings it back with THEIR author, which the server refuses for a
+    // create. The person restoring it is the one drawing it again, so it is re-authored to them (ADR-0020).
+    const annotation = opts.authorId === undefined ? p : { ...p, author_id: opts.authorId };
+    ops.push({ type: "create", annotation, index });
   });
   return ops;
 }

@@ -278,7 +278,6 @@ class ScopedMemory implements ScopedRepos {
           imageId: image.id,
           setId: set.id,
           clientId: a.id,
-          modelId: null,
           updatedAt: now,
         });
       }
