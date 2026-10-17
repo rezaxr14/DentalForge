@@ -21,7 +21,9 @@ export function SessionHeader() {
   }
   return (
     <span className="inline-flex items-center gap-3 text-sm">
-      <span className="text-zinc-600">{session.user.email}</span>
+      <span className="max-w-[9rem] truncate text-zinc-600 sm:max-w-none" title={session.user.email}>
+        {session.user.email}
+      </span>
       <button
         type="button"
         onClick={() => {
