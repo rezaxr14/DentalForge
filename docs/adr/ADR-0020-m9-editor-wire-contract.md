@@ -1,6 +1,6 @@
 # ADR-0020 — M9 slice 2, part 3: what the editor sends and receives
 
-Date: 2026-10-17 · Status: **layers 1 and 2 implemented and tested (viewer identity, edit patches, snapshot diff, bounds slack, model-box authorship, restored foreign boxes); sync engine and editor wiring decided below but NOT built** · Refines ADR-0018 (edit history) and ADR-0019 §4 and §8.
+Date: 2026-10-17 · Status: **layers 1, 2 and 3a implemented and tested (viewer identity, edit patches, snapshot diff, bounds slack, model-box authorship, restored foreign boxes, typed client, sync engine); the React wiring (layer 3b) is NOT built** · Refines ADR-0018 (edit history) and ADR-0019 §4 and §8.
 
 ## Context
 Before wiring the editor to `/api/labels`, every command the real editing core can produce was driven through the server's own `CommandSchema` and `applyOpsToSet`
@@ -23,10 +23,18 @@ Reading the code and running that walk found four things that would each have br
 4. **`diffToCommands(acked, present)`** (pure, `domain/editing/diff.ts`): the ops that turn the last acknowledged boxes into the editor's boxes (deletes, then `update`/`setLabel` patches of bbox/FDI/pathology only, then creates in editor order).
    Boxes are equal when their float32 values are, so an acknowledged box is never re-sent.
 
-### Decided, not built (sync engine, next layer)
-5. **The pending set is a diff, not a command queue** (this replaces "pending-command queue" in the plan of record). History rewrites one entry on every pointer move of a drag; a queue would either send every move or re-implement the merge rules.
-   The engine computes `diffToCommands(acked, present)` when it is about to send, one request in flight, `baseVersion` = acknowledged version. On 409 it adopts the returned set as `acked` and sets `present = pending.reduce(apply, server)`:
-   last writer wins per field, my edit of a box someone else deleted is a no-op and never resurrects it (tested in `m9-editing-wire.test.ts`, "rebase without an op log").
+### Built in layer 3a: client and sync engine (framework-free, no UI yet)
+5. **The pending set is a diff, not a command queue** (replaces "pending-command queue" in the plan of record). History rewrites one entry on every pointer move of a drag; a queue would either send every move or re-implement the merge rules.
+   `src/shared/labels/sync-engine.ts` computes `diffToCommands(acked, present, { authorId: viewer })` when a request is about to go out; one request in flight; debounce 800 ms with a 3 s max wait; chunks of 200 ops.
+   - 409 version: adopt the server's boxes, `present = pending.reduce(apply, server)` (last writer wins per field; a box someone else deleted is not resurrected), hand the merged boxes to the editor, status `merged` until the next edit.
+   - Set no longer a draft (whichever 409 reason announces it): adopt it, read-only, "your latest edits were not saved". The server compares versions before state, so a stale writer on a submitted set arrives as a *version* conflict; the first version of the engine rebased into a non-draft set and left the status stuck on "saving" (found by running it against the real handlers).
+   - 503/429/network: edits stay in memory; retry after `Retry-After` or 1, 2, 4 … 30 s; the count resets after any success and after a retry that finds nothing left to send. Edits made while waiting do not add requests.
+   - 401: mode `local` (reason `session-lost`); the editor must persist its boxes locally. A set is server-backed or local, never both.
+   - 422: status `error`, no automatic retry; the next edit tries again. 5 consecutive conflicts or 20 rounds without convergence also end in `error` instead of looping.
+   - `transition()` saves what is pending first and refuses while edits are unsaved; `flushOnExit()` sends with `keepalive`; `hasUnsaved()` is for a leave-page prompt.
+   Mode is decided once at load (GET, 404 → open, 401 → local `signed-out`, 403 → local `forbidden`, 503/network → local `server-unavailable`).
+   `src/shared/labels/client.ts` turns every answer into a typed result and checks bodies with `SetDtoSchema` (`dto.ts`); a handler test parses real server output with `.strict()` so the two cannot drift.
+   Contract with the editor: `getPresent()` must return the newest boxes synchronously, including right after `onRemote` (a ref updated inside the callback).
 
 ### Built in layer 2 (was open in layer 1)
 6. **Model boxes ("Suggest boxes") are authored by the viewer and name their model.** The authorship rule is unchanged: an exception for `yolo:` authors would let an admin create boxes that count as nobody's work and then decide the set,
@@ -34,7 +42,7 @@ Reading the code and running that walk found four things that would each have br
    and returned only when set. `predictionsToAnnotations` / `prelabelResultToAnnotations` take `authorId` (the viewer, for boxes that go to the server) and always set `model_id`; without `authorId` the local-mode default `yolo:<model>` author stays.
 7. **Restoring a box someone else drew** (undo of a deletion that was already flushed) is re-authored to the viewer by `diffToCommands(acked, present, { authorId })`: the restorer is drawing it again. Boxes already on the server are never touched.
 
-### Open
+### Open (layer 3b, the React wiring)
 8. Not gated yet: pointer and keyboard edits are not disabled when the set is not a draft (only buttons are), so on a submitted set the editor lets the user change boxes that the server will refuse. To be fixed with the wiring.
 
 ## Consequences
@@ -42,3 +50,5 @@ Reading the code and running that walk found four things that would each have br
 - One existing expectation changed shape: the worker-result mapping test now also expects `model_id` (a field was added, nothing was loosened).
 - The editing-core test that asserted status in patches changed; reviewers should read that diff.
 - Nothing in the editor calls the API yet; the app still saves to the browser.
+- The engine and client have 41 + 3 tests that run against the REAL handlers on both stores; 31 mutants over engine, client and schema were all killed (two survivors were test gaps and are closed).
+- Known gap: a returning user who has a local draft of an image and then signs in sees the server's set; the local draft is not merged or offered for import.

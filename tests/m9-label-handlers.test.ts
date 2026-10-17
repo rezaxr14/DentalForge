@@ -14,6 +14,7 @@ import { predictionsToAnnotations } from "@/shared/domain/annotation";
 import { diffToCommands, history as H, mirrorAnnotation } from "@/shared/domain/editing";
 import type { Role } from "@/shared/domain/auth";
 import type { Actor } from "@/shared/jobs/user-handlers";
+import { SetDtoSchema } from "@/shared/labels/dto";
 import * as h from "@/shared/labels/handlers";
 import { box } from "./helpers/annotation-repo-suite";
 
@@ -101,6 +102,7 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       const { orgA, as } = await world();
       const opened = await body(await h.openSet(as("alice", orgA, "annotator"), "1"));
       expect(opened.viewer).toEqual({ userId: "alice", role: "annotator" });
+      expect(() => SetDtoSchema.strict().parse(opened)).not.toThrow(); // the client's schema and the server's output cannot drift
       // somebody else reading the same set sees THEIR identity while the assignee stays alice
       const read = await body(await h.getSet(as("rita", orgA, "reviewer"), "1"));
       expect(read.viewer).toEqual({ userId: "rita", role: "reviewer" });
@@ -111,6 +113,7 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       const stale = await h.postOps(post("1/ops", { baseVersion: 1, ops: [create(box("n2", { author_id: "root" }), 1)] }), admin, "1");
       expect(stale.status).toBe(409);
       expect((await body(stale)).set.viewer).toEqual({ userId: "root", role: "admin" });
+      expect(() => SetDtoSchema.strict().parse(written)).not.toThrow();
       const submitted = await body(await h.postTransition(post("1/transition", { transition: "submit", baseVersion: 2 }), admin, "1"));
       expect(submitted.viewer).toEqual({ userId: "root", role: "admin" });
       expect(Object.keys(submitted.viewer).sort()).toEqual(["role", "userId"]);
