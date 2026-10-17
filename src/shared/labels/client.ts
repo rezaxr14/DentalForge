@@ -17,7 +17,11 @@ export type LabelResult<T = SetDto> =
 
 export type TransitionName = "submit" | "approve" | "reject" | "reopen";
 
+/** Whether the server can be used for labels at all. Never an HTTP error: see `labelStatus`. */
+export type StatusResult = { kind: "available" } | { kind: "signed-out" } | { kind: "unavailable"; message: string };
+
 export interface LabelClient {
+  status(): Promise<StatusResult>;
   get(imageId: string): Promise<LabelResult>;
   open(imageId: string): Promise<LabelResult>;
   ops(imageId: string, baseVersion: number, ops: unknown[], opts?: { keepalive?: boolean }): Promise<LabelResult>;
@@ -82,7 +86,20 @@ export function createLabelClient(fetchImpl: typeof fetch = (...a) => fetch(...a
     return { kind: "unavailable", retryAfterMs: retryAfterMs(res), message: problemText(parsed, `Server answered HTTP ${res.status}`) };
   }
 
+  async function status(): Promise<StatusResult> {
+    try {
+      const res = await fetchImpl(`${base}/status`, { method: "GET", headers: { accept: "application/json" }, credentials: "same-origin" });
+      const b = (await res.json()) as { available?: unknown; reason?: unknown };
+      if (res.status === 200 && b.available === true) return { kind: "available" };
+      if (res.status === 200 && b.available === false) return b.reason === "signed-out" ? { kind: "signed-out" } : { kind: "unavailable", message: "The server is not available for labels right now." };
+      return { kind: "unavailable", message: `Server answered HTTP ${res.status}` };
+    } catch (e) {
+      return { kind: "unavailable", message: e instanceof Error ? e.message : "network error" };
+    }
+  }
+
   return {
+    status,
     get: (id) => call("GET", id, ""),
     open: (id) => call("POST", id, "/open", {}),
     ops: (id, baseVersion, ops, opts) => call("POST", id, "/ops", { baseVersion, ops }, opts?.keepalive),

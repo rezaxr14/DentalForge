@@ -47,6 +47,19 @@ describe("label client", () => {
     expect(seen[0]!.init!.credentials).toBe("same-origin");
   });
 
+  it("asks /status and maps it: available, signed-out, unavailable, and any failure to unavailable (never throws)", async () => {
+    const st = (r: () => Response | Promise<Response>) => clientFor(r).status();
+    expect(await st(() => res(200, { available: true, reason: null }))).toEqual({ kind: "available" });
+    expect(await st(() => res(200, { available: false, reason: "signed-out" }))).toEqual({ kind: "signed-out" });
+    expect(await st(() => res(200, { available: false, reason: "unavailable" }))).toMatchObject({ kind: "unavailable" });
+    expect(await st(() => res(500, {}))).toMatchObject({ kind: "unavailable", message: "Server answered HTTP 500" });
+    expect(await st(() => res(200, "<html>proxy</html>"))).toMatchObject({ kind: "unavailable" });
+    expect(await st(() => { throw new TypeError("Failed to fetch"); })).toEqual({ kind: "unavailable", message: "Failed to fetch" });
+    const seen: { url?: string; init?: RequestInit }[] = [];
+    await clientFor(() => res(200, { available: true }), seen).status();
+    expect(`${seen[0]!.init?.method} ${seen[0]!.url}`).toBe("GET /api/labels/status");
+  });
+
   it("maps every status to one result", async () => {
     const problem = (status: number, detail: string) => res(status, { code: "x", title: "T", detail }, { "content-type": "application/problem+json" });
     const kind = async (r: Response) => (await clientFor(() => r).get("1"));

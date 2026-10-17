@@ -17,12 +17,15 @@ export function BoxTable({
   onSelect,
   onPatch,
   onDelete,
+  readOnly = false,
 }: {
   annotations: Annotation[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onPatch: (id: string, patch: EditPatch) => void;
   onDelete: (id: string) => void;
+  /** The set cannot be edited (not a draft, read-only role, or not connected yet): selecting still works, changing does not. */
+  readOnly?: boolean;
 }) {
   return (
     <section aria-labelledby="boxes-h" className="mt-4 rounded border border-zinc-200 p-3 dark:border-border">
@@ -32,7 +35,8 @@ export function BoxTable({
       {annotations.length === 0 ? (
         <p className="mt-2 text-xs text-zinc-500">No boxes yet. Draw one on the image, or use Suggest boxes.</p>
       ) : (
-        <div className="mt-2 overflow-x-auto">
+        /* `relative`: the table's sr-only cells are absolutely positioned and would otherwise escape this scroller and widen the whole page. */
+        <div className="relative mt-2 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <caption className="sr-only">Annotation boxes. Change quadrant, position or pathology in the row.</caption>
             <thead className="text-zinc-500">
@@ -67,7 +71,8 @@ export function BoxTable({
                     <td className={cell}>
                       <select
                         aria-label={`Quadrant for box ${n}`}
-                        className={select}
+                        className={`${select} disabled:opacity-50`}
+                        disabled={readOnly}
                         value={a.fdi_quadrant}
                         onChange={(e) => onPatch(a.id, { fdi_quadrant: Number(e.target.value) })}
                       >
@@ -79,7 +84,8 @@ export function BoxTable({
                     <td className={cell}>
                       <select
                         aria-label={`Position for box ${n}`}
-                        className={select}
+                        className={`${select} disabled:opacity-50`}
+                        disabled={readOnly}
                         value={a.fdi_position}
                         onChange={(e) => onPatch(a.id, { fdi_position: Number(e.target.value) })}
                       >
@@ -91,7 +97,8 @@ export function BoxTable({
                     <td className={cell}>
                       <select
                         aria-label={`Pathology for box ${n}`}
-                        className={select}
+                        className={`${select} disabled:opacity-50`}
+                        disabled={readOnly}
                         value={a.pathology}
                         onChange={(e) => onPatch(a.id, { pathology: e.target.value as Annotation["pathology"] })}
                       >
@@ -110,7 +117,8 @@ export function BoxTable({
                         type="button"
                         onClick={() => onDelete(a.id)}
                         aria-label={`Delete box ${n}`}
-                        className="rounded border border-red-300 px-2 py-0.5 text-red-700 dark:text-red-300"
+                        disabled={readOnly}
+                        className="rounded border border-red-300 px-2 py-0.5 text-red-700 disabled:opacity-40 dark:text-red-300"
                       >
                         Delete
                       </button>

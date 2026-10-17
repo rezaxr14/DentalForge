@@ -75,33 +75,38 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
     type Ed = ReturnType<Awaited<ReturnType<typeof world>>["session"]>;
     const ids = (e: Ed) => e.present.map((a) => a.id);
 
-    it("starts in local mode without opening anything when signed out, and on a 503 or a 403", async () => {
+    it("starts in local mode when signed out, when the server says it is unavailable, on a failing status call, and on a 403 from open", async () => {
       const { session } = await world();
       const out = session("alice");
       out.cur.actor = null;
       await out.engine.start();
       expect(out.view).toMatchObject({ mode: "local", localReason: "signed-out" });
-      expect(out.w.log.map((l) => l.action)).toEqual(["get"]); // no open attempt, nothing else
+      expect(out.w.log.map((l) => l.action)).toEqual(["status"]); // one question that is always answered 200, then nothing
+      const noDb = session("alice");
+      noDb.w.intercept = () => new Response(JSON.stringify({ available: false, reason: "unavailable" }), { status: 200, headers: { "content-type": "application/json" } });
+      await noDb.engine.start();
+      expect(noDb.view).toMatchObject({ mode: "local", localReason: "server-unavailable" });
+      expect(noDb.w.log.map((l) => l.action)).toEqual(["status"]);
       const down = session("alice");
       down.w.intercept = () => problem(503, {}, { "retry-after": "9" });
       await down.engine.start();
       expect(down.view).toMatchObject({ mode: "local", localReason: "server-unavailable" });
       const denied = session("alice");
-      denied.w.intercept = ({ action }) => (action === "get" ? problem(404) : problem(403, { detail: "Your role cannot open images for labelling" }));
+      denied.w.intercept = ({ action }) => (action === "open" ? problem(403, { detail: "Your role cannot open images for labelling" }) : null);
       await denied.engine.start();
       expect(denied.view).toMatchObject({ mode: "local", localReason: "forbidden", message: "Your role cannot open images for labelling" });
     });
 
-    it("opens an unopened image once, then loads an existing set without opening it again", async () => {
+    it("asks status, then opens (idempotent): the first opener becomes the assignee, a later one just loads the set", async () => {
       const { session } = await world();
       const a = session("alice");
       await a.engine.start();
-      expect(a.w.log.map((l) => l.action)).toEqual(["get", "open"]);
+      expect(a.w.log.map((l) => l.action)).toEqual(["status", "open"]);
       expect(a.view).toMatchObject({ mode: "server", status: "saved", version: 1, state: "draft", viewer: { userId: "alice", role: "annotator" }, assigneeId: "alice" });
       expect(a.remote).toEqual([{ why: "load", ids: [] }]);
       const b = session("bob");
       await b.engine.start();
-      expect(b.w.log.map((l) => l.action)).toEqual(["get"]);
+      expect(b.w.log.map((l) => l.action)).toEqual(["status", "open"]);
       expect(b.view.assigneeId).toBe("alice");
     });
 
@@ -369,7 +374,7 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       a.draw("a1"); // still inside the debounce
       const r = await a.engine.transition("submit");
       expect(r.kind).toBe("ok");
-      expect(a.w.log.map((l) => l.action)).toEqual(["get", "open", "ops", "transition"]);
+      expect(a.w.log.map((l) => l.action)).toEqual(["status", "open", "ops", "transition"]);
       expect(a.view).toMatchObject({ status: "readonly", state: "submitted", version: 3 });
       expect(a.remote.at(-1)).toMatchObject({ why: "transition", ids: ["a1"] });
       expect((await read()).state).toBe("submitted");

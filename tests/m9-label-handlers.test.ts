@@ -98,6 +98,18 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       expect(await body(await h.getSet(d, "1"))).toEqual(dto);
     });
 
+    it("labelStatus always answers 200: available for a member, signed-out without a session, unavailable when the store cannot be used", async () => {
+      const { store, orgA, as } = await world();
+      const say = async (d: Parameters<typeof h.labelStatus>[0]) => {
+        const res = h.labelStatus(d);
+        expect(res.status).toBe(200);
+        return res.json();
+      };
+      expect(await say(as("alice", orgA, "annotator"))).toEqual({ available: true, reason: null });
+      expect(await say({ store, actor: null })).toEqual({ available: false, reason: "signed-out" });
+      expect(await say(new Response("x", { status: 503 }))).toEqual({ available: false, reason: "unavailable" });
+    });
+
     it("tells the editor who is asking: viewer is the caller's own id and role on every endpoint, never the assignee's (ADR-0020)", async () => {
       const { orgA, as } = await world();
       const opened = await body(await h.openSet(as("alice", orgA, "annotator"), "1"));

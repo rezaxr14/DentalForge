@@ -19,11 +19,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BoxTable } from "./box-table";
 import { Odontogram } from "./odontogram";
+import { SyncBadge, describeSync } from "./sync-badge";
+import { useLabelSync } from "./use-label-sync";
 import type { Annotation, AnnotationStatus, LabelFixture } from "@/shared/contracts/labels";
 import { YoloPrelabelResult } from "@/shared/contracts/worker";
 import {
   clampBox, agreementStats, predictionsToAnnotations, prelabelResultToAnnotations, type Bbox,
 } from "@/shared/domain/annotation";
+import { can } from "@/shared/domain/auth";
 import { anatomicalName, fdiLabel, flipQuadrant } from "@/shared/domain/fdi";
 import {
   feedDigit, history as H, initialEntry, mirrorAnnotation, nextIndex, pathologyForCode,
@@ -33,6 +36,7 @@ import {
   CapabilityGate, ProvenanceBadge, contextFor, resolveStrategy, useWorkerSnapshot,
 } from "@/features/capability";
 import { useJobStream } from "@/features/jobs";
+import { isServerView, type LocalReason } from "@/shared/labels/sync-engine";
 import {
   applyDecision, demoAuthorId, ensureSet, getRole, saveAnnotations, setRole,
 } from "@/shared/lib/annotationStore";
@@ -66,19 +70,19 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const gestureSeq = useRef(0);
   const entryRef = useRef<EntryState>(initialEntry);
   const [live, setLive] = useState("");
-  const [version, setVersion] = useState(1);
-  const [status, setStatus] = useState<AnnotationStatus>("draft");
+  // Local (browser-only) mode state. When the set is server-backed, version and status come from the sync engine (below).
+  const [localVersion, setVersion] = useState(1);
+  const [localStatus, setStatus] = useState<AnnotationStatus>("draft");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [preview, setPreview] = useState<Bbox | null>(null);
   const [showGt, setShowGt] = useState(false);
   const [showPreds, setShowPreds] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  // Hydrate role lazily from localStorage (client-only component; the default
-  // matches the server snapshot so hydration is consistent).
-  const [role, setRoleState] = useState<"user" | "reviewer" | "admin">(() => getRole());
+  // Local-mode demo role. The stored value is read after mount (in `hydrateLocal`), never during render: a returning
+  // user's role differing from the server HTML is a hydration error (#418).
+  const [role, setRoleState] = useState<"user" | "reviewer" | "admin">("user");
   const [reviewReason, setReviewReason] = useState("");
-  const hydratedRef = useRef(false);
   // Worker tier of the "Suggest boxes" ladder: a queued yolo.prelabel job.
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobProblem, setJobProblem] = useState<string | null>(null);
@@ -100,16 +104,47 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const capability = useMemo(() => resolveStrategy("yolo.prelabel", capCtx), [capCtx]);
   const stream = useJobStream(jobId);
 
-  // One-shot localStorage hydration. This effect only *reads* external state
-  // (the store) into React state on mount — the supported useEffect pattern.
-  useEffect(() => {
-    if (hydratedRef.current) return;
-    hydratedRef.current = true;
+  // The image is saved to the server when a session with an active organization exists, otherwise to this browser (ADR-0020).
+  // Never both: the sync engine decides once at load, and again only if the session ends.
+  const hydrateLocal = (reason: LocalReason, present: readonly Annotation[]): void => {
+    setRoleState(getRole());
     const set = ensureSet(fixture.id, fixture.gt.length);
+    if (reason === "session-lost") {
+      // Signed out mid-edit: what is on screen is newer than the local copy, so it is the one to keep.
+      const res = saveAnnotations(fixture.id, [...present], set.version);
+      if (res.ok) {
+        setVersion(res.value.version);
+        setStatus(res.value.state);
+      } else {
+        setVersion(set.version);
+        setStatus(set.state);
+        setMsg(`Could not keep your edits in this browser (${res.code}): ${res.reason}`);
+      }
+      return;
+    }
     setHist((h) => H.reset(h, set.annotations));
     setVersion(set.version);
     setStatus(set.state);
-  }, [fixture.id, fixture.gt.length]);
+  };
+  const { view, engineRef } = useLabelSync({
+    imageId: fixture.id,
+    present: annotations,
+    onRemote: (a) => {
+      setHist((h) => H.reset(h, a));
+      setSelectedId((cur) => (cur && a.some((x) => x.id === cur) ? cur : null));
+      entryRef.current = initialEntry;
+    },
+    onLocalFallback: hydrateLocal,
+  });
+  const sv = isServerView(view) ? view : null;
+  const connecting = view === null || view.mode === "connecting";
+  const status: AnnotationStatus = sv ? sv.state : localStatus;
+  const version = sv ? sv.version : localVersion;
+  const uiRole: "user" | "reviewer" | "admin" = sv ? (sv.viewer.role === "annotator" ? "user" : sv.viewer.role) : role;
+  const authorId = sv ? sv.viewer.userId : demoAuthorId;
+  /** The one gate for every way of changing boxes: pointer, keyboard, buttons, table, imports. */
+  const canEdit = !connecting && status === "draft" && (sv ? sv.status !== "readonly" && can(sv.viewer.role, "annotation.edit") : true);
+  const sync = describeSync(view);
 
   const selected = useMemo(
     () => annotations.find((a) => a.id === selectedId) ?? null,
@@ -135,6 +170,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     const [x, y] = toOriginal(e.clientX, e.clientY);
     const handle = target.dataset.handle;
     const boxId = target.dataset.boxId;
+    if (!canEdit) {
+      if (boxId) setSelectedId(boxId);
+      return;
+    }
 
     if (handle && selectedId && selected) {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -219,7 +258,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           confidence: null,
           status: "draft",
           version: 1,
-          author_id: demoAuthorId,
+          author_id: authorId,
         };
         setHist((h) => H.create(h, next));
         setSelectedId(id);
@@ -253,48 +292,56 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
   const deleteById = useCallback(
     (id: string) => {
+      if (!canEdit) return;
       setHist((h) => H.remove(h, id));
       setSelectedId((cur) => (cur === id ? null : cur));
       announce("Box deleted.");
     },
-    [announce],
+    [announce, canEdit],
   );
   const deleteSelected = useCallback(() => {
     if (selectedId) deleteById(selectedId);
   }, [selectedId, deleteById]);
 
-  const patchBox = useCallback((id: string, patch: EditPatch): void => {
-    setHist((h) => H.update(h, id, patch));
-    setMsg(null);
-  }, []);
+  const patchBox = useCallback(
+    (id: string, patch: EditPatch): void => {
+      if (!canEdit) return;
+      setHist((h) => H.update(h, id, patch));
+      setMsg(null);
+    },
+    [canEdit],
+  );
   const patchSelected = (patch: EditPatch): void => {
     if (selectedId) patchBox(selectedId, patch);
   };
 
   const undo = useCallback((): void => {
+    if (!canEdit) return;
     const step = hist.past[hist.past.length - 1];
     if (!step) return;
     const next = H.undo(hist);
     setHist(next);
     setSelectedId((cur) => (cur && next.present.some((a) => a.id === cur) ? cur : null));
     announce(`Undid ${H.describe(step.command)}.`);
-  }, [hist, announce]);
+  }, [hist, announce, canEdit]);
   const redo = useCallback((): void => {
+    if (!canEdit) return;
     const step = hist.future[0];
     if (!step) return;
     const next = H.redo(hist);
     setHist(next);
     setSelectedId((cur) => (cur && next.present.some((a) => a.id === cur) ? cur : null));
     announce(`Redid ${H.describe(step.command)}.`);
-  }, [hist, announce]);
+  }, [hist, announce, canEdit]);
 
   const mirrorSelected = useCallback((): void => {
+    if (!canEdit) return;
     const src = annotations.find((a) => a.id === selectedId);
     if (!src) return;
     const m = mirrorAnnotation(
       src,
       { width: fixture.width, height: fixture.height },
-      { id: `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`, authorId: demoAuthorId },
+      { id: `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`, authorId },
     );
     if (!m) {
       setMsg("Cannot mirror this box: nothing usable is left inside the image.");
@@ -306,7 +353,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     const tooth = fdiLabel(m.fdi_quadrant, m.fdi_position);
     setMsg(taken ? `Mirrored to ${tooth}, which already has a box (see the odontogram).` : `Mirrored to ${tooth}. Adjust the box to the tooth.`);
     announce(`Mirrored to ${tooth}.`);
-  }, [annotations, selectedId, fixture.width, fixture.height, announce]);
+  }, [annotations, selectedId, fixture.width, fixture.height, announce, canEdit, authorId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -334,7 +381,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         entryRef.current = initialEntry;
         setSelectedId(null);
       }
-      if (mod || !selectedId) return;
+      if (!canEdit || mod || !selectedId) return;
       if (e.altKey) {
         const path = pathologyForCode(e.code);
         if (path) {
@@ -364,7 +411,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelected, selectedId, undo, redo, patchBox, mirrorSelected, announce]);
+  }, [deleteSelected, selectedId, undo, redo, patchBox, mirrorSelected, announce, canEdit]);
 
   /** Tab / Shift+Tab inside the image area walks the boxes; at either end focus leaves normally (no keyboard trap). */
   const onRegionKeyDown = (e: React.KeyboardEvent): void => {
@@ -379,13 +426,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   };
 
   const importPrelabels = (): void => {
-    if (!fixture.predictions?.length) return;
+    if (!canEdit || !fixture.predictions?.length) return;
     const added = predictionsToAnnotations(fixture.predictions, {
       imageId: fixture.id,
       width: fixture.width,
       height: fixture.height,
       modelId: fixture.prediction_model ?? "unknown",
       startIdx: nextIndex(annotations),
+      ...(sv ? { authorId: sv.viewer.userId } : {}),
     });
     if (added.length === 0) return;
     setHist((h) => H.createMany(h, added, "Import pre-labels"));
@@ -429,8 +477,8 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     const parsed = YoloPrelabelResult.safeParse(succeededJob.result);
     if (!parsed.success) {
       setMsg("Worker finished but the result failed schema validation — nothing applied.");
-    } else if (status !== "draft") {
-      setMsg("Worker finished, but this set is no longer a draft — suggestions were not applied.");
+    } else if (!canEdit) {
+      setMsg("Worker finished, but this set can no longer be edited — suggestions were not applied.");
     } else {
       const added = prelabelResultToAnnotations(parsed.data.boxes, {
         imageId: fixture.id,
@@ -438,11 +486,41 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         height: fixture.height,
         modelId: parsed.data.modelId,
         startIdx: nextIndex(annotations),
+        ...(sv ? { authorId: sv.viewer.userId } : {}),
       });
       setHist((h) => H.createMany(h, added, "Apply worker suggestions"));
       setMsg(`Worker suggested ${added.length} boxes (provenance: worker_exact); review them before submitting.`);
     }
   }
+
+  /** Server-backed state changes: the engine saves what is pending first, then asks the server (ADR-0019 §6). */
+  const transition = async (t: "submit" | "approve" | "reject" | "reopen", reason?: string): Promise<void> => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const r = await engine.transition(t, reason?.trim() ? reason.trim() : undefined);
+    switch (r.kind) {
+      case "ok":
+        setReviewReason("");
+        setMsg({ submit: "Set submitted for review.", approve: "Set approved.", reject: "Set rejected.", reopen: "Set reopened for editing." }[t]);
+        break;
+      case "conflict":
+        setMsg("Someone changed this set first; showing its current state.");
+        break;
+      case "forbidden":
+      case "invalid":
+        setMsg(r.message);
+        break;
+      case "unauthorized":
+        setMsg("You were signed out, so the set could not change state.");
+        break;
+      case "notFound":
+        setMsg("This image is not open on the server any more. Reload the page.");
+        break;
+      case "unavailable":
+        setMsg(`The server did not answer (${r.message}). Try again.`);
+        break;
+    }
+  };
 
   const review = (decision: "approved" | "rejected"): void => {
     const res = applyDecision(fixture.id, decision, reviewReason, role);
@@ -506,10 +584,11 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           <span className={`rounded border px-2 py-1 font-medium ${STATUS_TONE[status]}`}>
             {status} · v{version}
           </span>
+          <SyncBadge view={view} />
           <button
             type="button"
             onClick={undo}
-            disabled={!H.canUndo(hist)}
+            disabled={!canEdit || !H.canUndo(hist)}
             title="Undo (Ctrl/Cmd+Z)"
             className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 disabled:opacity-40"
           >
@@ -518,7 +597,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           <button
             type="button"
             onClick={redo}
-            disabled={!H.canRedo(hist)}
+            disabled={!canEdit || !H.canRedo(hist)}
             title="Redo (Ctrl/Cmd+Shift+Z)"
             className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 disabled:opacity-40"
           >
@@ -557,7 +636,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                   <button
                     type="button"
                     onClick={() => void suggestOnWorker()}
-                    disabled={status !== "draft"}
+                    disabled={!canEdit}
                     title="Queue an exact run; it executes when a worker connects"
                     className="rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-800 disabled:opacity-40"
                     data-suggest="queue-later"
@@ -574,7 +653,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                   <button
                     type="button"
                     onClick={() => void suggestOnWorker()}
-                    disabled={status !== "draft"}
+                    disabled={!canEdit}
                     title={r.reason}
                     className="rounded border border-emerald-500 bg-emerald-50 px-2 py-1 text-emerald-800 disabled:opacity-40"
                     data-suggest="worker"
@@ -585,7 +664,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                   <button
                     type="button"
                     onClick={importPrelabels}
-                    disabled={!fixture.predictions?.length || status !== "draft"}
+                    disabled={!fixture.predictions?.length || !canEdit}
                     title={r.reason}
                     className="rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1 text-zinc-700 dark:text-zinc-300 disabled:opacity-40"
                     data-suggest="replay"
@@ -597,7 +676,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                   <button
                     type="button"
                     onClick={() => void suggestOnWorker()}
-                    disabled={status !== "draft"}
+                    disabled={!canEdit}
                     title="Queue an exact run; it executes when a worker connects"
                     className="rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-800 disabled:opacity-40"
                     data-suggest="queue-later"
@@ -612,6 +691,11 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             {annotations.length} boxes · drag to draw · ⌫ deletes · Esc deselects · digits set the tooth (4 6 = 46)
           </span>
         </div>
+        {sync.detail && (
+          <p className="mb-2 text-xs text-zinc-700 dark:text-zinc-300" data-sync-detail>
+            {sync.detail}
+          </p>
+        )}
         <p className="mb-2 text-xs text-zinc-500" data-capability-reason>
           {capability.reason}
         </p>
@@ -686,6 +770,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           onSelect={setSelectedId}
           onPatch={patchBox}
           onDelete={deleteById}
+          readOnly={!canEdit}
         />
       </section>
 
@@ -706,7 +791,8 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       key={q}
                       type="button"
                       onClick={() => patchSelected({ fdi_quadrant: q })}
-                      className={`h-8 w-8 rounded border text-xs ${
+                      disabled={!canEdit}
+                      className={`h-8 w-8 rounded border text-xs disabled:opacity-40 ${
                         selected.fdi_quadrant === q
                           ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                           : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
@@ -725,7 +811,8 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       key={p}
                       type="button"
                       onClick={() => patchSelected({ fdi_position: p })}
-                      className={`h-8 w-8 rounded border text-xs ${
+                      disabled={!canEdit}
+                      className={`h-8 w-8 rounded border text-xs disabled:opacity-40 ${
                         selected.fdi_position === p
                           ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                           : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
@@ -744,7 +831,8 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                       key={p}
                       type="button"
                       onClick={() => patchSelected({ pathology: p })}
-                      className={`rounded border px-2 py-1 text-xs ${
+                      disabled={!canEdit}
+                      className={`rounded border px-2 py-1 text-xs disabled:opacity-40 ${
                         selected.pathology === p
                           ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                           : "border-zinc-300 dark:border-border bg-white dark:bg-card text-zinc-700 dark:text-zinc-300"
@@ -770,15 +858,17 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                 <button
                   type="button"
                   onClick={mirrorSelected}
+                  disabled={!canEdit}
                   title="Copy to the opposite tooth (M)"
-                  className="w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card py-1 text-xs text-zinc-700 dark:text-zinc-300"
+                  className="w-full rounded border disabled:opacity-40 border-zinc-300 dark:border-border bg-white dark:bg-card py-1 text-xs text-zinc-700 dark:text-zinc-300"
                 >
                   Mirror to {fdiLabel(flipQuadrant(selected.fdi_quadrant), selected.fdi_position)}
                 </button>
                 <button
                   type="button"
                   onClick={deleteSelected}
-                  className="w-full rounded border border-red-300 bg-red-50 py-1 text-xs text-red-700 hover:bg-red-100"
+                  disabled={!canEdit}
+                  className="w-full rounded border border-red-300 bg-red-50 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-40"
                 >
                   Delete box
                 </button>
@@ -797,37 +887,53 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           <div className="mt-2 flex flex-wrap gap-1.5">
             <button
               type="button"
-              onClick={() => persist()}
-              disabled={status !== "draft"}
+              onClick={() => (sv ? void engineRef.current?.flushNow() : persist())}
+              disabled={!canEdit}
               className="rounded border border-zinc-400 dark:border-border bg-white dark:bg-card px-2 py-1 text-xs disabled:opacity-40"
             >
-              Save draft
+              {sv ? "Save now" : "Save draft"}
             </button>
             <button
               type="button"
-              onClick={() => persist("submitted")}
-              disabled={status !== "draft"}
+              onClick={() => (sv ? void transition("submit") : persist("submitted"))}
+              disabled={!canEdit}
               className="rounded border border-sky-500 bg-sky-50 px-2 py-1 text-xs text-sky-800 disabled:opacity-40"
             >
               Submit for review
             </button>
+            {sv && status === "rejected" && (
+              <button
+                type="button"
+                onClick={() => void transition("reopen")}
+                className="rounded border border-zinc-400 dark:border-border bg-white dark:bg-card px-2 py-1 text-xs"
+              >
+                Reopen for editing
+              </button>
+            )}
           </div>
-          <label className="mt-3 block text-xs text-zinc-600">
-            Demo role (no auth yet, ADR-0005 §4)
-            <select
-              className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5"
-              value={role}
-              onChange={(e) => {
-                const r = e.target.value as "user" | "reviewer" | "admin";
-                setRoleState(r);
-                setRole(r);
-              }}
-            >
-              <option value="user">user (annotate)</option>
-              <option value="reviewer">reviewer (review)</option>
-              <option value="admin">admin</option>
-            </select>
-          </label>
+          {sv ? (
+            <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400" data-viewer>
+              Signed in as <span className="font-mono">{sv.viewer.userId.slice(0, 8)}</span> · {sv.viewer.role}
+              {sv.assigneeId && sv.assigneeId !== sv.viewer.userId ? " · assigned to someone else" : ""}
+            </p>
+          ) : (
+            <label className="mt-3 block text-xs text-zinc-600">
+              Role for this browser-only draft
+              <select
+                className="mt-1 w-full rounded border border-zinc-300 dark:border-border bg-white dark:bg-card px-2 py-1.5"
+                value={role}
+                onChange={(e) => {
+                  const r = e.target.value as "user" | "reviewer" | "admin";
+                  setRoleState(r);
+                  setRole(r);
+                }}
+              >
+                <option value="user">user (annotate)</option>
+                <option value="reviewer">reviewer (review)</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+          )}
           {status === "submitted" && (
             <div className="mt-2 space-y-1.5">
               <input
@@ -835,23 +941,24 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
                 value={reviewReason}
                 onChange={(e) => setReviewReason(e.target.value)}
                 placeholder="Reason (optional)"
+                aria-label="Review reason"
                 className="w-full rounded border border-zinc-300 dark:border-border px-2 py-1.5 text-xs"
               />
               <div className="flex gap-1.5">
                 <button
                   type="button"
-                  onClick={() => review("approved")}
-                  disabled={role === "user"}
-                  title={role === "user" ? "Switch role to reviewer" : undefined}
+                  onClick={() => (sv ? void transition("approve", reviewReason) : review("approved"))}
+                  disabled={uiRole === "user"}
+                  title={uiRole === "user" ? (sv ? "Only reviewers and admins can decide" : "Switch role to reviewer") : undefined}
                   className="flex-1 rounded border border-emerald-500 bg-emerald-50 py-1 text-xs text-emerald-800 disabled:opacity-40"
                 >
                   Approve
                 </button>
                 <button
                   type="button"
-                  onClick={() => review("rejected")}
-                  disabled={role === "user"}
-                  title={role === "user" ? "Switch role to reviewer" : undefined}
+                  onClick={() => (sv ? void transition("reject", reviewReason) : review("rejected"))}
+                  disabled={uiRole === "user"}
+                  title={uiRole === "user" ? (sv ? "Only reviewers and admins can decide" : "Switch role to reviewer") : undefined}
                   className="flex-1 rounded border border-red-400 bg-red-50 py-1 text-xs text-red-700 disabled:opacity-40"
                 >
                   Reject
