@@ -40,7 +40,7 @@ Reading the code and running that walk found four things that would each have br
 9. **Start is `GET /api/labels/status`, then `POST …/open`.** `status` always answers 200 (`{ available, reason }`): the editor asks on every load, and a 401 (signed out) or 503 (no database) would show up as a failed request in the console of every
    such visitor and break every strict-console browser spec. `open` is idempotent (the first opener becomes the assignee), so there is no GET/404 probe. A session without an active organization is "signed out" for this purpose
    (a fresh sign-in has none until the header's organization switcher sets it).
-10. **One gate, `canEdit`**, in `label-editor.tsx`: connected, set is a draft, the sync engine is not read-only, the role may edit. It guards pointer (selecting a box still works), keyboard, undo/redo, sidebar pickers, the box table (`readOnly`), imports and worker suggestions.
+10. **One gate, `canEdit`**, in `label-editor.tsx`: the set is a draft, the sync engine is not read-only, the role may edit. It is deliberately **open while the mode is still being decided** (see 16). It guards pointer (selecting a box still works), keyboard, undo/redo, sidebar pickers, the box table (`readOnly`), imports and worker suggestions.
     Before this, only the buttons were disabled: on a submitted set the pointer and keyboard still edited.
 11. **Where the numbers come from.** Server-backed: version, state and role come from the engine's view (`viewer.role` annotator → "user"); local: from the browser store as before, with the demo role read after mount (a render-time `localStorage` read is a hydration error for a returning user).
     New boxes, mirrors and imports are authored by the viewer (`authorId`). A visible badge says where the boxes live (`Saved to server`, `Unsaved changes`, `Saving…`, `Saved · merged with others' changes`, `Offline · will retry` with a countdown, `Not saved`, `Read-only · submitted`, `Saved in this browser only`) and a line under the toolbar says why.
@@ -54,6 +54,9 @@ Reading the code and running that walk found four things that would each have br
 7. **Restoring a box someone else drew** (undo of a deletion that was already flushed) is re-authored to the viewer by `diffToCommands(acked, present, { authorId })`: the restorer is drawing it again. Boxes already on the server are never touched.
 
 ### Open (layer 3c and later)
+16. **The editor is never dead while it decides** (found when the full browser suite failed on a Windows machine, where the first status call is slow because the database probe takes seconds to give up on an unreachable port; measured here: about 1 s against a refused port and 3.1 s against a hanging one).
+    The first version closed the gate until the decision and silently dropped everything drawn meanwhile. Now boxes drawn before the decision are kept and merged into whichever store wins: replayed on the server's set (re-authored to the viewer, then saved) or added to the local set;
+    a set that is no longer a draft drops them with a message. Saving and submitting stay disabled until the decision, so the two stores are never mixed.
 14. The Review and Export pages still read the browser store; they should read with `GET /api/labels/{image}` (which never writes and answers 404 until the image is opened) and say so. A returning user's browser-only draft is not offered for import after signing in.
 15. Canvas `EditorEngine` and a measured frame budget (slice 3); the overlay is DOM today.
 

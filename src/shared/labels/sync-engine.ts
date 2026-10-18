@@ -14,6 +14,8 @@
  *    server-backed or local, never both;
  *  - 422: the server refused the edit; no automatic retry (it would repeat forever), the next edit tries again.
  *
+ * Edits made before the mode is decided (the editor is usable meanwhile) are merged into the server's set when it loads.
+ *
  * Contract with the editor: `getPresent()` must return the newest boxes synchronously, INCLUDING right after `onRemote`
  * (keep them in a ref and update it inside the callback). The engine calls `onRemote` only for boxes that differ from what
  * the editor already has because of the server (load, rebase, transition, state conflict), never to echo the editor's own edits.
@@ -144,11 +146,28 @@ export function createSyncEngine(o: SyncOptions): SyncEngine {
     const r = await o.client.open(o.imageId);
     if (stopped) return;
     switch (r.kind) {
-      case "ok":
+      case "ok": {
+        // The editor is usable while this is being decided (a slow or unreachable database must not make it dead), so the
+        // user may already have drawn. Those boxes are creates relative to nothing: replay them on the server's set (the
+        // same merge as after a conflict) and send them; a set that is no longer a draft cannot take them.
+        const early = diffToCommands([], o.getPresent(), { authorId: r.value.viewer.userId });
         adopt(r.value);
+        if (early.length > 0 && r.value.state === "draft") {
+          o.onRemote(early.reduce(apply, r.value.annotations.slice()), "load");
+          emit({ mode: "server", localReason: null, status: "pending", message: null, retryAt: null });
+          void flushNow();
+          return;
+        }
         o.onRemote(r.value.annotations, "load");
-        emit({ mode: "server", localReason: null, status: settledStatus(), message: null, retryAt: null });
+        emit({
+          mode: "server",
+          localReason: null,
+          status: settledStatus(),
+          message: early.length > 0 ? "Boxes drawn while connecting were not saved: this set is no longer a draft." : null,
+          retryAt: null,
+        });
         return;
+      }
       case "unauthorized":
         return goLocal("signed-out", null);
       case "forbidden":

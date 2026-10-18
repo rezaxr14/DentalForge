@@ -122,7 +122,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       }
       return;
     }
-    setHist((h) => H.reset(h, set.annotations));
+    // Boxes drawn while the mode was still being decided are kept: added to the local set unless it is no longer a draft.
+    const early = present.filter((a) => !set.annotations.some((x) => x.id === a.id));
+    if (early.length > 0 && set.state !== "draft") setMsg("Boxes drawn while connecting were not kept: this set is no longer a draft.");
+    setHist((h) => H.reset(h, set.state === "draft" ? [...set.annotations, ...early] : set.annotations));
     setVersion(set.version);
     setStatus(set.state);
   };
@@ -142,8 +145,12 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const version = sv ? sv.version : localVersion;
   const uiRole: "user" | "reviewer" | "admin" = sv ? (sv.viewer.role === "annotator" ? "user" : sv.viewer.role) : role;
   const authorId = sv ? sv.viewer.userId : demoAuthorId;
-  /** The one gate for every way of changing boxes: pointer, keyboard, buttons, table, imports. */
-  const canEdit = !connecting && status === "draft" && (sv ? sv.status !== "readonly" && can(sv.viewer.role, "annotation.edit") : true);
+  /**
+   * The one gate for every way of changing boxes: pointer, keyboard, buttons, table, imports. Not closed while connecting:
+   * a slow or unreachable database would otherwise leave the editor dead for seconds (those boxes are merged in when the
+   * mode is decided). Saving and submitting do wait for the decision, so the two stores are never mixed.
+   */
+  const canEdit = status === "draft" && (sv ? sv.status !== "readonly" && can(sv.viewer.role, "annotation.edit") : true);
   const sync = describeSync(view);
 
   const selected = useMemo(
@@ -888,7 +895,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             <button
               type="button"
               onClick={() => (sv ? void engineRef.current?.flushNow() : persist())}
-              disabled={!canEdit}
+              disabled={!canEdit || connecting}
               className="rounded border border-zinc-400 dark:border-border bg-white dark:bg-card px-2 py-1 text-xs disabled:opacity-40"
             >
               {sv ? "Save now" : "Save draft"}
@@ -896,7 +903,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             <button
               type="button"
               onClick={() => (sv ? void transition("submit") : persist("submitted"))}
-              disabled={!canEdit}
+              disabled={!canEdit || connecting}
               className="rounded border border-sky-500 bg-sky-50 px-2 py-1 text-xs text-sky-800 disabled:opacity-40"
             >
               Submit for review
