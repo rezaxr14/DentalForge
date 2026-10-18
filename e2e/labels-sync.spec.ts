@@ -34,6 +34,18 @@ async function open(page: Page, base = app.base) {
     return !!b && b.getAttribute("data-sync-status") !== "loading";
   });
 }
+/** Open and draw as soon as the image is there, without waiting for the server/browser decision (what a fast user does). */
+async function openFast(page: Page, statusDelayMs: number) {
+  await page.route("**/api/labels/status", async (r) => {
+    await new Promise((res) => setTimeout(res, statusDelayMs));
+    await r.continue();
+  });
+  await page.goto(`${app.base}/labels/1`);
+  await page.waitForFunction(() => {
+    const img = document.querySelector<HTMLImageElement>('img[alt^="Radiograph"]');
+    return !!img && img.complete && img.naturalWidth > 0;
+  });
+}
 async function draw(page: Page, x0: number, y0: number, x1: number, y1: number) {
   const b = (await region(page).boundingBox())!;
   await page.mouse.move(b.x + b.width * x0, b.y + b.height * y0);
@@ -241,6 +253,44 @@ test("browser-only drafts are read-only too once submitted (the gate does not de
   await expect(rows(page)).toHaveCount(1);
   await expect(page.getByRole("combobox", { name: "Pathology for box 1" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled();
+  expect(watch.problems()).toEqual([]);
+});
+
+test("a slow server decision does not make the editor dead: boxes drawn meanwhile are kept and saved to the server", async ({ browser }) => {
+  const { context, page } = await signedIn(browser, "slow");
+  const watch = watchPage(page, app.base);
+  await openFast(page, 2500);
+  await expect(badge(page)).toHaveAttribute("data-sync-status", "loading"); // still deciding
+  await expect(page.getByRole("button", { name: /^Save (draft|now)$/ })).toBeDisabled(); // saving waits for the decision: no mixing stores
+  await draw(page, 0.2, 0.3, 0.3, 0.5);
+  await expect(rows(page)).toHaveCount(1); // the draw was not dropped
+  await expect(badge(page)).toHaveAttribute("data-sync-mode", "server", { timeout: 15_000 });
+  await expect(badge(page)).toHaveAttribute("data-sync-status", "saved", { timeout: 15_000 });
+  await expect(rows(page)).toHaveCount(1);
+  const set = (await (await page.request.get(`${app.base}/api/labels/1`)).json()) as { viewer: { userId: string }; annotations: { author_id: string }[] };
+  expect(set.annotations).toHaveLength(1);
+  expect(set.annotations[0]!.author_id).toBe(set.viewer.userId); // not the demo author the box was drawn with
+  await page.unroute("**/api/labels/status");
+  await page.reload();
+  await expect(rows(page)).toHaveCount(1);
+  expect(watch.problems()).toEqual([]);
+  await context.close();
+});
+
+test("a slow decision, then browser-only: boxes drawn meanwhile are kept and can be saved locally", async ({ page }) => {
+  const watch = watchPage(page, app.base);
+  await openFast(page, 2500);
+  await expect(badge(page)).toHaveAttribute("data-sync-status", "loading");
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  await draw(page, 0.2, 0.3, 0.3, 0.5);
+  await expect(rows(page)).toHaveCount(1);
+  await expect(badge(page)).toHaveAttribute("data-sync-mode", "local", { timeout: 15_000 });
+  await expect(rows(page)).toHaveCount(1); // still there after the decision
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeEnabled();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.unroute("**/api/labels/status");
+  await page.reload();
+  await expect(rows(page)).toHaveCount(1);
   expect(watch.problems()).toEqual([]);
 });
 

@@ -64,6 +64,8 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
           get view() { return engine.view(); },
           ops: () => w.log.filter((l) => l.action === "ops"),
           draw(id: string, bbox: [number, number, number, number] = [100, 100, 50, 60]) { hist = H.create(hist, box(id, { bbox, author_id: userId })); engine.notifyChange(); },
+          /** A box with someone else's author id: what the editor produces before it knows who is signed in. */
+          drawAs(author: string, id: string, bbox: [number, number, number, number] = [100, 100, 50, 60]) { hist = H.create(hist, box(id, { bbox, author_id: author })); engine.notifyChange(); },
           drag(id: string, bbox: [number, number, number, number]) { hist = H.update(hist, id, { bbox }); engine.notifyChange(); },
           label(id: string, pathology: string) { hist = H.update(hist, id, { pathology }); engine.notifyChange(); },
           remove(id: string) { hist = H.remove(hist, id); engine.notifyChange(); },
@@ -415,6 +417,46 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       own.draw("c1");
       await own.engine.transition("submit");
       expect(await own.engine.transition("approve")).toMatchObject({ kind: "forbidden" });
+    });
+
+    it("boxes drawn before the mode is decided are merged into the server's set, re-authored to the viewer, and saved", async () => {
+      const { session, read } = await world();
+      const bob = session("bob");
+      await bob.engine.start();
+      bob.draw("b1", [600, 100, 50, 60]);
+      await bob.sched.advance(800);
+      const a = session("alice");
+      a.drawAs("demo-user", "a1"); // drawn while "Connecting…": the editor does not know the viewer yet
+      a.drawAs("demo-user", "a2", [300, 100, 50, 60]);
+      expect(a.w.log).toHaveLength(0); // nothing is sent before the mode is decided
+      await a.engine.start();
+      expect(a.remote).toEqual([{ why: "load", ids: expect.arrayContaining(["a1", "a2", "b1"]) }]);
+      expect(a.remote[0]!.ids).toHaveLength(3);
+      expect(a.present.filter((x) => x.id !== "b1").map((x) => x.author_id)).toEqual(["alice", "alice"]); // the editor's own copy too
+      expect(a.view.status).toMatch(/pending|saving/);
+      await a.sched.advance(0);
+      expect(a.view.status).toBe("saved");
+      const s = await read();
+      expect(s.annotations.map((x) => x.id).sort()).toEqual(["a1", "a2", "b1"]);
+      expect(s.annotations.filter((x) => x.id !== "b1").map((x) => x.author_id)).toEqual(["alice", "alice"]); // not "demo-user"
+    });
+
+    it("with nothing drawn early the load is a plain load, and a set that is no longer a draft drops early boxes with a message", async () => {
+      const { session } = await world();
+      const bob = session("bob");
+      await bob.engine.start();
+      bob.draw("b1");
+      await bob.engine.transition("submit");
+      const plain = session("carol");
+      await plain.engine.start();
+      expect(plain.view).toMatchObject({ status: "readonly", message: null });
+      const a = session("alice");
+      a.drawAs("demo-user", "a1");
+      await a.engine.start();
+      expect(a.view).toMatchObject({ status: "readonly", state: "submitted", message: expect.stringContaining("while connecting") });
+      expect(a.remote).toEqual([{ why: "load", ids: ["b1"] }]);
+      await a.sched.advance(5000);
+      expect(a.ops()).toHaveLength(0);
     });
 
     it("stop() also cancels a pending retry", async () => {
