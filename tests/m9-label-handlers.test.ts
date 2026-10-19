@@ -14,7 +14,7 @@ import { predictionsToAnnotations } from "@/shared/domain/annotation";
 import { diffToCommands, history as H, mirrorAnnotation } from "@/shared/domain/editing";
 import type { Role } from "@/shared/domain/auth";
 import type { Actor } from "@/shared/jobs/user-handlers";
-import { SetDtoSchema } from "@/shared/labels/dto";
+import { ListDtoSchema, SetDtoSchema } from "@/shared/labels/dto";
 import * as h from "@/shared/labels/handlers";
 import { box } from "./helpers/annotation-repo-suite";
 
@@ -96,6 +96,32 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       const again = await h.openSet(as("bob", orgA), "1");
       expect((await body(again)).assigneeId).toBe("alice");
       expect(await body(await h.getSet(d, "1"))).toEqual(dto);
+    });
+
+    it("lists the org's opened sets read-only: unopened images absent, nothing created, other orgs invisible, every role may read (ADR-0020 3c)", async () => {
+      const { store, orgA, orgB, as } = await world();
+      expect((await h.listSets({ store, actor: null })).status).toBe(401);
+      // nothing opened yet: an empty list, and listing must not open anything
+      const empty = await body(await h.listSets(as("rita", orgA, "reviewer")));
+      expect(empty.sets).toEqual([]);
+      expect(empty.viewer).toEqual({ userId: "rita", role: "reviewer" });
+      expect((await h.getSet(as("rita", orgA), "1")).status).toBe(404);
+      expect((await h.getSet(as("rita", orgA), "2")).status).toBe(404);
+      // alice opens image 2 and draws on it; org B opens image 1
+      await h.openSet(as("alice", orgA), "2");
+      await h.postOps(post("2/ops", { baseVersion: 1, ops: [create(box("n1", { author_id: "alice" }), 0)] }), as("alice", orgA), "2");
+      await h.openSet(as("bob", orgB), "1");
+      for (const who of [as("alice", orgA), as("rita", orgA, "reviewer"), as("root", orgA, "admin")]) {
+        const list = await body(await h.listSets(who));
+        expect(() => ListDtoSchema.strict().parse(list)).not.toThrow();
+        expect(list.sets.map((s: { imageId: string }) => s.imageId)).toEqual(["2"]); // image 1 is org B's, 3-5 are unopened
+        expect(list.sets[0].set).toMatchObject({ version: 2, state: "draft", assigneeId: "alice" });
+        expect(list.sets[0].set.annotations.map((a: { id: string }) => a.id)).toEqual(["n1"]);
+        expect(list.sets[0].set.viewer).toEqual(list.viewer); // each set carries the same caller identity
+      }
+      // reading changed nothing: the set is exactly where it was and image 1 is still unopened for org A
+      expect((await body(await h.getSet(as("alice", orgA), "2"))).version).toBe(2);
+      expect((await h.getSet(as("alice", orgA), "1")).status).toBe(404);
     });
 
     it("labelStatus always answers 200: available for a member, signed-out without a session, unavailable when the store cannot be used", async () => {

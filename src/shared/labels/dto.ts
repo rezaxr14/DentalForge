@@ -7,9 +7,11 @@ import { z } from "zod";
 import { Annotation, AnnotationStatus } from "@/shared/contracts/labels";
 import { Role } from "@/shared/domain/auth";
 
+const ViewerSchema = z.object({ userId: z.string().min(1), role: Role });
+
 export const SetDtoSchema = z.object({
   /** The caller's own id and role in the active org (ADR-0020). */
-  viewer: z.object({ userId: z.string().min(1), role: Role }),
+  viewer: ViewerSchema,
   version: z.number().int().min(1),
   state: AnnotationStatus,
   assigneeId: z.string().nullable(),
@@ -18,4 +20,11 @@ export const SetDtoSchema = z.object({
   annotations: z.array(Annotation),
 });
 export type SetDto = z.infer<typeof SetDtoSchema>;
+
+/** `GET /api/labels`: every opened set of the active org, read-only (the Review, Export and queue pages). Unopened images are absent. */
+export const ListDtoSchema = z.object({
+  viewer: ViewerSchema,
+  sets: z.array(z.object({ imageId: z.string().min(1), set: SetDtoSchema })),
+});
+export type ListDto = z.infer<typeof ListDtoSchema>;
 export type Viewer = SetDto["viewer"];

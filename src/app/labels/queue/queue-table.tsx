@@ -3,8 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { alQueueScore } from "@/shared/domain/annotation";
-import { getSet } from "@/shared/lib/annotationStore";
-import { useMounted } from "@/shared/ui/use-mounted";
+import { useLabelSets } from "../use-label-sets";
 
 interface QueueImage {
   id: string;
@@ -14,13 +13,13 @@ interface QueueImage {
 }
 
 export function QueueTable({ images }: { images: QueueImage[] }) {
-  // The local annotation store only exists in the browser: until mounted, render what the server rendered.
-  const mounted = useMounted();
+  // The server's sets or this browser's drafts, decided after mount: until then render what the server rendered.
+  const { getSet } = useLabelSets();
   const rows = useMemo(
     () =>
       images
         .map((img) => {
-          const local = mounted ? getSet(img.id) : null;
+          const local = getSet(img.id);
           const labeled = local?.annotations.length ?? 0;
           const s = alQueueScore({
             meanConf: img.meanConf,
@@ -30,7 +29,7 @@ export function QueueTable({ images }: { images: QueueImage[] }) {
           return { ...img, labeled, state: local?.state ?? "unstarted", score: s.score };
         })
         .sort((a, b) => b.score - a.score || Number(a.id) - Number(b.id)),
-    [images, mounted],
+    [images, getSet],
   );
   return (
     <div className="mt-6 overflow-x-auto rounded border border-zinc-200">

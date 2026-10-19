@@ -15,6 +15,7 @@ import { CommandSchema, MAX_OPS_PER_REQUEST } from "@/shared/domain/editing/pers
 import { json, problem, validationProblem } from "@/shared/jobs/problem";
 import type { Actor } from "@/shared/jobs/user-handlers";
 import type { SetDto } from "./dto";
+import { listLabels } from "@/shared/lib/fixtures";
 import { resolveFixtureImage } from "./image-source";
 
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -104,6 +105,24 @@ function outcomeResponse(o: TransitionOutcome, actor: Actor): Response {
     case "not_found":
       return problem(404, "not_found", "Image not opened yet", "POST /api/labels/:image/open first.");
   }
+}
+
+/**
+ * Every opened set of the caller's org, in one read-only request (ADR-0020 layer 3c). Never writes: an image nobody has
+ * opened is simply absent (the Review page must not make its reader the assignee), and unlike `GET …/{image}` there is no
+ * 404 to log for each of them.
+ */
+export async function listSets(deps: LabelDeps): Promise<Response> {
+  if (!deps.actor) return problem(401, "unauthorized", "Sign in required");
+  const repos = deps.store.scoped(deps.actor.orgId);
+  const sets: { imageId: string; set: SetDto }[] = [];
+  for (const l of listLabels()) {
+    const image = (deps.resolveImage ?? resolveFixtureImage)(l.id);
+    if (!image) continue;
+    const snap = await repos.getAnnotationSet(image);
+    if (snap) sets.push({ imageId: l.id, set: toSetDto(snap, deps.actor) });
+  }
+  return json({ viewer: { userId: deps.actor.userId, role: deps.actor.role }, sets });
 }
 
 /**

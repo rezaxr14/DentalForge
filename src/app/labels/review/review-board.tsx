@@ -5,9 +5,10 @@ import Link from "next/link";
 import type { Annotation } from "@/shared/contracts/labels";
 import { agreementStats } from "@/shared/domain/annotation";
 import {
-  applyDecision, getDecisions, getRole, listSets, resetAll, setRole,
+  applyDecision, getDecisions, getRole, resetAll, setRole,
 } from "@/shared/lib/annotationStore";
 import { useMounted } from "@/shared/ui/use-mounted";
+import { useLabelSets } from "../use-label-sets";
 
 export interface GtRef {
   id: string;
@@ -25,18 +26,47 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Role, sets and decisions live in localStorage. Until mounted the board renders what the
-  // server rendered (default role, no sets); reading the store during the hydrating render
-  // would differ from the server HTML for any returning user (React #418).
+  // Sets come from the server when a session with an active organization exists, otherwise from this browser (never both).
+  // Until that is decided the board renders what the server rendered (no sets); the browser store is only read after mount,
+  // because reading it during the hydrating render would differ from the server HTML for a returning user (React #418).
+  const ls = useLabelSets();
+  const server = ls.phase === "server";
   const mounted = useMounted();
-  const role = mounted ? getRole() : "user";
-  const sets = mounted ? listSets() : [];
+  const role: "user" | "reviewer" | "admin" = ls.viewer
+    ? ls.viewer.role === "annotator" ? "user" : ls.viewer.role
+    : ls.phase === "local" && mounted ? getRole() : "user";
   const switchRole = (r: "user" | "reviewer" | "admin"): void => {
     setRole(r);
     setTick((t) => t + 1);
   };
 
-  const decide = (imageId: string, decision: "approved" | "rejected"): void => {
+  const decide = async (imageId: string, decision: "approved" | "rejected"): Promise<void> => {
+    if (server) {
+      const r = await ls.transition(imageId, decision === "approved" ? "approve" : "reject", reason);
+      switch (r.kind) {
+        case "ok":
+          setReason("");
+          setMsg(`image ${imageId}: ${decision}.`);
+          break;
+        case "conflict":
+          setMsg(`image ${imageId}: someone changed this set first; the list was refreshed.`);
+          break;
+        case "forbidden":
+        case "invalid":
+          setMsg(r.message);
+          break;
+        case "unauthorized":
+          setMsg("You were signed out. Reload to continue with this browser's drafts.");
+          break;
+        case "notFound":
+          setMsg(`image ${imageId}: not opened on the server.`);
+          break;
+        case "unavailable":
+          setMsg(`The server did not answer (${r.message}). Try again.`);
+          break;
+      }
+      return;
+    }
     const res = applyDecision(imageId, decision, reason, role);
     if (!res.ok) {
       setMsg(`Review failed (${res.code}): ${res.reason}`);
@@ -49,6 +79,20 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
 
   return (
     <div className="mt-6 space-y-4" key={tick}>
+      {ls.phase !== "loading" && (
+        <p className="max-w-3xl text-sm text-zinc-600" data-review-source={ls.phase}>
+          {server
+            ? "Signed in: this board reads your organization's sets from the server. Decisions are recorded there with an audit entry, and the server refuses a decision on a set you drew boxes on."
+            : `${ls.localReason === "server-unavailable" ? "The server could not be reached" : "You are not signed in, or no organization is selected"}, so this board shows the drafts kept in this browser. Decisions are recorded in this browser only (ADR-0005 §4) and the role switcher below is a demo stand-in.`}
+        </p>
+      )}
+      {server && ls.viewer && (
+        <p className="text-xs text-zinc-600" data-viewer>
+          Signed in as <span className="font-mono">{ls.viewer.userId.slice(0, 8)}</span> · {ls.viewer.role}
+          {role === "user" ? " · only reviewers and admins can decide" : ""}
+        </p>
+      )}
+      {ls.phase === "local" && (
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="text-zinc-600">Demo role:</span>
         {(["user", "reviewer", "admin"] as const).map((r) => (
@@ -78,14 +122,15 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
           Reset local state
         </button>
       </div>
+      )}
       {msg && <p className="text-sm text-zinc-700 dark:text-zinc-300">{msg}</p>}
 
       {refs.map((ref) => {
-        const set = sets.find((s) => s.image_id === ref.id);
+        const set = ls.getSet(ref.id);
         const stats = set
           ? agreementStats(ref.id, set.assignee_id, "gt_import", set.annotations, ref.gt)
           : null;
-        const decisions = mounted ? getDecisions(ref.id) : [];
+        const decisions = ls.phase === "local" && mounted ? getDecisions(ref.id) : [];
         return (
           <section key={ref.id} className="rounded border border-zinc-200 p-4">
             <div className="flex flex-wrap items-baseline gap-2">
@@ -127,7 +172,9 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
                 <div className="rounded border p-2">
                   <p className="text-xs text-zinc-500">Decisions</p>
                   <p className="font-mono">
-                    {decisions.length ? decisions.map((d) => d.decision).join(", ") : "—"}
+                    {server
+                      ? set.state === "approved" || set.state === "rejected" ? set.state : "—" // the server keeps the history in its audit log
+                      : decisions.length ? decisions.map((d) => d.decision).join(", ") : "—"}
                   </p>
                 </div>
               </div>
@@ -143,18 +190,18 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
                 />
                 <button
                   type="button"
-                  onClick={() => decide(ref.id, "approved")}
+                  onClick={() => void decide(ref.id, "approved")}
                   disabled={role === "user"}
-                  title={role === "user" ? "Switch role to reviewer" : undefined}
+                  title={role === "user" ? (server ? "Only reviewers and admins can decide" : "Switch role to reviewer") : undefined}
                   className="rounded border border-emerald-500 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800 disabled:opacity-40"
                 >
                   Approve
                 </button>
                 <button
                   type="button"
-                  onClick={() => decide(ref.id, "rejected")}
+                  onClick={() => void decide(ref.id, "rejected")}
                   disabled={role === "user"}
-                  title={role === "user" ? "Switch role to reviewer" : undefined}
+                  title={role === "user" ? (server ? "Only reviewers and admins can decide" : "Switch role to reviewer") : undefined}
                   className="rounded border border-red-400 bg-red-50 px-3 py-1.5 text-xs text-red-700 disabled:opacity-40"
                 >
                   Reject
