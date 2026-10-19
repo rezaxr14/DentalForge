@@ -60,6 +60,19 @@ describe("label client", () => {
     expect(`${seen[0]!.init?.method} ${seen[0]!.url}`).toBe("GET /api/labels/status");
   });
 
+  it("list(): GET /api/labels, parsed with the list schema, and every failure mapped like the others", async () => {
+    const list = { viewer: dto.viewer, sets: [{ imageId: "1", set: dto }] };
+    const seen: { url?: string; init?: RequestInit }[] = [];
+    expect(await clientFor(() => res(200, list), seen).list()).toEqual({ kind: "ok", value: list });
+    expect(`${seen[0]!.init?.method} ${seen[0]!.url}`).toBe("GET /api/labels");
+    expect(seen[0]!.init!.body).toBeUndefined();
+    expect(await clientFor(() => res(401, {})).list()).toEqual({ kind: "unauthorized" });
+    expect(await clientFor(() => res(503, {}, { "retry-after": "4" })).list()).toMatchObject({ kind: "unavailable", retryAfterMs: 4000 });
+    expect(await clientFor(() => res(200, { viewer: dto.viewer, sets: [{ imageId: "", set: dto }] })).list()).toMatchObject({ kind: "unavailable" });
+    expect(await clientFor(() => res(200, dto)).list()).toMatchObject({ kind: "unavailable" }); // a single set is not a list
+    expect(await clientFor(() => { throw new TypeError("Failed to fetch"); }).list()).toMatchObject({ kind: "unavailable" });
+  });
+
   it("maps every status to one result", async () => {
     const problem = (status: number, detail: string) => res(status, { code: "x", title: "T", detail }, { "content-type": "application/problem+json" });
     const kind = async (r: Response) => (await clientFor(() => r).get("1"));

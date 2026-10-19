@@ -14,9 +14,7 @@ export default function ReviewPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Review</h1>
       <p className="mt-1 max-w-3xl text-sm text-zinc-600">
         Adjudicate submitted sets against the DENTEX consensus GT with
-        inter-annotator agreement (IoU≥0.5 match, Cohen&apos;s κ). Decisions are
-        recorded locally (ADR-0005 §4); the role switcher is a demo stand-in —
-        no auth exists yet.
+        inter-annotator agreement (IoU≥0.5 match, Cohen&apos;s κ).
       </p>
       <ReviewBoard refs={refs} />
     </PageShell>

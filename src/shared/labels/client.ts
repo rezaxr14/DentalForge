@@ -3,7 +3,7 @@
  * Every outcome is a typed result, never an exception, so the sync engine decides what each one means:
  * ok | conflict (version/state, with the server's current set) | unauthorized | forbidden | notFound | invalid | unavailable.
  */
-import { SetDtoSchema, type SetDto } from "./dto";
+import { ListDtoSchema, SetDtoSchema, type ListDto, type SetDto } from "./dto";
 
 export type LabelResult<T = SetDto> =
   | { kind: "ok"; value: T }
@@ -22,6 +22,8 @@ export type StatusResult = { kind: "available" } | { kind: "signed-out" } | { ki
 
 export interface LabelClient {
   status(): Promise<StatusResult>;
+  /** Every opened set of the active org; read-only. */
+  list(): Promise<LabelResult<ListDto>>;
   get(imageId: string): Promise<LabelResult>;
   open(imageId: string): Promise<LabelResult>;
   ops(imageId: string, baseVersion: number, ops: unknown[], opts?: { keepalive?: boolean }): Promise<LabelResult>;
@@ -47,8 +49,24 @@ function problemText(body: unknown, fallback: string): string {
 }
 
 export function createLabelClient(fetchImpl: typeof fetch = (...a) => fetch(...a), base = "/api/labels"): LabelClient {
-  async function call(method: "GET" | "POST", imageId: string, action: string, body?: unknown, keepalive = false): Promise<LabelResult> {
-    const url = `${base}/${encodeURIComponent(imageId)}${action}`;
+  /** Everything that is not a 200: one place decides what each HTTP status means. */
+  function failure(res: Response, parsed: unknown): LabelResult<never> {
+    if (res.status === 409) {
+      const b = (parsed ?? {}) as { reason?: unknown; set?: unknown };
+      const set = SetDtoSchema.safeParse(b.set);
+      if (set.success && (b.reason === "version" || b.reason === "state")) return { kind: "conflict", reason: b.reason, set: set.data };
+      return { kind: "unavailable", retryAfterMs: null, message: "unreadable conflict answer" };
+    }
+    if (res.status === 401) return { kind: "unauthorized" };
+    if (res.status === 403) return { kind: "forbidden", message: problemText(parsed, "Not allowed") };
+    if (res.status === 404) return { kind: "notFound" };
+    if (res.status === 400 || res.status === 413 || res.status === 415 || res.status === 422) {
+      return { kind: "invalid", message: problemText(parsed, `The server refused the request (HTTP ${res.status})`) };
+    }
+    return { kind: "unavailable", retryAfterMs: retryAfterMs(res), message: problemText(parsed, `Server answered HTTP ${res.status}`) };
+  }
+
+  async function request<T>(method: "GET" | "POST", url: string, parse: (v: unknown) => T | null, body?: unknown, keepalive = false): Promise<LabelResult<T>> {
     let res: Response;
     try {
       res = await fetchImpl(url, {
@@ -67,24 +85,21 @@ export function createLabelClient(fetchImpl: typeof fetch = (...a) => fetch(...a
     } catch {
       parsed = null;
     }
-    if (res.status === 200) {
-      const dto = SetDtoSchema.safeParse(parsed);
-      return dto.success ? { kind: "ok", value: dto.data } : { kind: "unavailable", retryAfterMs: null, message: "unexpected response from the server" };
-    }
-    if (res.status === 409) {
-      const b = (parsed ?? {}) as { reason?: unknown; set?: unknown };
-      const set = SetDtoSchema.safeParse(b.set);
-      if (set.success && (b.reason === "version" || b.reason === "state")) return { kind: "conflict", reason: b.reason, set: set.data };
-      return { kind: "unavailable", retryAfterMs: null, message: "unreadable conflict answer" };
-    }
-    if (res.status === 401) return { kind: "unauthorized" };
-    if (res.status === 403) return { kind: "forbidden", message: problemText(parsed, "Not allowed") };
-    if (res.status === 404) return { kind: "notFound" };
-    if (res.status === 400 || res.status === 413 || res.status === 415 || res.status === 422) {
-      return { kind: "invalid", message: problemText(parsed, `The server refused the request (HTTP ${res.status})`) };
-    }
-    return { kind: "unavailable", retryAfterMs: retryAfterMs(res), message: problemText(parsed, `Server answered HTTP ${res.status}`) };
+    if (res.status !== 200) return failure(res, parsed);
+    const value = parse(parsed);
+    return value === null ? { kind: "unavailable", retryAfterMs: null, message: "unexpected response from the server" } : { kind: "ok", value };
   }
+
+  const parseSet = (v: unknown): SetDto | null => {
+    const r = SetDtoSchema.safeParse(v);
+    return r.success ? r.data : null;
+  };
+  const parseList = (v: unknown): ListDto | null => {
+    const r = ListDtoSchema.safeParse(v);
+    return r.success ? r.data : null;
+  };
+  const call = (method: "GET" | "POST", imageId: string, action: string, body?: unknown, keepalive = false): Promise<LabelResult> =>
+    request(method, `${base}/${encodeURIComponent(imageId)}${action}`, parseSet, body, keepalive);
 
   async function status(): Promise<StatusResult> {
     try {
@@ -100,6 +115,7 @@ export function createLabelClient(fetchImpl: typeof fetch = (...a) => fetch(...a
 
   return {
     status,
+    list: () => request("GET", base, parseList),
     get: (id) => call("GET", id, ""),
     open: (id) => call("POST", id, "/open", {}),
     ops: (id, baseVersion, ops, opts) => call("POST", id, "/ops", { baseVersion, ops }, opts?.keepalive),

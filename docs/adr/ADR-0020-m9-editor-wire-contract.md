@@ -1,6 +1,6 @@
 # ADR-0020 — M9 slice 2, part 3: what the editor sends and receives
 
-Date: 2026-10-17 · Status: **layers 1, 2, 3a and 3b implemented and tested (viewer identity, edit patches, snapshot diff, bounds slack, model-box authorship, restored foreign boxes, typed client, sync engine, editor wiring); the Review and Export pages still read the browser store (layer 3c)** · Refines ADR-0018 (edit history) and ADR-0019 §4 and §8.
+Date: 2026-10-17 · Status: **layers 1, 2, 3a, 3b and 3c implemented and tested (viewer identity, edit patches, snapshot diff, bounds slack, model-box authorship, restored foreign boxes, typed client, sync engine, editor wiring, Review/Export/queue on the server)** · Refines ADR-0018 (edit history) and ADR-0019 §4 and §8.
 
 ## Context
 Before wiring the editor to `/api/labels`, every command the real editing core can produce was driven through the server's own `CommandSchema` and `applyOpsToSet`
@@ -47,24 +47,33 @@ Reading the code and running that walk found four things that would each have br
 12. **Leaving the page**: `beforeunload` prompts while edits are unsaved, `pagehide`/`visibilitychange` send them with `keepalive`.
 13. Two layout bugs surfaced only with realistic signed-in state on a 390 px phone and are fixed here: the site header's right-hand group did not wrap (603 px wide), and the box table's `sr-only` cells are absolutely positioned inside a scroller that was not `relative`, so they escaped it and widened the whole page by 81 px.
 
+16. **The editor is never dead while it decides** (found when the full browser suite failed on a Windows machine, where the first status call is slow because the database probe takes seconds to give up on an unreachable port; measured here: about 1 s against a refused port and 3.1 s against a hanging one).
+    The first version closed the gate until the decision and silently dropped everything drawn meanwhile. Now boxes drawn before the decision are kept and merged into whichever store wins: replayed on the server's set (re-authored to the viewer, then saved) or added to the local set;
+    a set that is no longer a draft drops them with a message. Saving and submitting stay disabled until the decision, so the two stores are never mixed.
+
 ### Built in layer 2 (was open in layer 1)
 6. **Model boxes ("Suggest boxes") are authored by the viewer and name their model.** The authorship rule is unchanged: an exception for `yolo:` authors would let an admin create boxes that count as nobody's work and then decide the set,
    bypassing the self-review rule. `Annotation` gets an optional `model_id` (max 200, only on `source: "model"` boxes, immutable after creation because patches are strict), stored in the existing `annotations.model_id` column by both stores
    and returned only when set. `predictionsToAnnotations` / `prelabelResultToAnnotations` take `authorId` (the viewer, for boxes that go to the server) and always set `model_id`; without `authorId` the local-mode default `yolo:<model>` author stays.
 7. **Restoring a box someone else drew** (undo of a deletion that was already flushed) is re-authored to the viewer by `diffToCommands(acked, present, { authorId })`: the restorer is drawing it again. Boxes already on the server are never touched.
 
-### Open (layer 3c and later)
-16. **The editor is never dead while it decides** (found when the full browser suite failed on a Windows machine, where the first status call is slow because the database probe takes seconds to give up on an unreachable port; measured here: about 1 s against a refused port and 3.1 s against a hanging one).
-    The first version closed the gate until the decision and silently dropped everything drawn meanwhile. Now boxes drawn before the decision are kept and merged into whichever store wins: replayed on the server's set (re-authored to the viewer, then saved) or added to the local set;
-    a set that is no longer a draft drops them with a message. Saving and submitting stay disabled until the decision, so the two stores are never mixed.
-14. The Review and Export pages still read the browser store; they should read with `GET /api/labels/{image}` (which never writes and answers 404 until the image is opened) and say so. A returning user's browser-only draft is not offered for import after signing in.
+### Built in layer 3c: Review, Export and the queue on the server
+17. **`GET /api/labels`** (`listSets`) returns every opened set of the caller's org in one read-only request, `{ viewer, sets: [{ imageId, set }] }`. It never writes (an image nobody opened is absent; reading must not make the reader the assignee) and, unlike one GET per image,
+    there is no 404 to log for each unopened one. All roles may read it. Tested on both stores (org isolation, nothing created, strict schema) and mutation-tested.
+18. **One source rule for all three pages** (`use-label-sets.ts`): ask `status`; available → the server's sets, otherwise this browser's drafts, never both; until decided `getSet` answers null, which is what the server rendered (hydration-safe; a returning user's local drafts are read only after mount).
+    The Review board decides through the same transitions as the editor (`approve`/`reject` with the set's version and the reason; the list is re-read afterwards, also after a conflict); the role comes from the session (an annotator sees the buttons disabled with the reason); the demo role switcher and "Reset local state" exist only in browser mode.
+    Export reads the same sets (only approved boxes leave the app) and says where they come from. The "no auth exists yet" wording is gone; each page says which store it shows and why.
+19. **Gap, stated:** the Review board shows the decided state but not the decision history or reason in server mode; the server writes them to `audit_log` and there is no read endpoint for it yet.
+
+### Open
+14. A returning user's browser-only draft is not offered for import after signing in (the Review/Export/queue pages show the server's sets only, the editor too). Recommendation: an explicit "import my browser draft" action in the editor that replays the local boxes as creates, never automatic.
 15. Canvas `EditorEngine` and a measured frame budget (slice 3); the overlay is DOM today.
 
 ## Consequences
 - 21 hand-made mutants over the viewer field, the diff and the bounds rule (layer 1) and 11 over `model_id`, the model-only rule, `authorId` and re-authoring (layer 2) were all killed; two layer-2 survivors were equivalent clauses (a `model_id` comparison for a field that cannot change, a `!==` guard before a no-op copy) and were deleted after the mutation harness itself was fixed (its first run reported every mutant as surviving: the exit code was lost in nested shell quoting).
 - One existing expectation changed shape: the worker-result mapping test now also expects `model_id` (a field was added, nothing was loosened).
 - The editing-core test that asserted status in patches changed; reviewers should read that diff.
-- The editor now saves to the server when a session with an active organization exists; the Review and Export pages still read the browser store and the Review page still says "no auth exists yet" (layer 3c: read with GET, never write).
+- The editor, Review, Export and the queue use the server when a session with an active organization exists and this browser's drafts otherwise.
 - The engine and client have 41 + 3 tests that run against the REAL handlers on both stores; 31 mutants over engine, client and schema were all killed (two survivors were test gaps and are closed).
-- Not covered by any browser test: a reviewer deciding on someone else's set (the browser spec has one admin who drew the boxes, so it shows the self-review refusal only); a role that cannot edit (all roles can today).
+- Browser-tested with real accounts: an invited reviewer deciding someone else's set, an annotator who cannot decide, the author's self-review refusal. Not covered: a role that cannot edit (all roles can today).
 - Known gap: a returning user who has a local draft of an image and then signs in sees the server's set; the local draft is not merged or offered for import.

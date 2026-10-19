@@ -7,8 +7,7 @@ import {
   cocoExport, yoloLines, type ExportImage,
 } from "@/shared/domain/annotation";
 import { buildZip, listZipEntries, zipTextEntries } from "@/shared/domain/zip";
-import { getSet } from "@/shared/lib/annotationStore";
-import { useMounted } from "@/shared/ui/use-mounted";
+import { useLabelSets, type SetLike } from "../use-label-sets";
 
 type Format = "yolo" | "coco";
 type Source = "mine" | "gt";
@@ -25,10 +24,10 @@ function download(bytes: Uint8Array, filename: string, mime: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-function boxRows(images: ExportImage[], onlyApproved: boolean, mounted = true) {
+function boxRows(images: ExportImage[], onlyApproved: boolean, getSet: (id: string) => SetLike | null) {
   const byImage: Record<string, Annotation[]> = {};
   for (const img of images) {
-    const set = mounted ? getSet(img.id) : null;
+    const set = getSet(img.id);
     const anns = (set?.annotations ?? []) as Annotation[];
     byImage[img.id] = onlyApproved
       ? anns.filter((a) => a.status === "approved")
@@ -43,23 +42,25 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
   const [onlyApproved, setOnlyApproved] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Browser-only store: render the server's (empty) preview until mounted (hydration-safe).
-  const mounted = useMounted();
+  // Sets are the server's (signed in with an organization) or this browser's, decided after mount: until then the
+  // preview is the server-rendered empty one (hydration-safe).
+  const ls = useLabelSets();
+  const getSet = ls.getSet;
   const preview = useMemo(() => {
     if (source !== "mine") return null;
-    const byImage = boxRows(images, onlyApproved, mounted);
+    const byImage = boxRows(images, onlyApproved, getSet);
     return images.map((img) => ({
       id: img.id,
       lines: yoloLines(byImage[img.id] ?? [], img.width, img.height, false),
       n: (byImage[img.id] ?? []).length,
     }));
-  }, [images, source, onlyApproved, mounted]);
+  }, [images, source, onlyApproved, getSet]);
 
   const totalBoxes = preview?.reduce((n, r) => n + r.n, 0) ?? 0;
 
   const onDownload = (): void => {
     if (source !== "mine" || !preview) return;
-    const byImage = boxRows(images, onlyApproved);
+    const byImage = boxRows(images, onlyApproved, getSet);
     if (format === "coco") {
       const doc = cocoExport(images, byImage, false);
       const enc = new TextEncoder();
@@ -93,6 +94,13 @@ export function ExportPanel({ images }: { images: ExportImage[] }) {
 
   return (
     <div className="mt-6 space-y-4">
+      {ls.phase !== "loading" && source === "mine" && (
+        <p className="text-xs text-zinc-600" data-export-source={ls.phase}>
+          {ls.phase === "server"
+            ? "“my sets” are your organization's sets on the server."
+            : "“my sets” are the drafts kept in this browser (not signed in, no organization selected, or the server is unreachable)."}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span className="text-xs text-zinc-600">Format</span>
         {(["yolo", "coco"] as const).map((f) => (
