@@ -19,6 +19,8 @@ const args = (process.env.PW_CHROMIUM_ARGS ?? "").split(/\s+/).filter(Boolean);
 
 export default defineConfig({
   testDir: "./e2e",
+  // Timing measurements are opt-in (`pnpm perf:editor`): they depend on the machine and must not gate a normal run.
+  testIgnore: process.env.E2E_PERF ? [] : ["**/perf-*.spec.ts"],
   // Specs own their servers and databases rows; one worker keeps ports and rows predictable.
   workers: 1,
   fullyParallel: false,

@@ -17,7 +17,8 @@
     "mock-worker": "tsx examples/mock-worker/index.ts",
     "smoke": "node scripts/smoke-degradation.mjs",
     "e2e:worker": "node scripts/e2e-worker.mjs",
-    "e2e:browser": "playwright test"
+    "e2e:browser": "playwright test",
+    "perf:editor": "E2E_PERF=1 playwright test e2e/perf-editor.spec.ts"
   },
   "dependencies": {
     "@redis/client": "6.2.1",

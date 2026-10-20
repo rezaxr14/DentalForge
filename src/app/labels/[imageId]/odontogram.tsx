@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { odontogram, type Slot } from "@/shared/domain/editing";
 import type { Annotation } from "@/shared/contracts/labels";
 
@@ -15,7 +16,7 @@ const TONE: Record<Slot["state"], string> = {
  * ● labeled, ! more than one box on the same tooth, · empty. Clicking a slot selects its box (and cycles
  * through the boxes when there is a conflict).
  */
-export function Odontogram({
+export const Odontogram = memo(function Odontogram({
   annotations,
   selectedId,
   onSelect,
@@ -82,4 +83,4 @@ export function Odontogram({
       <p className="mt-2 text-[11px] text-zinc-500">● one box · ! several boxes on one tooth · · none. Right of the patient is on the left.</p>
     </section>
   );
-}
+});

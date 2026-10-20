@@ -48,3 +48,4 @@ next-env.d.ts
 /public/demo-assets/
 __pycache__/
 *.pyc
+/perf-results/

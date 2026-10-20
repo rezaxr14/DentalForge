@@ -101,6 +101,7 @@ test("signed in: a drawn box is saved to the server, survives a reload, and the 
 
   const res = await drawAndSave(page, 0.2, 0.3, 0.3, 0.5);
   expect(res.status()).toBe(200);
+  await expect(page.locator("div.border-dashed.border-amber-400:visible")).toHaveCount(0); // the rubber band is gone after release
   await drawAndSave(page, 0.5, 0.3, 0.6, 0.5);
   await page.getByRole("combobox", { name: "Pathology for box 1" }).selectOption("Impacted");
   await expect(badge(page)).toHaveAttribute("data-sync-status", "saved", { timeout: 10_000 });
