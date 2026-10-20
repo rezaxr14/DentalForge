@@ -16,9 +16,10 @@
  * one step per drag), FDI quick entry (digits), Alt+1..4 pathology, mirror,
  * Tab cycles boxes, odontogram and an accessible table view.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { BoxTable } from "./box-table";
 import { Odontogram } from "./odontogram";
+import { applyBoxStyle, OverlayBox, StaticBoxes } from "./overlay";
 import { SyncBadge, describeSync } from "./sync-badge";
 import { useLabelSync } from "./use-label-sync";
 import type { Annotation, AnnotationStatus, LabelFixture } from "@/shared/contracts/labels";
@@ -50,11 +51,8 @@ const STATUS_TONE: Record<AnnotationStatus, string> = {
   rejected: "border-red-300 bg-red-50 text-red-800",
 };
 
-function sourceTone(source: Annotation["source"]): string {
-  if (source === "gt_import") return "border-emerald-500";
-  if (source === "model") return "border-sky-500";
-  return "border-amber-500";
-}
+
+const JSON_SHOWN = 25;
 
 type Drag =
   | { kind: "draw"; startX: number; startY: number; x: number; y: number }
@@ -75,7 +73,15 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const [localStatus, setStatus] = useState<AnnotationStatus>("draft");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [preview, setPreview] = useState<Bbox | null>(null);
+  // A drag gesture's geometry lives OUTSIDE React state (ADR-0021): the dragged node's style is written directly and the
+  // result is committed to the history once, on release. `gestureBox` is the box being moved/resized/drawn right now.
+  const boxEls = useRef(new Map<string, HTMLElement>());
+  const registerBox = useCallback((id: string, el: HTMLElement | null): void => {
+    if (el) boxEls.current.set(id, el);
+    else boxEls.current.delete(id);
+  }, []);
+  const previewEl = useRef<HTMLDivElement>(null);
+  const gestureBox = useRef<Bbox | null>(null);
   const [showGt, setShowGt] = useState(false);
   const [showPreds, setShowPreds] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -202,7 +208,16 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setSelectedId(null);
     setDrag({ kind: "draw", startX: x, startY: y, x, y });
-    setPreview([x, y, 0, 0]);
+    gestureBox.current = [x, y, 0, 0];
+    showPreview([x, y, 0, 0]);
+  };
+
+  /** The rubber band is one persistent node that is shown, moved and hidden directly. */
+  const showPreview = (box: Bbox | null): void => {
+    const el = previewEl.current;
+    if (!el) return;
+    el.hidden = box === null;
+    if (box) applyBoxStyle(el, box, fixture.width, fixture.height);
   };
 
   const onPointerMove = (e: React.PointerEvent): void => {
@@ -215,7 +230,8 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         Math.abs(x - drag.startX),
         Math.abs(y - drag.startY),
       ];
-      setPreview(box);
+      gestureBox.current = box;
+      showPreview(box);
       return;
     }
     if (drag.kind === "move") {
@@ -226,9 +242,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         fixture.width,
         fixture.height,
       );
-      if (clamped) {
-        const key = gestureRef.current ?? undefined;
-        setHist((h) => H.update(h, drag.id, { bbox: clamped }, { coalesceKey: key }));
+      const el = boxEls.current.get(drag.id);
+      if (clamped && el) {
+        gestureBox.current = clamped;
+        applyBoxStyle(el, clamped, fixture.width, fixture.height);
       }
       return;
     }
@@ -244,15 +261,17 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       fixture.width,
       fixture.height,
     );
-    if (next) {
-      const key = gestureRef.current ?? undefined;
-      setHist((h) => H.update(h, drag.id, { bbox: next }, { coalesceKey: key }));
+    const el = boxEls.current.get(drag.id);
+    if (next && el) {
+      gestureBox.current = next;
+      applyBoxStyle(el, next, fixture.width, fixture.height);
     }
   };
 
   const onPointerUp = (): void => {
-    if (drag?.kind === "draw" && preview) {
-      const box = clampBox(preview, fixture.width, fixture.height);
+    const gesture = gestureBox.current;
+    if (drag?.kind === "draw" && gesture) {
+      const box = clampBox(gesture, fixture.width, fixture.height);
       if (box) {
         const id = `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`;
         const next: Annotation = {
@@ -271,8 +290,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         setSelectedId(id);
         setMsg(null);
       }
-      setPreview(null);
+      showPreview(null);
+    } else if ((drag?.kind === "move" || drag?.kind === "resize") && gesture) {
+      // One commit for the whole gesture: still a single undo step, and the only render it causes.
+      const id = drag.id;
+      const key = gestureRef.current ?? undefined;
+      setHist((h) => H.update(h, id, { bbox: gesture }, { coalesceKey: key }));
     }
+    gestureBox.current = null;
     gestureRef.current = null;
     setDrag(null);
   };
@@ -542,46 +567,39 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     setMsg(`Set ${decision}.`);
   };
 
+  // The agreement panel and the JSON view are read-outs, not part of the editing loop: they follow the boxes one render
+  // behind (React 19 `useDeferredValue`), so computing and printing 500 boxes never sits between an input and its paint.
+  const deferredAnnotations = useDeferredValue(annotations);
   const agreement = useMemo(
-    () => agreementStats(fixture.id, "human", "gt_import", annotations, fixture.gt),
-    [annotations, fixture.gt, fixture.id],
+    () => agreementStats(fixture.id, "human", "gt_import", deferredAnnotations, fixture.gt),
+    [deferredAnnotations, fixture.gt, fixture.id],
   );
+  // The JSON view shows the first JSON_SHOWN boxes: laying out the text of 500 boxes (thousands of lines) cost ~30 ms on
+  // every edit (measured with a layout trace). The full document is one click away and is built only then.
+  const setJson = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          image_id: fixture.id,
+          state: status,
+          version,
+          annotations: deferredAnnotations.slice(0, JSON_SHOWN),
+          ...(deferredAnnotations.length > JSON_SHOWN ? { annotations_not_shown: deferredAnnotations.length - JSON_SHOWN } : {}),
+        },
+        null,
+        1,
+      ),
+    [deferredAnnotations, fixture.id, status, version],
+  );
+  const copyJson = (): void => {
+    const full = JSON.stringify({ image_id: fixture.id, state: status, version, annotations }, null, 1);
+    navigator.clipboard.writeText(full).then(
+      () => setMsg(`Copied the full set JSON (${annotations.length} boxes).`),
+      () => setMsg("Could not copy: the browser blocked clipboard access."),
+    );
+  };
 
   const pct = (v: number): string => `${(v * 100).toFixed(1)}%`;
-
-  const overlayBox = (
-    b: Bbox,
-    cls: string,
-    key: string,
-    interactive: boolean,
-    boxId?: string,
-  ): React.ReactNode => (
-    <div
-      key={key}
-      className={`absolute ${cls}`}
-      style={{
-        left: `${(b[0] / fixture.width) * 100}%`,
-        top: `${(b[1] / fixture.height) * 100}%`,
-        width: `${(b[2] / fixture.width) * 100}%`,
-        height: `${(b[3] / fixture.height) * 100}%`,
-      }}
-      data-box-id={interactive ? boxId : undefined}
-    >
-      {interactive && boxId === selectedId && (
-        <>
-          {(["nw", "ne", "sw", "se"] as const).map((h) => (
-            <span
-              key={h}
-              data-handle={h}
-              className={`absolute h-2.5 w-2.5 rounded-sm border border-zinc-900 bg-white dark:bg-card ${
-                h.includes("n") ? "-top-1.5" : "-bottom-1.5"
-              } ${h.includes("w") ? "-left-1.5" : "-right-1.5"} cursor-pointer`}
-            />
-          ))}
-        </>
-      )}
-    </div>
-  );
 
   return (
     <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
@@ -747,28 +765,15 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             draggable={false}
           />
           {/* GT overlay (green, non-interactive) */}
-          {showGt &&
-            fixture.gt.map((g, i) =>
-              overlayBox(g.bbox as Bbox, "border-2 border-dashed border-emerald-400", `gt_${i}`, false),
-            )}
+          {showGt && <StaticBoxes items={fixture.gt} className="border-2 border-dashed border-emerald-400" w={fixture.width} h={fixture.height} />}
           {/* Pre-label overlay (sky, non-interactive) */}
-          {showPreds &&
-            (fixture.predictions ?? []).map((p, i) =>
-              overlayBox(p.bbox as Bbox, "border border-sky-400/70", `pl_${i}`, false),
-            )}
+          {showPreds && <StaticBoxes items={fixture.predictions ?? []} className="border border-sky-400/70" w={fixture.width} h={fixture.height} />}
           {/* Human/model annotations (interactive) */}
-          {annotations.map((a) =>
-            overlayBox(
-              a.bbox as Bbox,
-              `border-2 ${sourceTone(a.source)} ${a.id === selectedId ? "bg-amber-300/20" : "bg-transparent"} cursor-move`,
-              a.id,
-              true,
-              a.id,
-            ),
-          )}
+          {annotations.map((a) => (
+            <OverlayBox key={a.id} a={a} selected={a.id === selectedId} w={fixture.width} h={fixture.height} register={registerBox} />
+          ))}
           {/* Rubber-band preview */}
-          {preview &&
-            overlayBox(preview, "border-2 border-dashed border-amber-400 bg-amber-400/20", "preview", false)}
+          <div ref={previewEl} hidden className="absolute border-2 border-dashed border-amber-400 bg-amber-400/20" />
         </div>
         <Odontogram annotations={annotations} selectedId={selectedId} onSelect={setSelectedId} />
         <BoxTable
@@ -1010,7 +1015,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
         {/* JSON view */}
         <section className="rounded border border-zinc-200 p-3">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Set JSON</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Set JSON</h2>
+            {annotations.length > JSON_SHOWN && (
+              <button type="button" onClick={copyJson} className="rounded border border-zinc-300 px-2 py-0.5 text-[11px] dark:border-border">
+                Copy full JSON
+              </button>
+            )}
+          </div>
           <pre
             // Scrolls once there are a few boxes, so keyboard users must be able to focus it (axe: scrollable-region-focusable).
             tabIndex={0}
@@ -1018,7 +1030,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             aria-label="Annotation set as JSON"
             className="mt-2 max-h-56 overflow-auto rounded bg-zinc-900 p-2 text-[11px] leading-relaxed text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            {JSON.stringify({ image_id: fixture.id, state: status, version, annotations }, null, 1)}
+            {setJson}
           </pre>
         </section>
       </aside>
