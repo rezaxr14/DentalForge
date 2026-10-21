@@ -20,6 +20,8 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { BoxTable } from "./box-table";
 import { Odontogram } from "./odontogram";
 import { applyBoxStyle, OverlayBox, StaticBoxes } from "./overlay";
+import { useViewport } from "./use-viewport";
+import { ZoomControls } from "./zoom-controls";
 import { SyncBadge, describeSync } from "./sync-badge";
 import { useLabelSync } from "./use-label-sync";
 import type { Annotation, AnnotationStatus, LabelFixture } from "@/shared/contracts/labels";
@@ -54,10 +56,14 @@ const STATUS_TONE: Record<AnnotationStatus, string> = {
 
 const JSON_SHOWN = 25;
 
+/** Ids of boxes drawn in the browser: time-based, plus the position so two boxes in one millisecond cannot collide. */
+const newBoxId = (index: number): string => `ann_${Date.now().toString(36)}_${index}`;
+
 type Drag =
   | { kind: "draw"; startX: number; startY: number; x: number; y: number }
   | { kind: "move"; id: string; offX: number; offY: number }
-  | { kind: "resize"; id: string; handle: "nw" | "ne" | "sw" | "se"; box: Bbox };
+  | { kind: "resize"; id: string; handle: "nw" | "ne" | "sw" | "se"; box: Bbox }
+  | { kind: "pan" };
 
 export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const imgRef = useRef<HTMLImageElement>(null);
@@ -178,6 +184,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   );
 
   const onPointerDown = (e: React.PointerEvent): void => {
+    // Pan: the middle button, or the left one with the hand tool / Space. Works on a read-only set too.
+    if (e.button === 1 || (e.button === 0 && panning)) {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      vp.beginPan(e.clientX, e.clientY);
+      setDrag({ kind: "pan" });
+      return;
+    }
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     const [x, y] = toOriginal(e.clientX, e.clientY);
@@ -222,6 +236,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
   const onPointerMove = (e: React.PointerEvent): void => {
     if (!drag) return;
+    if (drag.kind === "pan") {
+      vp.movePan(e.clientX, e.clientY);
+      return;
+    }
     const [x, y] = toOriginal(e.clientX, e.clientY);
     if (drag.kind === "draw") {
       const box: Bbox = [
@@ -270,10 +288,12 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
 
   const onPointerUp = (): void => {
     const gesture = gestureBox.current;
-    if (drag?.kind === "draw" && gesture) {
+    if (drag?.kind === "pan") {
+      vp.endPan();
+    } else if (drag?.kind === "draw" && gesture) {
       const box = clampBox(gesture, fixture.width, fixture.height);
       if (box) {
-        const id = `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`;
+        const id = newBoxId(nextIndex(annotations));
         const next: Annotation = {
           id,
           bbox: box,
@@ -321,6 +341,22 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   );
 
   const announce = useCallback((m: string) => setLive(m), []);
+
+  // Zoom and pan (ADR-0022): the image area is a clipped viewport onto a content node that is transformed directly.
+  const regionRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const vp = useViewport({ regionRef, contentRef, naturalWidth: fixture.width, announce });
+  const { zoomBy, fit: fitView, panByPx, reveal: revealBox } = vp;
+  const [hand, setHand] = useState(false);
+  const [space, setSpace] = useState(false);
+  const panning = hand || space;
+  // Selecting from the table, the odontogram, the Tab walk or a mirror asks the view to show the box even when it was
+  // already the selected one (the user may have panned away since).
+  const [revealTick, setRevealTick] = useState(0);
+  const selectAndReveal = useCallback((id: string): void => {
+    setSelectedId(id);
+    setRevealTick((t) => t + 1);
+  }, []);
 
   const deleteById = useCallback(
     (id: string) => {
@@ -373,7 +409,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     const m = mirrorAnnotation(
       src,
       { width: fixture.width, height: fixture.height },
-      { id: `ann_${Date.now().toString(36)}_${nextIndex(annotations)}`, authorId },
+      { id: newBoxId(nextIndex(annotations)), authorId },
     );
     if (!m) {
       setMsg("Cannot mirror this box: nothing usable is left inside the image.");
@@ -381,11 +417,11 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     }
     const taken = annotations.some((a) => a.fdi_quadrant === m.fdi_quadrant && a.fdi_position === m.fdi_position);
     setHist((h) => H.create(h, m));
-    setSelectedId(m.id);
+    selectAndReveal(m.id);
     const tooth = fdiLabel(m.fdi_quadrant, m.fdi_position);
     setMsg(taken ? `Mirrored to ${tooth}, which already has a box (see the odontogram).` : `Mirrored to ${tooth}. Adjust the box to the tooth.`);
     announce(`Mirrored to ${tooth}.`);
-  }, [annotations, selectedId, fixture.width, fixture.height, announce, canEdit, authorId]);
+  }, [annotations, selectedId, fixture.width, fixture.height, announce, canEdit, authorId, selectAndReveal]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -412,6 +448,35 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
       if (e.key === "Escape") {
         entryRef.current = initialEntry;
         setSelectedId(null);
+      }
+      // View keys work on any set, read-only included.
+      if (!mod && !e.altKey) {
+        if (e.key === "+" || e.key === "=") {
+          e.preventDefault();
+          zoomBy(1.5);
+          return;
+        }
+        if (e.key === "-" || e.key === "_") {
+          e.preventDefault();
+          zoomBy(1 / 1.5);
+          return;
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          fitView();
+          return;
+        }
+        if (e.shiftKey && e.key.startsWith("Arrow")) {
+          e.preventDefault();
+          const step = 80;
+          panByPx(e.key === "ArrowLeft" ? step : e.key === "ArrowRight" ? -step : 0, e.key === "ArrowUp" ? step : e.key === "ArrowDown" ? -step : 0);
+          return;
+        }
+        if (e.code === "Space" && tag !== "BUTTON") {
+          e.preventDefault(); // no page scroll while the hand is held
+          setSpace(true);
+          return;
+        }
       }
       if (!canEdit || mod || !selectedId) return;
       if (e.altKey) {
@@ -441,9 +506,29 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         mirrorSelected();
       }
     };
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (e.code === "Space") setSpace(false);
+    };
+    const onBlur = (): void => setSpace(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelected, selectedId, undo, redo, patchBox, mirrorSelected, announce, canEdit]);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [deleteSelected, selectedId, undo, redo, patchBox, mirrorSelected, announce, canEdit, zoomBy, fitView, panByPx]);
+
+  // A box selected from the keyboard, the table or the odontogram may be off screen when zoomed: bring it into view.
+  const selectedBox = useRef<readonly number[] | null>(null);
+  useEffect(() => {
+    selectedBox.current = selected ? selected.bbox : null;
+  });
+  useEffect(() => {
+    const b = selectedBox.current;
+    if (selectedId && b) revealBox(b as [number, number, number, number], fixture.width, fixture.height);
+  }, [selectedId, revealTick, revealBox, fixture.width, fixture.height]);
 
   /** Tab / Shift+Tab inside the image area walks the boxes; at either end focus leaves normally (no keyboard trap). */
   const onRegionKeyDown = (e: React.KeyboardEvent): void => {
@@ -453,7 +538,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     const box = annotations[next];
     if (!box) return;
     e.preventDefault();
-    setSelectedId(box.id);
+    selectAndReveal(box.id);
     announce(`Box ${next + 1} of ${annotations.length}: ${fdiLabel(box.fdi_quadrant, box.fdi_position)}, ${box.pathology}.`);
   };
 
@@ -741,27 +826,34 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         <p id="editor-keys" className="sr-only">
           Tab and Shift+Tab move between boxes. With a box selected: two digits set the tooth, so 4 then 6 is tooth 46;
           Alt+1 to Alt+4 set the pathology; M mirrors the box to the opposite tooth; Delete removes it;
-          Ctrl or Cmd+Z undoes. The same boxes are editable in the table below.
+          Ctrl or Cmd+Z undoes. Plus and minus zoom, Home shows the whole image, Shift with the arrow keys pans, and holding
+          Space while dragging pans. The same boxes are editable in the table below.
         </p>
         <p className="sr-only" role="status" aria-live="polite">{live}</p>
+        <ZoomControls scale={vp.scale} onZoomBy={zoomBy} onFit={fitView} onOneToOne={vp.oneToOne} hand={hand} onHand={setHand} />
         <div
+          ref={regionRef}
           role="group"
           aria-label="Radiograph annotation area"
           aria-describedby="editor-keys"
           tabIndex={0}
           onKeyDown={onRegionKeyDown}
-          className="relative select-none rounded border border-zinc-300 dark:border-border bg-zinc-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          style={{ aspectRatio: `${fixture.width} / ${fixture.height}`, ...(panning ? { touchAction: "none" } : {}) }}
+          className={`relative box-content select-none overflow-hidden rounded border border-zinc-300 dark:border-border bg-zinc-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+            panning ? (drag?.kind === "pan" ? "[&_*]:!cursor-grabbing" : "[&_*]:!cursor-grab") : ""
+          }`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
+          <div ref={contentRef} className="absolute left-0 top-0 h-full w-full">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imgRef}
             src={fixture.image_path}
             alt={`Radiograph ${fixture.id}`}
-            className="block w-full cursor-crosshair"
+            className={`block h-full w-full ${panning ? "" : "cursor-crosshair"}`}
             draggable={false}
           />
           {/* GT overlay (green, non-interactive) */}
@@ -773,13 +865,14 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
             <OverlayBox key={a.id} a={a} selected={a.id === selectedId} w={fixture.width} h={fixture.height} register={registerBox} />
           ))}
           {/* Rubber-band preview */}
-          <div ref={previewEl} hidden className="absolute border-2 border-dashed border-amber-400 bg-amber-400/20" />
+          <div ref={previewEl} hidden data-rubber-band className="absolute border-2 border-dashed border-amber-400 bg-amber-400/20" />
+          </div>
         </div>
-        <Odontogram annotations={annotations} selectedId={selectedId} onSelect={setSelectedId} />
+        <Odontogram annotations={annotations} selectedId={selectedId} onSelect={selectAndReveal} />
         <BoxTable
           annotations={annotations}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={selectAndReveal}
           onPatch={patchBox}
           onDelete={deleteById}
           readOnly={!canEdit}
