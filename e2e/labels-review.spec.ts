@@ -206,3 +206,128 @@ test("signed out: the pages show this browser's drafts, say so, keep the demo ro
   await expect(page.getByRole("row").filter({ hasText: "image 1" })).toContainText("unstarted");
   expect(watch.problems()).toEqual([]);
 });
+
+test("the Review board shows each set's decision history from the server's audit log: who decided what and why, oldest first, for every member (light, dark, axe; ADR-0023)", async ({ browser }) => {
+  const admin = await adminWithSubmittedSet(browser); // the admin drew the boxes and submitted: set at v3
+  const rev = await invitedReviewer(browser, admin.context);
+  const adminId = ((await (await admin.context.request.get(`${app.base}/api/labels/1`)).json()) as { viewer: { userId: string } }).viewer.userId;
+  const page = await rev.context.newPage();
+  const watch = watchPage(page, app.base);
+  const review = `${app.base}/labels/review`;
+  const items = page.locator('[data-decision-history="1"] li');
+  const decide = async (button: "Approve" | "Reject", reason: string): Promise<void> => {
+    await section(page, "1").getByPlaceholder("Reason (optional)").fill(reason);
+    const done = page.waitForResponse((r) => r.url().endsWith("/api/labels/1/transition") && r.status() === 200);
+    await section(page, "1").getByRole("button", { name: button }).click();
+    await done;
+  };
+
+  await page.goto(review);
+  await ready(page);
+  await expect(page.locator("[data-review-source]")).toHaveAttribute("data-review-source", "server");
+  await expect(items).toHaveCount(1); // the submit the admin made before the reviewer ever opened the page
+  await expect(items.first()).toContainText(`${adminId.slice(0, 8)} submitted`);
+  await expect(page.locator('[data-decision-history="2"]')).toHaveCount(0); // nothing decided on image 2: no list at all
+
+  await decide("Reject", "Boxes too loose");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(1)).toContainText("you rejected — Boxes too loose");
+
+  // the author reopens and submits again (what the editor does), the reviewer reloads and approves
+  const tr = (transition: string, baseVersion: number) => admin.context.request.post(`${app.base}/api/labels/1/transition`, { headers: headers(), data: { transition, baseVersion } });
+  expect((await tr("reopen", 4)).ok(), "reopen").toBe(true);
+  expect((await tr("submit", 5)).ok(), "resubmit").toBe(true);
+  await page.goto(review);
+  await ready(page);
+  await expect(items).toHaveCount(4);
+  await decide("Approve", "Now tight");
+  await expect(items).toHaveCount(5);
+  expect(await items.evaluateAll((els) => els.map((e) => e.getAttribute("data-decision")))).toEqual(["submitted", "rejected", "reopened", "submitted", "approved"]);
+  await expect(items.nth(2)).toContainText(`${adminId.slice(0, 8)} reopened`);
+  await expect(items.nth(4)).toContainText("you approved — Now tight");
+  await expect(page.getByRole("list", { name: "Decision history of image 1" })).toBeVisible();
+
+  // the author reads the same history, with "you" meaning her
+  const own = await admin.context.newPage();
+  const ownWatch = watchPage(own, app.base);
+  await own.goto(review);
+  await ready(own);
+  const ownItems = own.locator('[data-decision-history="1"] li');
+  await expect(ownItems).toHaveCount(5);
+  await expect(ownItems.nth(0)).toContainText("you submitted");
+  await expect(ownItems.nth(1)).toContainText("rejected — Boxes too loose");
+  await expect(ownItems.nth(1)).not.toContainText("you");
+  expect(ownWatch.problems()).toEqual([]);
+
+  for (const theme of ["light", "dark"] as const) {
+    const p = await rev.context.newPage();
+    await p.addInitScript((t) => window.localStorage.setItem("theme", t), theme);
+    const w = watchPage(p, app.base);
+    await p.goto(review);
+    await ready(p);
+    await expect(p.locator('[data-decision-history="1"] li')).toHaveCount(5);
+    const axe = await new AxeBuilder({ page: p }).withTags(WCAG).analyze();
+    expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`), `axe review history ${theme}`).toEqual([]);
+    await shot(p, `review-history-${theme}`);
+    expect(w.problems()).toEqual([]);
+    await p.close();
+  }
+  expect(watch.problems()).toEqual([]);
+  await rev.context.close();
+  await admin.context.close();
+});
+
+test("when the history cannot be read the board still shows the sets and says so; signed-out visitors never ask for it (ADR-0023)", async ({ browser }) => {
+  const admin = await adminWithSubmittedSet(browser);
+  const rev = await invitedReviewer(browser, admin.context);
+  const page = await rev.context.newPage();
+  const watch = watchPage(page, app.base, [/503/]); // the answer this test injects
+  await page.route("**/api/labels/history", (r) => r.fulfill({ status: 503, contentType: "application/problem+json", headers: { "retry-after": "15" }, body: JSON.stringify({ title: "Labels are unavailable" }) }));
+  await page.goto(`${app.base}/labels/review`);
+  await ready(page);
+  await expect(page.locator("[data-review-source]")).toHaveAttribute("data-review-source", "server"); // the sets came from the server
+  await expect(page.locator("[data-history-unavailable]")).toContainText("could not be read");
+  await expect(section(page, "1")).toContainText("submitted · v3 · 2 boxes");
+  await expect(section(page, "1").getByRole("button", { name: "Approve" })).toBeEnabled();
+  await expect(page.locator("[data-decision-history]")).toHaveCount(0);
+  expect(watch.problems()).toEqual([]);
+  await rev.context.close();
+  await admin.context.close();
+
+  const anon = await browser.newPage();
+  const asked: string[] = [];
+  anon.on("request", (r) => {
+    if (r.url().includes("/api/labels/history")) asked.push(r.url());
+  });
+  await anon.goto(`${app.base}/labels/review`);
+  await ready(anon);
+  await expect(anon.locator("[data-review-source]")).toHaveAttribute("data-review-source", "local");
+  await expect(anon.locator("[data-history-unavailable]")).toHaveCount(0);
+  expect(asked).toEqual([]);
+  await anon.close();
+});
+
+test("a long unbroken reason wraps inside the history on a phone instead of widening the page (ADR-0023)", async ({ browser }) => {
+  const admin = await adminWithSubmittedSet(browser);
+  const rev = await invitedReviewer(browser, admin.context);
+  const page = await rev.context.newPage();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const watch = watchPage(page, app.base);
+  await page.goto(`${app.base}/labels/review`);
+  await ready(page);
+  const reason = "unbrokenreason".repeat(40); // 560 characters, no space to break at
+  await section(page, "1").getByPlaceholder("Reason (optional)").fill(reason);
+  const done = page.waitForResponse((r) => r.url().endsWith("/api/labels/1/transition") && r.status() === 200);
+  await section(page, "1").getByRole("button", { name: "Reject" }).click();
+  await done;
+  const item = page.locator('[data-decision-history="1"] li').last();
+  await expect(item).toContainText("you rejected");
+  await expect(item).toContainText(reason.slice(0, 40));
+  const over = await page.evaluate(() => ({ page: document.documentElement.scrollWidth - window.innerWidth, item: 0 }));
+  expect(over.page, "the page must not scroll sideways").toBeLessThanOrEqual(0);
+  expect(await item.evaluate((el) => el.scrollWidth - el.clientWidth), "the entry must not overflow its box").toBeLessThanOrEqual(0);
+  await shot(page, "review-history-mobile");
+  expect(watch.problems()).toEqual([]);
+  await rev.context.close();
+  await admin.context.close();
+});
