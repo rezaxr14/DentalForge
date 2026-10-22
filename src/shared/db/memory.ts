@@ -15,6 +15,7 @@ import {
   type ApplyOpsOutcome,
   type ArtifactRecord,
   type AuditRecord,
+  type SetDecision,
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
@@ -47,7 +48,7 @@ import {
   type WorkerRecord,
   type WorkerTokenRecord,
 } from "./repos";
-import { byEditorOrder, canonicalAnnotation, sameRowFields, toAnnotation, toRowFields } from "./annotation-map";
+import { byEditorOrder, canonicalAnnotation, decisionsOf, sameRowFields, toAnnotation, toRowFields } from "./annotation-map";
 import { applyOpsToSet, canTransition, transitionTarget, type SetTransition } from "@/shared/domain/editing/persist";
 import type { Command } from "@/shared/domain/editing/history";
 import type { Role } from "@/shared/domain/auth";
@@ -323,6 +324,13 @@ class ScopedMemory implements ScopedRepos {
       createdAt: now,
     });
     return { kind: "ok", snapshot: this.snapshotOf(set, image) };
+  }
+
+  async listSetDecisions(key: ImageSourceKey): Promise<SetDecision[]> {
+    const image = this.findImage(key);
+    const set = image ? this.setOf(image.id) : null;
+    if (!set) return [];
+    return decisionsOf([...this.root.audit.values()].filter((a) => a.orgId === this.orgId && a.resource === set.id));
   }
 
   async appendAudit(input: {

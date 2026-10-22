@@ -160,6 +160,18 @@ export type ApplyOpsOutcome =
 
 export type TransitionOutcome = ApplyOpsOutcome | { kind: "forbidden" };
 
+/**
+ * One decision in a set's history (ADR-0023): a row of the audit log that `transitionAnnotationSet` wrote, in the shape the
+ * Review board needs. `version` is the set's version AFTER the decision, so it orders the history without trusting clocks.
+ */
+export interface SetDecision {
+  transition: SetTransition;
+  actorId: string | null;
+  at: Date;
+  version: number;
+  reason: string | null;
+}
+
 export interface AuditRecord {
   id: string;
   orgId: string;
@@ -487,6 +499,12 @@ export interface ScopedRepos {
   transitionAnnotationSet(
     input: ImageSourceKey & { baseVersion: number; transition: SetTransition; actorId: string; role: Role; reason?: string },
   ): Promise<TransitionOutcome>;
+  /**
+   * The decisions (submit / approve / reject / reopen) made on one image's set, oldest first; `[]` when the image or its set
+   * does not exist in this org. Read-only. Only audit rows the transition wrote for THIS set count: other audit entries of
+   * the org (tokens, invites) and malformed rows are not decisions.
+   */
+  listSetDecisions(key: ImageSourceKey): Promise<SetDecision[]>;
   appendAudit(input: { actorId: string | null; action: string; resource?: string; meta?: Record<string, unknown> }): Promise<AuditRecord>;
   listAudit(): Promise<AuditRecord[]>;
   /**

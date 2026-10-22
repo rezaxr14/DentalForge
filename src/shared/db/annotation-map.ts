@@ -4,7 +4,8 @@
  */
 import type { Annotation } from "../contracts/labels";
 import { toFloat4 } from "./ingest-rules";
-import type { AnnotationRecord } from "./repos";
+import { isSetTransition } from "../domain/editing/persist";
+import type { AnnotationRecord, AuditRecord, SetDecision } from "./repos";
 
 /** The columns an op batch can change on a box row (everything except identity, org and set). */
 export type RowFields = Pick<
@@ -74,4 +75,28 @@ export function sameRowFields(a: RowFields, b: RowFields): boolean {
 /** Editor order. Ties (legacy rows all at position 0) fall back to the client id so both stores list identically. */
 export function byEditorOrder(a: { position: number; clientId: string }, b: { position: number; clientId: string }): number {
   return a.position - b.position || (a.clientId < b.clientId ? -1 : a.clientId > b.clientId ? 1 : 0);
+}
+
+const DECISION_PREFIX = "annotation_set.";
+
+/**
+ * An audit row as a decision, or null when it is not one: another action, or a row whose meta lacks the set's new version
+ * (`transitionAnnotationSet` always writes it, so such a row did not come from there). Shared by both stores, which read the
+ * rows differently but must agree on what counts as a decision.
+ */
+export function decisionOf(a: AuditRecord): SetDecision | null {
+  if (!a.action.startsWith(DECISION_PREFIX)) return null;
+  const transition = a.action.slice(DECISION_PREFIX.length);
+  if (!isSetTransition(transition)) return null;
+  const { version, reason } = a.meta as { version?: unknown; reason?: unknown };
+  if (typeof version !== "number" || !Number.isInteger(version) || version < 1) return null;
+  return { transition, actorId: a.actorId, at: a.createdAt, version, reason: typeof reason === "string" ? reason : null };
+}
+
+/** The history of one set: its decisions, oldest first (by the version each one produced; the clock only breaks ties). */
+export function decisionsOf(rows: AuditRecord[]): SetDecision[] {
+  return rows
+    .map(decisionOf)
+    .filter((d): d is SetDecision => d !== null)
+    .sort((a, b) => a.version - b.version || a.at.getTime() - b.at.getTime());
 }

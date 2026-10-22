@@ -73,6 +73,22 @@ describe("label client", () => {
     expect(await clientFor(() => { throw new TypeError("Failed to fetch"); }).list()).toMatchObject({ kind: "unavailable" });
   });
 
+  it("history(): GET /api/labels/history, parsed with the history schema, and every failure mapped like the others (ADR-0023)", async () => {
+    const decision = { transition: "reject", actorId: "carol", at: "2026-10-23T10:00:00.000Z", version: 4, reason: "boxes too loose" };
+    const hist = { viewer: dto.viewer, history: [{ imageId: "1", decisions: [decision, { ...decision, transition: "reopen", actorId: null, reason: null, version: 5 }] }] };
+    const seen: { url?: string; init?: RequestInit }[] = [];
+    expect(await clientFor(() => res(200, hist), seen).history()).toEqual({ kind: "ok", value: hist });
+    expect(`${seen[0]!.init?.method} ${seen[0]!.url}`).toBe("GET /api/labels/history");
+    expect(seen[0]!.init!.body).toBeUndefined();
+    expect(await clientFor(() => res(401, {})).history()).toEqual({ kind: "unauthorized" });
+    expect(await clientFor(() => res(503, {}, { "retry-after": "4" })).history()).toMatchObject({ kind: "unavailable", retryAfterMs: 4000 });
+    expect(await clientFor(() => res(200, { viewer: dto.viewer, history: [{ imageId: "1", decisions: [] }] })).history()).toMatchObject({ kind: "unavailable" }); // an image without decisions is absent, not empty
+    expect(await clientFor(() => res(200, { viewer: dto.viewer, history: [{ imageId: "1", decisions: [{ ...decision, transition: "explode" }] }] })).history()).toMatchObject({ kind: "unavailable" });
+    expect(await clientFor(() => res(200, { viewer: dto.viewer, history: [{ imageId: "1", decisions: [{ ...decision, version: 0 }] }] })).history()).toMatchObject({ kind: "unavailable" });
+    expect(await clientFor(() => res(200, { viewer: dto.viewer, sets: [] })).history()).toMatchObject({ kind: "unavailable" }); // a list of sets is not a history
+    expect(await clientFor(() => { throw new TypeError("Failed to fetch"); }).history()).toMatchObject({ kind: "unavailable" });
+  });
+
   it("maps every status to one result", async () => {
     const problem = (status: number, detail: string) => res(status, { code: "x", title: "T", detail }, { "content-type": "application/problem+json" });
     const kind = async (r: Response) => (await clientFor(() => r).get("1"));
