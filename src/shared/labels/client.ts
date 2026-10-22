@@ -3,7 +3,7 @@
  * Every outcome is a typed result, never an exception, so the sync engine decides what each one means:
  * ok | conflict (version/state, with the server's current set) | unauthorized | forbidden | notFound | invalid | unavailable.
  */
-import { ListDtoSchema, SetDtoSchema, type ListDto, type SetDto } from "./dto";
+import { HistoryDtoSchema, ListDtoSchema, SetDtoSchema, type HistoryDto, type ListDto, type SetDto } from "./dto";
 
 export type LabelResult<T = SetDto> =
   | { kind: "ok"; value: T }
@@ -24,6 +24,8 @@ export interface LabelClient {
   status(): Promise<StatusResult>;
   /** Every opened set of the active org; read-only. */
   list(): Promise<LabelResult<ListDto>>;
+  /** The decision history of every decided set of the active org; read-only (the Review board). */
+  history(): Promise<LabelResult<HistoryDto>>;
   get(imageId: string): Promise<LabelResult>;
   open(imageId: string): Promise<LabelResult>;
   ops(imageId: string, baseVersion: number, ops: unknown[], opts?: { keepalive?: boolean }): Promise<LabelResult>;
@@ -98,6 +100,10 @@ export function createLabelClient(fetchImpl: typeof fetch = (...a) => fetch(...a
     const r = ListDtoSchema.safeParse(v);
     return r.success ? r.data : null;
   };
+  const parseHistory = (v: unknown): HistoryDto | null => {
+    const r = HistoryDtoSchema.safeParse(v);
+    return r.success ? r.data : null;
+  };
   const call = (method: "GET" | "POST", imageId: string, action: string, body?: unknown, keepalive = false): Promise<LabelResult> =>
     request(method, `${base}/${encodeURIComponent(imageId)}${action}`, parseSet, body, keepalive);
 
@@ -116,6 +122,7 @@ export function createLabelClient(fetchImpl: typeof fetch = (...a) => fetch(...a
   return {
     status,
     list: () => request("GET", base, parseList),
+    history: () => request("GET", `${base}/history`, parseHistory),
     get: (id) => call("GET", id, ""),
     open: (id) => call("POST", id, "/open", {}),
     ops: (id, baseVersion, ops, opts) => call("POST", id, "/ops", { baseVersion, ops }, opts?.keepalive),

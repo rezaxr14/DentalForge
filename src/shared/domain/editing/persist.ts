@@ -135,6 +135,11 @@ const TRANSITIONS: Record<SetTransition, { from: AnnotationStatus; to: Annotatio
 };
 
 /** The state a transition leads to, or `null` when the set is not in the state the transition starts from. */
+/** True for exactly the four transition names (own keys only: `"constructor"` is not one). */
+export function isSetTransition(v: string): v is SetTransition {
+  return Object.prototype.hasOwnProperty.call(TRANSITIONS, v);
+}
+
 export function transitionTarget(from: AnnotationStatus, t: SetTransition): AnnotationStatus | null {
   const rule = TRANSITIONS[t];
   return rule.from === from ? rule.to : null;

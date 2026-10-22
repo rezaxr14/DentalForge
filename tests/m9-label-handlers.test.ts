@@ -14,7 +14,7 @@ import { predictionsToAnnotations } from "@/shared/domain/annotation";
 import { diffToCommands, history as H, mirrorAnnotation } from "@/shared/domain/editing";
 import type { Role } from "@/shared/domain/auth";
 import type { Actor } from "@/shared/jobs/user-handlers";
-import { ListDtoSchema, SetDtoSchema } from "@/shared/labels/dto";
+import { HistoryDtoSchema, ListDtoSchema, SetDtoSchema } from "@/shared/labels/dto";
 import * as h from "@/shared/labels/handlers";
 import { box } from "./helpers/annotation-repo-suite";
 
@@ -122,6 +122,53 @@ function define(label: string, makeStore: () => Promise<OrgStore>, skip = false)
       // reading changed nothing: the set is exactly where it was and image 1 is still unopened for org A
       expect((await body(await h.getSet(as("alice", orgA), "2"))).version).toBe(2);
       expect((await h.getSet(as("alice", orgA), "1")).status).toBe(404);
+    });
+
+    it("reads the decision history of the org's sets: oldest first, reasons and actors, read-only, other orgs invisible, every role may read (ADR-0023)", async () => {
+      const { store, orgA, orgB, as } = await world();
+      expect((await h.listHistory({ store, actor: null })).status).toBe(401);
+      const empty = await body(await h.listHistory(as("rita", orgA, "reviewer")));
+      expect(empty).toEqual({ viewer: { userId: "rita", role: "reviewer" }, history: [] });
+
+      const alice = as("alice", orgA);
+      const carol = as("carol", orgA, "reviewer");
+      const tr = (d: h.LabelDeps, image: string, transition: string, baseVersion: number, extra: object = {}) =>
+        h.postTransition(post(`${image}/transition`, { transition, baseVersion, ...extra }), d, image);
+      await h.openSet(alice, "1");
+      expect((await h.postOps(post("1/ops", { baseVersion: 1, ops: [create(box("a"), 0)] }), alice, "1")).status).toBe(200);
+      expect((await tr(alice, "1", "submit", 2)).status).toBe(200);
+      expect((await tr(carol, "1", "reject", 3, { reason: "boxes too loose" })).status).toBe(200);
+      expect((await tr(alice, "1", "reopen", 4)).status).toBe(200);
+      await h.openSet(alice, "2"); // opened and drawn on, but never decided on: absent from the history
+      await h.openSet(as("bob", orgB), "3");
+      expect((await h.postOps(post("3/ops", { baseVersion: 1, ops: [create(box("b", { author_id: "bob" }), 0)] }), as("bob", orgB), "3")).status).toBe(200);
+      expect((await tr(as("bob", orgB), "3", "submit", 2, { reason: "org B only" })).status).toBe(200);
+
+      const auditBefore = (await store.scoped(orgA).listAudit()).length;
+      for (const who of [alice, carol, as("root", orgA, "admin")]) {
+        const res = await h.listHistory(who);
+        expect(res.status).toBe(200);
+        const list = await body(res);
+        expect(() => HistoryDtoSchema.strict().parse(list)).not.toThrow();
+        expect(list.viewer).toEqual({ userId: who.actor!.userId, role: who.actor!.role });
+        expect(list.history.map((e: { imageId: string }) => e.imageId)).toEqual(["1"]); // 2 undecided, 3 is org B's
+        expect(
+          list.history[0].decisions.map((d: { transition: string; actorId: string; version: number; reason: string | null }) => [d.transition, d.actorId, d.version, d.reason]),
+        ).toEqual([
+          ["submit", "alice", 3, null],
+          ["reject", "carol", 4, "boxes too loose"],
+          ["reopen", "alice", 5, null],
+        ]);
+        expect(new Date(list.history[0].decisions[0].at).toISOString()).toBe(list.history[0].decisions[0].at);
+      }
+      // org B sees only its own decision
+      const b = await body(await h.listHistory(as("bob", orgB)));
+      expect(b.history.map((e: { imageId: string }) => e.imageId)).toEqual(["3"]);
+      expect(b.history[0].decisions).toHaveLength(1);
+      expect(b.history[0].decisions[0]).toMatchObject({ transition: "submit", actorId: "bob", reason: "org B only" });
+      // reading wrote nothing
+      expect((await store.scoped(orgA).listAudit()).length).toBe(auditBefore);
+      expect((await body(await h.getSet(alice, "1"))).version).toBe(5);
     });
 
     it("labelStatus always answers 200: available for a member, signed-out without a session, unavailable when the store cannot be used", async () => {

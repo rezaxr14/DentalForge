@@ -14,7 +14,7 @@ import { can } from "@/shared/domain/auth";
 import { CommandSchema, MAX_OPS_PER_REQUEST } from "@/shared/domain/editing/persist";
 import { json, problem, validationProblem } from "@/shared/jobs/problem";
 import type { Actor } from "@/shared/jobs/user-handlers";
-import type { SetDto } from "./dto";
+import type { HistoryDto, SetDto } from "./dto";
 import { listLabels } from "@/shared/lib/fixtures";
 import { resolveFixtureImage } from "./image-source";
 
@@ -123,6 +123,26 @@ export async function listSets(deps: LabelDeps): Promise<Response> {
     if (snap) sets.push({ imageId: l.id, set: toSetDto(snap, deps.actor) });
   }
   return json({ viewer: { userId: deps.actor.userId, role: deps.actor.role }, sets });
+}
+
+/**
+ * The decision history (submit / approve / reject / reopen, with the reasons) of every opened set of the caller's org
+ * (ADR-0023): the audit entries `transitionAnnotationSet` writes, which nothing read before. Read-only like `listSets`, any
+ * member of the org may read it, and an image with no decision yet is absent.
+ */
+export async function listHistory(deps: LabelDeps): Promise<Response> {
+  if (!deps.actor) return problem(401, "unauthorized", "Sign in required");
+  const repos = deps.store.scoped(deps.actor.orgId);
+  const history: HistoryDto["history"] = [];
+  for (const l of listLabels()) {
+    const image = (deps.resolveImage ?? resolveFixtureImage)(l.id);
+    if (!image) continue;
+    const decisions = await repos.listSetDecisions(image);
+    if (decisions.length) {
+      history.push({ imageId: l.id, decisions: decisions.map((d) => ({ ...d, at: d.at.toISOString() })) });
+    }
+  }
+  return json({ viewer: { userId: deps.actor.userId, role: deps.actor.role }, history });
 }
 
 /**

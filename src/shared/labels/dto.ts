@@ -28,3 +28,20 @@ export const ListDtoSchema = z.object({
 });
 export type ListDto = z.infer<typeof ListDtoSchema>;
 export type Viewer = SetDto["viewer"];
+
+/** One decision on a set (ADR-0023): who did what, when, and the reason they gave. `version` is the set's version after it. */
+export const DecisionDtoSchema = z.object({
+  transition: z.enum(["submit", "approve", "reject", "reopen"]),
+  actorId: z.string().nullable(),
+  at: z.string(),
+  version: z.number().int().min(1),
+  reason: z.string().nullable(),
+});
+export type DecisionDto = z.infer<typeof DecisionDtoSchema>;
+
+/** `GET /api/labels/history`: the decision history of every opened set of the active org, oldest decision first. Images nobody has decided on are absent. */
+export const HistoryDtoSchema = z.object({
+  viewer: ViewerSchema,
+  history: z.array(z.object({ imageId: z.string().min(1), decisions: z.array(DecisionDtoSchema).min(1) })),
+});
+export type HistoryDto = z.infer<typeof HistoryDtoSchema>;

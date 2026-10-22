@@ -320,6 +320,56 @@ export function defineAnnotationRepoSuite(
       expect(audit).toEqual(["annotation_set.submit", "annotation_set.reject", "annotation_set.reopen"]);
     });
 
+    it("lists a set's decisions oldest first with actor, reason and the version each produced; nothing else counts as a decision (ADR-0023)", async () => {
+      const { repo, snap } = await setup();
+      expect(await repo.listSetDecisions(KEY)).toEqual([]); // opened, nothing decided yet
+      expect(await repo.listSetDecisions({ ...KEY, sourceImageId: 999 })).toEqual([]); // an image the org never opened
+      const v = ok(await ops(repo, 1, [create(box("a"), 0)])).set.version;
+      const t = (transition: "submit" | "approve" | "reject" | "reopen", baseVersion: number, actorId: string, role: "annotator" | "reviewer", reason?: string) =>
+        repo.transitionAnnotationSet({ ...KEY, baseVersion, transition, actorId, role, ...(reason === undefined ? {} : { reason }) });
+      ok(await t("submit", v, "alice", "annotator")); // no reason given
+      ok(await t("reject", v + 1, "carol", "reviewer", "boxes too loose"));
+      ok(await t("reopen", v + 2, "bob", "annotator"));
+      ok(await t("submit", v + 3, "alice", "annotator", "fixed"));
+      ok(await t("approve", v + 4, "carol", "reviewer", "looks right"));
+      const expected = [
+        ["submit", "alice", v + 1, null],
+        ["reject", "carol", v + 2, "boxes too loose"],
+        ["reopen", "bob", v + 3, null],
+        ["submit", "alice", v + 4, "fixed"],
+        ["approve", "carol", v + 5, "looks right"],
+      ];
+      const summary = (list: Awaited<ReturnType<typeof repo.listSetDecisions>>) => list.map((d) => [d.transition, d.actorId, d.version, d.reason]);
+      const decisions = await repo.listSetDecisions(KEY);
+      expect(summary(decisions)).toEqual(expected);
+      expect(decisions.every((d) => d.at instanceof Date && !Number.isNaN(d.at.getTime()))).toBe(true);
+      expect(decisions[4]!.version).toBe((await repo.getAnnotationSet(KEY))!.set.version); // the last decision produced the current version
+
+      // Not decisions: another action on this set, an entry for another set, an entry without the set's version, an action that
+      // merely looks like a transition. None of them may appear, and none may change what the real ones say.
+      await repo.appendAudit({ actorId: "x", action: "worker.token.revoke", resource: snap.set.id, meta: { version: 20 } });
+      await repo.appendAudit({ actorId: "x", action: "annotation_set.approve", resource: "some-other-set", meta: { version: 21, reason: null } });
+      await repo.appendAudit({ actorId: "x", action: "annotation_set.approve", resource: snap.set.id, meta: { reason: "no version" } });
+      await repo.appendAudit({ actorId: "x", action: "annotation_set.approve", resource: snap.set.id, meta: { version: 1.5 } });
+      await repo.appendAudit({ actorId: "x", action: "annotation_set.constructor", resource: snap.set.id, meta: { version: 22 } });
+      await repo.appendAudit({ actorId: "x", action: "annotation_xet.approve", resource: snap.set.id, meta: { version: 23 } }); // same length of prefix, wrong prefix
+      await repo.appendAudit({ actorId: "x", action: "annotation_set.approve", resource: snap.set.id, meta: { version: 0 } }); // versions start at 1
+      expect(summary(await repo.listSetDecisions(KEY))).toEqual(expected);
+
+      // another image of the same org has its own history
+      await repo.openAnnotationSet({ ...IMAGE, sourceImageId: 283, storageKey: "fixtures/labels/2.jpg", assigneeId: "alice" });
+      expect(await repo.listSetDecisions({ ...KEY, sourceImageId: 283 })).toEqual([]);
+    });
+
+    it("orders decisions by the version they produced, not by the order the rows were written (ADR-0023)", async () => {
+      const { repo, snap } = await setup();
+      for (const [action, version] of [["annotation_set.approve", 4], ["annotation_set.submit", 2], ["annotation_set.reject", 3]] as const) {
+        // the reason key is absent: it reads as null, never as undefined (which would not survive JSON as "no reason")
+        await repo.appendAudit({ actorId: "u", action, resource: snap.set.id, meta: { version } });
+      }
+      expect((await repo.listSetDecisions(KEY)).map((d) => [d.transition, d.version, d.reason])).toEqual([["submit", 2, null], ["reject", 3, null], ["approve", 4, null]]);
+    });
+
     it("never lets someone decide work they contributed to, and only reviewers/admins decide", async () => {
       const { repo } = await setup();
       let v = ok(await ops(repo, 1, [create(box("a", { author_id: "alice" }), 0)])).set.version;
@@ -405,6 +455,13 @@ export function defineAnnotationRepoSuite(
       await b.transitionAnnotationSet({ ...KEY, baseVersion: 2, transition: "submit", actorId: "bea", role: "annotator" });
       expect((await a.getAnnotationSet(KEY))!.set.state).toBe("draft");
       expect((await a.listAudit()).length).toBe(0);
+
+      // decision history is per org as well (ADR-0023): B's decision is not in A's history, and an audit row B wrote that
+      // names A's set (resource = A's set id) is B's row, not A's decision
+      expect(await a.listSetDecisions(KEY)).toEqual([]);
+      expect((await b.listSetDecisions(KEY)).map((d) => d.transition)).toEqual(["submit"]);
+      await b.appendAudit({ actorId: "z", action: "annotation_set.approve", resource: sa.set.id, meta: { version: 5, reason: null } });
+      expect(await a.listSetDecisions(KEY)).toEqual([]);
     });
 
     it("answers not_found for an image the org never opened", async () => {

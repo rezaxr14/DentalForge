@@ -44,6 +44,7 @@ import {
   type ApplyOpsOutcome,
   type ArtifactRecord,
   type AuditRecord,
+  type SetDecision,
   type DatasetRecord,
   type EvalRunRecord,
   type ImageRecord,
@@ -77,7 +78,7 @@ import {
   type WorkerTokenRecord,
 } from "./repos";
 import { mergeRunStatus } from "./ingest-rules";
-import { canonicalAnnotation, sameRowFields, toAnnotation, toRowFields } from "./annotation-map";
+import { canonicalAnnotation, decisionsOf, sameRowFields, toAnnotation, toRowFields } from "./annotation-map";
 import { applyOpsToSet, canTransition, transitionTarget, type SetTransition } from "@/shared/domain/editing/persist";
 import type { Command } from "@/shared/domain/editing/history";
 import type { Role } from "@/shared/domain/auth";
@@ -444,6 +445,19 @@ class ScopedPg implements ScopedRepos {
         meta: { imageId: image.id, sourceImageId: image.sourceImageId, version: set.version + 1, reason: input.reason ?? null },
       });
       return { kind: "ok", snapshot: await this.snapshotOf(tx, (await this.setRowFor(tx, image.id, false))!, image) } as const;
+    });
+  }
+
+  async listSetDecisions(key: ImageSourceKey): Promise<SetDecision[]> {
+    return this.db.transaction(async (tx) => {
+      const image = await this.imageByKey(tx, key);
+      const set = image ? await this.setRowFor(tx, image.id, false) : null;
+      if (!set) return [];
+      const rows = await tx
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.orgId, this.orgId), eq(auditLog.resource, set.id)));
+      return decisionsOf(rows);
     });
   }
 
