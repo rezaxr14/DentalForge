@@ -63,7 +63,7 @@ Reading the code and running that walk found four things that would each have br
 18. **One source rule for all three pages** (`use-label-sets.ts`): ask `status`; available → the server's sets, otherwise this browser's drafts, never both; until decided `getSet` answers null, which is what the server rendered (hydration-safe; a returning user's local drafts are read only after mount).
     The Review board decides through the same transitions as the editor (`approve`/`reject` with the set's version and the reason; the list is re-read afterwards, also after a conflict); the role comes from the session (an annotator sees the buttons disabled with the reason); the demo role switcher and "Reset local state" exist only in browser mode.
     Export reads the same sets (only approved boxes leave the app) and says where they come from. The "no auth exists yet" wording is gone; each page says which store it shows and why.
-19. **Gap, stated:** the Review board shows the decided state but not the decision history or reason in server mode; the server writes them to `audit_log` and there is no read endpoint for it yet.
+19. **Gap, stated:** the Review board shows the decided state but not the decision history or reason in server mode; the server writes them to `audit_log` and there is no read endpoint for it yet. **Closed by ADR-0023** (`GET /api/labels/history`).
 
 ### Open
 14. A returning user's browser-only draft is not offered for import after signing in (the Review/Export/queue pages show the server's sets only, the editor too). Recommendation: an explicit "import my browser draft" action in the editor that replays the local boxes as creates, never automatic.
