@@ -17,6 +17,15 @@ export interface GtRef {
   height: number;
 }
 
+interface HistoryRow {
+  at: string;
+  who: string;
+  label: string;
+  reason: string | null;
+}
+
+const PAST = { submit: "submitted", approve: "approved", reject: "rejected", reopen: "reopened" } as const;
+
 function kappa(v: number | null): string {
   return v == null ? "n/a" : v.toFixed(3);
 }
@@ -29,7 +38,7 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
   // Sets come from the server when a session with an active organization exists, otherwise from this browser (never both).
   // Until that is decided the board renders what the server rendered (no sets); the browser store is only read after mount,
   // because reading it during the hydrating render would differ from the server HTML for a returning user (React #418).
-  const ls = useLabelSets();
+  const ls = useLabelSets(true);
   const server = ls.phase === "server";
   const mounted = useMounted();
   const role: "user" | "reviewer" | "admin" = ls.viewer
@@ -123,6 +132,11 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
         </button>
       </div>
       )}
+      {server && ls.historyFailed && (
+        <p className="text-sm text-amber-700" data-history-unavailable>
+          The decision history could not be read from the server; the sets and their current state are shown.
+        </p>
+      )}
       {msg && <p className="text-sm text-zinc-700 dark:text-zinc-300">{msg}</p>}
 
       {refs.map((ref) => {
@@ -131,6 +145,15 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
           ? agreementStats(ref.id, set.assignee_id, "gt_import", set.annotations, ref.gt)
           : null;
         const decisions = ls.phase === "local" && mounted ? getDecisions(ref.id) : [];
+        // One list for both stores. The server's entries come from its audit log (ADR-0023); this browser's from its own store.
+        const history: HistoryRow[] = server
+          ? ls.getHistory(ref.id).map((d) => ({
+              at: d.at,
+              who: d.actorId === null ? "unknown" : d.actorId === ls.viewer?.userId ? "you" : d.actorId.slice(0, 8),
+              label: PAST[d.transition],
+              reason: d.reason,
+            }))
+          : decisions.map((d) => ({ at: d.decided_at, who: d.reviewer_id, label: d.decision, reason: d.reason || null }));
         return (
           <section key={ref.id} className="rounded border border-zinc-200 p-4">
             <div className="flex flex-wrap items-baseline gap-2">
@@ -173,7 +196,7 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
                   <p className="text-xs text-zinc-500">Decisions</p>
                   <p className="font-mono">
                     {server
-                      ? set.state === "approved" || set.state === "rejected" ? set.state : "—" // the server keeps the history in its audit log
+                      ? set.state === "approved" || set.state === "rejected" ? set.state : "—"
                       : decisions.length ? decisions.map((d) => d.decision).join(", ") : "—"}
                   </p>
                 </div>
@@ -208,11 +231,11 @@ export function ReviewBoard({ refs }: { refs: GtRef[] }) {
                 </button>
               </div>
             )}
-            {decisions.length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-zinc-600">
-                {decisions.map((d, i) => (
-                  <li key={i} className="font-mono">
-                    {d.decided_at.slice(0, 19).replace("T", " ")} · {d.reviewer_id} {d.decision}
+            {history.length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-zinc-600" aria-label={`Decision history of image ${ref.id}`} data-decision-history={ref.id}>
+                {history.map((d, i) => (
+                  <li key={i} className="font-mono [overflow-wrap:anywhere]" data-decision={d.label}>
+                    {d.at.slice(0, 19).replace("T", " ")} · {d.who} {d.label}
                     {d.reason ? ` — ${d.reason}` : ""}
                   </li>
                 ))}
