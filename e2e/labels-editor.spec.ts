@@ -178,14 +178,31 @@ function contrast(a: number[], b: number[]): number {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 
+/**
+ * Switches the theme in place (a reload would drop the unsaved boxes these tests are about) and waits until the colour
+ * transitions it starts (`transition-colors`, e.g. the active nav link) have finished. axe and the contrast probes read
+ * computed colours, and while a transition runs those are blends of the two themes: an axe run that lands inside the
+ * 150 ms window reports `dark: color-contrast .bg-accent` on a correct page (reproduced by freezing that transition at 50%).
+ */
+async function switchTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  await page.evaluate((t) => {
+    document.documentElement.classList.toggle("dark", t === "dark");
+    document.documentElement.style.colorScheme = t;
+  }, theme);
+  await page.evaluate(async () => {
+    for (let i = 0; i < 10; i++) {
+      const running = document.getAnimations().filter((a) => a instanceof CSSTransition);
+      if (!running.length) return;
+      await Promise.allSettled(running.map((a) => a.finished)); // a cancelled transition rejects: it is over either way
+    }
+  });
+}
+
 test("the chosen quadrant is visibly different from the others, in both themes (non-text contrast 3:1)", async ({ page }) => {
   await open(page);
   await draw(page, 0.2, 0.3, 0.3, 0.5);
   for (const theme of ["light", "dark"] as const) {
-    await page.evaluate((t) => {
-      document.documentElement.classList.toggle("dark", t === "dark");
-      document.documentElement.style.colorScheme = t;
-    }, theme);
+    await switchTheme(page, theme);
     // Computed colours come back as lab()/oklch() in Tailwind v4; a 1x1 canvas turns any CSS colour into sRGB bytes.
     const bg = (n: string) =>
       page.getByRole("button", { name: n, exact: true }).first().evaluate((el) => {
@@ -208,10 +225,7 @@ test("no WCAG A/AA violations with boxes, a conflict and the table, in both them
   await expect(page.getByRole("status").filter({ hasText: "more than one box" })).toBeVisible();
   for (const theme of ["light", "dark"] as const) {
     // Switch in place: a reload would drop the unsaved boxes this test is about.
-    await page.evaluate((t) => {
-      document.documentElement.classList.toggle("dark", t === "dark");
-      document.documentElement.style.colorScheme = t;
-    }, theme);
+    await switchTheme(page, theme);
     await expect(rows(page)).toHaveCount(3);
     const results = await new AxeBuilder({ page }).withTags(WCAG).analyze();
     expect(results.violations.map((v) => `${theme}: ${v.id} ${v.nodes[0]?.target.join(" ")}`)).toEqual([]);
