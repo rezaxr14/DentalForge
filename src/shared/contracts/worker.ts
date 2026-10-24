@@ -6,7 +6,7 @@
  * Header: `X-Contract-Version: 1` required; errors follow RFC 9457 Problem Details.
  */
 import { z } from "zod";
-import { Bbox, Finding } from "./traces";
+import { Bbox, Finding, PredictedFinding } from "./traces";
 
 export const CONTRACT_VERSION = 1;
 export const CONTRACT_HEADER = "x-contract-version";
@@ -235,6 +235,8 @@ export const AgentRunPayload = z.object({
   maxToolCalls: z.number().int().default(50),
   canonicalResize: z.boolean().default(false),
   seed: z.number().int().optional(),
+  /** Sampling temperature per turn. 0 (greedy) is the evaluation default and matches the SFT/GRPO loop. */
+  temperature: z.number().min(0).max(2).default(0),
 });
 
 // 4. eval.run
@@ -284,10 +286,13 @@ export const AlScoreResult = z.object({
 
 // 3b. agent.run result (streams one `turn` event per turn; event data = Turn, see traces.ts)
 export const AgentRunResult = z.object({
-  finalAnswer: z.array(Finding),
+  /** Tolerant class (ADR-0014): a model may put a full FDI code in `tooth_position`; that is kept, not rejected. */
+  finalAnswer: z.array(PredictedFinding),
   nTurns: z.number().int().min(0),
   nToolCalls: z.number().int().min(0),
   formatOk: z.boolean(),
+  /** The trace this run was stored as, when the worker could ingest one (ADR-0025). */
+  traceId: z.string().uuid().optional(),
   rewardComponents: z
     .object({
       accuracy: z.number(),
@@ -296,6 +301,27 @@ export const AgentRunResult = z.object({
       efficiency: z.number(),
     })
     .optional(),
+});
+
+/**
+ * `GET /images/{id}` response (ADR-0025). The download URL and size were always here; a live run
+ * also needs the image's identity and ground truth to post a trace. `groundTruth: null` means the
+ * app does not know it, and the worker must skip ingestion rather than invent a healthy scan.
+ */
+export const ImageMetadataResponse = z.object({
+  url: z.string(),
+  expiresInSeconds: z.number().int().positive(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  imageId: z.string().uuid(),
+  sourceImageId: z.number().int(),
+  datasetId: z.string().uuid(),
+  /** Dataset source (`dentex` | `tufts` | `upload`), the key `/ingest/traces` resolves. */
+  dataset: z.enum(["dentex", "tufts", "upload"]).nullable(),
+  datasetName: z.string().nullable(),
+  split: z.string().nullable(),
+  /** Strict ground truth (`Finding[]`); `[]` is a healthy scan, `null` is unknown. */
+  groundTruth: z.array(Finding).nullable(),
 });
 
 // 7. system.ping — contract-level diagnostic (not in plan §10.2). Lets an operator
