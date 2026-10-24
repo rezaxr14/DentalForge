@@ -50,6 +50,13 @@
       "when": 1792849160281,
       "tag": "0006_lively_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792853990595,
+      "tag": "0007_chief_chimera",
+      "breakpoints": true
     }
   ]
 }

@@ -463,6 +463,17 @@ export const traces = pgTable(
     contentHash: text("content_hash").notNull(),
     /** Which tolerant reader produced this row (ADR-0024); e.g. `trace.v1`. */
     adapterVersion: text("adapter_version"),
+    /**
+     * Which backend produced a LIVE run (ADR-0025): `torch_hf` or `openai_compat`. NULL for
+     * imported traces (they came from a file, not a worker backend).
+     */
+    backend: text("backend"),
+    /**
+     * The model stage a live run used (`base|sft|grpo|test`). NULL for imported traces.
+     * `test` rows are the LM Studio backend and are excluded from cohort statistics and benchmark
+     * tables by default (`listTraces({ researchOnly: true })`), never from Trace Explorer.
+     */
+    stage: text("stage"),
     nTurns: integer("n_turns").notNull().default(0),
     nToolCalls: integer("n_tool_calls").notNull().default(0),
     formatOk: boolean("format_ok").notNull().default(false),
@@ -578,6 +589,10 @@ export const evalRuns = pgTable(
     runKey: text("run_key"),
     /** Which tolerant reader produced this run (ADR-0024); e.g. `eval.v1`. NULL for API-ingested runs. */
     adapterVersion: text("adapter_version"),
+    /** Backend that produced an API-ingested run (ADR-0025); NULL for file imports. */
+    backend: text("backend"),
+    /** Model stage of an API-ingested run (ADR-0025); NULL for file imports. `test` is excluded from benchmarks. */
+    stage: text("stage"),
     summary: jsonb("summary").$type<Record<string, number>>().notNull().default({}),
     createdAt: createdAt(),
   },
@@ -632,7 +647,7 @@ export const modelRegistry = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     kind: text("kind", { enum: ["yolo", "vlm", "api"] }).notNull(),
-    stage: text("stage", { enum: ["zero_shot", "sft", "grpo", "yolo"] }).notNull(),
+    stage: text("stage", { enum: ["zero_shot", "sft", "grpo", "yolo", "test"] }).notNull(),
     hfPath: text("hf_path"),
     onnxArtifactId: text("onnx_artifact_id"),
     meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),

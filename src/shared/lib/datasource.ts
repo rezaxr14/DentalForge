@@ -35,6 +35,9 @@ export interface TraceDetail {
   id: string;
   trace: VerifiedTraceT;
   provenance: DataProvenance;
+  /** Live-run provenance (ADR-0025); absent for fixture traces and imported traces. */
+  backend?: string | null;
+  stage?: string | null;
 }
 
 export interface EvalCaseDetail {
@@ -132,6 +135,8 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
       nToolCalls: s.traces.nToolCalls,
       formatOk: s.traces.formatOk,
       finalAnswer: s.traces.finalAnswer,
+      backend: s.traces.backend,
+      stage: s.traces.stage,
       datasetSource: s.datasets.source,
       sourceImageId: s.images.sourceImageId,
     })
@@ -154,6 +159,8 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
       formatOk: r.formatOk ?? false,
       nFindings: finalAnswer.length,
       verified: r.verified ?? false,
+      backend: r.backend,
+      stage: r.stage,
       provenance: "postgres" as const,
     };
   });
@@ -172,6 +179,8 @@ async function getTraceRow(
       verifierReason: s.traces.verifierReason,
       groundTruth: s.traces.groundTruth,
       finalAnswer: s.traces.finalAnswer,
+      backend: s.traces.backend,
+      stage: s.traces.stage,
       datasetSource: s.datasets.source,
       sourceImageId: s.images.sourceImageId,
     })
@@ -239,7 +248,7 @@ async function getTraceRow(
   };
   const parsed = VerifiedTrace.safeParse(raw);
   if (!parsed.success) return null;
-  return { id, trace: parsed.data, provenance: "postgres" as const };
+  return { id, trace: parsed.data, provenance: "postgres" as const, backend: t.backend, stage: t.stage };
 }
 
 async function listEvalRunRows(db: Db, orgId: string): Promise<LeaderboardRow[]> {

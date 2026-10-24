@@ -46,7 +46,7 @@ jobs:
       - name: Contract tests
         run: |
           set -o pipefail
-          python -m pytest -q tests/python/test_compat_contract.py 2>&1 | tee pytest.log
+          python -m pytest -q tests/python/test_compat_contract.py tests/python/test_protocol_conformance.py 2>&1 | tee pytest.log
 
       - name: Upload the drift report
         if: always()

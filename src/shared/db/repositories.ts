@@ -182,10 +182,15 @@ class ScopedPg implements ScopedRepos {
   async listTraces(filter?: {
     datasetId?: string;
     mode?: TraceRecord["mode"];
+    imageId?: string;
+    researchOnly?: boolean;
   }): Promise<TraceRecord[]> {
     const conds = [eq(traces.orgId, this.orgId)];
     if (filter?.datasetId !== undefined) conds.push(eq(traces.datasetId, filter.datasetId));
     if (filter?.mode !== undefined) conds.push(eq(traces.mode, filter.mode));
+    if (filter?.imageId !== undefined) conds.push(eq(traces.imageId, filter.imageId));
+    // `is distinct from` keeps imported rows (stage NULL) and never drops them on NULL semantics.
+    if (filter?.researchOnly) conds.push(sql`${traces.stage} is distinct from 'test'`);
     return this.db
       .select()
       .from(traces)
@@ -1181,6 +1186,8 @@ class ScopedPg implements ScopedRepos {
           nToolCalls: input.nToolCalls,
           formatOk: input.formatOk,
           verifierReason: input.verifierReason,
+          backend: input.backend ?? null,
+          stage: input.stage ?? null,
           groundTruth: input.groundTruth,
           finalAnswer: input.finalAnswer,
         })
@@ -1234,6 +1241,7 @@ class ScopedPg implements ScopedRepos {
             error: c.error,
             trueBbox: c.trueBbox,
             perturbTier: c.perturbTier,
+            artifactId: c.artifactId ?? null,
           })),
         );
         for (const part of chunks(calls, 500)) {
@@ -1281,6 +1289,7 @@ class ScopedPg implements ScopedRepos {
           error: c.error,
           trueBbox: c.trueBbox,
           perturbTier: c.perturbTier,
+          artifactId: c.artifactId,
         })),
     }));
   }
@@ -1299,6 +1308,8 @@ class ScopedPg implements ScopedRepos {
           provider: input.run.provider,
           model: input.run.model,
           canonicalResize: input.run.canonicalResize,
+          backend: input.run.backend ?? null,
+          stage: input.run.stage ?? null,
           n: 0,
           sourceFile: `api:${input.runKey}`,
           summary: {},
