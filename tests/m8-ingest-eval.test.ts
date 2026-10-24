@@ -126,6 +126,22 @@ describe.each(backends)("eval run ingestion — $name", ({ skip, make }) => {
       expect((await r.listEvalRuns()).filter((x) => x.runKey === "r-create")).toHaveLength(1);
     });
 
+    it("stores live-run provenance on the run (ADR-0025)", async () => {
+      const r = store.scoped(a.id);
+      const out = await r.ingestEvalCases({
+        runKey: "r-provenance",
+        run: { ...RUN, backend: "openai_compat", stage: "test" },
+        cases: [asInput(1)],
+      });
+      if (out.outcome !== "ok") throw new Error(out.outcome);
+      expect(out.run).toMatchObject({ backend: "openai_compat", stage: "test" });
+      // A file-import run keeps the truthful NULLs.
+      const imported = await r.ingestEvalCases({ runKey: "r-imported", run: RUN, cases: [asInput(2)] });
+      if (imported.outcome !== "ok") throw new Error(imported.outcome);
+      expect(imported.run.backend ?? null).toBeNull();
+      expect(imported.run.stage ?? null).toBeNull();
+    });
+
     it("chunked upload == one-shot upload: same n, same summary", async () => {
       const r = store.scoped(a.id);
       await r.ingestEvalCases({ runKey: "r-chunked", run: RUN, cases: [1, 2, 3].map((n) => asInput(n)) });

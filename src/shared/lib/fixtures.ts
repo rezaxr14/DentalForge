@@ -22,6 +22,9 @@ export interface TraceSummary {
   formatOk: boolean;
   nFindings: number;
   verified: boolean;
+  /** Live-run provenance (ADR-0025); absent for fixture traces. */
+  backend?: string | null;
+  stage?: string | null;
 }
 
 function traceFileMeta(file: string): Pick<TraceSummary, "mode" | "cohort" | "verified"> {

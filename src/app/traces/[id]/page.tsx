@@ -54,14 +54,27 @@ function TraceBody({
   trace,
   resolution,
   toolImages,
+  backend,
+  stage,
 }: {
   trace: VerifiedTraceT;
   resolution: StrategyResolution;
   toolImages: Map<string, ToolImageInfo>;
+  backend?: string | null;
+  stage?: string | null;
 }) {
   const t = trace;
   return (
     <div className="mt-6 space-y-4">
+      {stage === "test" && (
+        <p
+          className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          data-test-backend
+        >
+          Test backend ({backend ?? "openai_compat"}) — not the research model. This run is excluded
+          from cohort statistics and benchmark tables by default.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <div className="rounded border p-2">Dataset: {t.dataset}</div>
         <div className="rounded border p-2">Image: {t.image_id}</div>
@@ -131,7 +144,7 @@ function TraceBody({
               {turn.parsed.final_answer.map((f, k) => (
                 <li key={k}>
                   Q{f.quadrant}T{f.tooth_position}: {f.diagnosis}
-                  {f.confidence !== undefined ? ` (${f.confidence.toFixed(2)})` : ""}
+                  {f.confidence != null ? ` (${f.confidence.toFixed(2)})` : ""}
                 </li>
               ))}
             </ul>
@@ -155,7 +168,13 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
       <h1 className="text-2xl font-semibold tracking-tight">Trace {id.slice(0, 8)}</h1>
       <Suspense fallback={<p className="mt-6 text-sm">Loading trace…</p>}>
         {detail ? (
-          <TraceBody trace={detail.trace} resolution={resolution} toolImages={toolImages} />
+          <TraceBody
+            trace={detail.trace}
+            resolution={resolution}
+            toolImages={toolImages}
+            backend={detail.backend}
+            stage={detail.stage}
+          />
         ) : (
           <p className="mt-6 text-sm text-zinc-600">
             Trace not found in the {source.provenance} source.

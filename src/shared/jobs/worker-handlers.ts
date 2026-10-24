@@ -260,7 +260,27 @@ export async function imageUrl(req: Request, deps: WorkerDeps, imageId: string):
   try {
     const ttl = 300;
     const url = await deps.storage.presignDownload(image.storageKey, ttl);
-    return json({ url: absolutize(url, req), expiresInSeconds: ttl, width: image.width, height: image.height });
+    // Live-run provenance (ADR-0025): a worker needs the dataset identity and the image's ground
+    // truth to post a trace it just produced. The GT comes from an already-imported trace for this
+    // image; `null` means "unknown", and the worker must skip ingestion rather than invent a
+    // healthy scan.
+    const dataset = (await auth.repos.listDatasets()).find((d) => d.id === image.datasetId);
+    const traces = await auth.repos.listTraces({ imageId: image.id });
+    const gtTrace =
+      traces.find((t) => t.verified && t.groundTruth != null) ?? traces.find((t) => t.groundTruth != null);
+    return json({
+      url: absolutize(url, req),
+      expiresInSeconds: ttl,
+      width: image.width,
+      height: image.height,
+      imageId: image.id,
+      sourceImageId: image.sourceImageId,
+      datasetId: image.datasetId,
+      dataset: dataset?.source ?? null,
+      datasetName: dataset?.name ?? null,
+      split: image.split,
+      groundTruth: gtTrace?.groundTruth ?? null,
+    });
   } catch {
     return problem(503, "unavailable", "Object storage is unavailable", undefined, {}, { "retry-after": "30" });
   }

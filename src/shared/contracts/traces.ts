@@ -71,6 +71,12 @@ export const ToolCallRecord = z
     /** Only when a perturbation fired (locate_tooth audit). */
     true_bbox: Bbox.optional(),
     perturb_tier: z.enum(["small", "big"]).optional(),
+    /**
+     * Stored tool-image artifact this call produced (ADR-0025). A live run uploads its tool images
+     * as artifacts and names them here, so Trace Explorer can open the real image instead of the
+     * placeholder. Absent on imported traces (they have no artifact storage).
+     */
+    artifact_id: z.string().uuid().optional(),
   })
   .passthrough();
 
@@ -98,7 +104,8 @@ export const Turn = z
       .object({
         thought: z.string().optional(),
         tool_calls: z.array(ParsedToolCall).optional(),
-        final_answer: z.array(Finding).optional(),
+        /** Model output, so the tolerant class: a wrong FDI code must be stored and scored, not rejected. */
+        final_answer: z.array(PredictedFinding).optional(),
       })
       .passthrough()
       .nullable()
@@ -123,7 +130,8 @@ export const VerifiedTrace = z
      * no-tools files store an EMPTY LIST []. Accept both.
      */
     tool_calls: z.union([z.number().int(), z.array(z.unknown())]),
-    final_answer: z.array(Finding).nullable(),
+    /** Model output (ADR-0014): tolerant, because a wrong FDI code must be representable. */
+    final_answer: z.array(PredictedFinding).nullable(),
     messages: z.array(z.unknown()),
     format_ok: z.boolean(),
     verifier_reason: z.string().optional(),
