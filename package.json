@@ -14,6 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "compat": "tsx scripts/compat.ts",
     "ci": "pnpm typecheck && pnpm lint && pnpm test",
     "contract:docs": "tsx scripts/generate-worker-contract.ts",
     "worker:token": "tsx scripts/create-worker-token.ts",

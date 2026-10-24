@@ -1,0 +1,88 @@
+name: upstream-compat
+
+# Weekly drift detection against the public VLM-DENTAL `main` (ADR-0024).
+#
+# This workflow is deliberately NOT a required check: a commit in VLM-DENTAL must never turn
+# DentalForge's own CI red. A failure here means "upstream changed, look at the report", so it
+# opens or updates exactly one issue titled "Upstream drift".
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-compat
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VLM_DENTAL_PATH: ${{ github.workspace }}/.upstream/vlm-dental
+      CI_REQUIRE_VLM: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Throwaway clone: the probe and the contract tests only read it.
+      - name: Clone public VLM-DENTAL main
+        run: git clone --depth 1 https://github.com/rezaxr14/VLM-DENTAL.git "$VLM_DENTAL_PATH"
+
+      - name: Install the torch-free worker set
+        run: pip install -r examples/python-worker/requirements-light.txt pytest "pillow>=10"
+
+      # Exit 0 means "the probe ran"; the report itself is the artifact.
+      - name: Probe (feature detection, never pinning)
+        run: python examples/python-worker/vlm_compat.py --json > compat-report.json
+
+      - name: Contract tests
+        run: |
+          set -o pipefail
+          python -m pytest -q tests/python/test_compat_contract.py 2>&1 | tee pytest.log
+
+      - name: Upload the drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-compat-report
+          path: |
+            compat-report.json
+            pytest.log
+          retention-days: 30
+
+      # One issue, updated in place, so weekly drift does not spam the tracker.
+      - name: Open or update the "Upstream drift" issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="Upstream drift"
+          commit=$(git -C "$VLM_DENTAL_PATH" rev-parse --short HEAD)
+          body=$(cat <<EOF
+          The weekly compatibility contract failed against VLM-DENTAL \`main\` at \`$commit\`.
+
+          This is a **drift report**, not an automatic bug: upstream changed shape, or a numeric
+          library changed a tool output. Nothing here is pinned, and goldens are regenerated only by
+          the owner's decision.
+
+          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Artifact: \`upstream-compat-report\` (probe JSON + pytest log)
+          - Reproduce: \`VLM_DENTAL_PATH=<clone> CI_REQUIRE_VLM=1 python -m pytest -q tests/python/test_compat_contract.py\`
+          EOF
+          )
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,title --jq '.[] | select(.title == "Upstream drift") | .number' | head -n 1)
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
