@@ -82,6 +82,95 @@
               },
               "vlmDentalCommit": {
                 "type": "string"
+              },
+              "vlmDentalBranch": {
+                "type": "string"
+              },
+              "vlmDentalDirty": {
+                "type": "boolean"
+              },
+              "vlmDentalPath": {
+                "type": "string"
+              },
+              "packages": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "packageErrors": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "jobs": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "available"
+                  ]
+                }
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "unknownToApp": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missingUpstream": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "groundingWeights": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "advertisedJobs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           },
