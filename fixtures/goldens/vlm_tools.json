@@ -1,0 +1,273 @@
+{
+  "adapter": "vlm-tools.v1",
+  "environment": {
+    "packages": {
+      "numpy": "2.5.1",
+      "opencv-python-headless": null,
+      "pillow": "12.3.0",
+      "torch": "2.5.1+cu121",
+      "transformers": "5.14.1",
+      "ultralytics": "8.4.116"
+    },
+    "python": "3.12.3"
+  },
+  "images": {
+    "val_18.png": {
+      "fileSha256": "84a04df1afcd4a51055d8a60c4522665320e5cce36aa0cce10618391aca57a5c",
+      "size": [
+        3003,
+        1316
+      ]
+    },
+    "val_32.png": {
+      "fileSha256": "f0eabfbbdb58efaedd88d5e7a7a8cc7cac0d90a0e79a1cedf6aa91660a24e6c4",
+      "size": [
+        2747,
+        1316
+      ]
+    },
+    "val_44.png": {
+      "fileSha256": "98e25231f0576d5a354ef4289b5df82f296e605fa6ea3ccafb23764644904a39",
+      "size": [
+        2744,
+        1316
+      ]
+    }
+  },
+  "skipped": [],
+  "tools": {
+    "val_18.png": {
+      "contralateral_compare": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "b86014ac1ab649f1ed2a1296c8245e1bd34ac773308e5c173e1ced57b4008b23",
+        "size": [
+          1210,
+          263
+        ]
+      },
+      "denoise": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "364a67f9e58bbd160d991f84323c4b2b2a50014b8035ae76d17f68b296821bf5",
+        "size": [
+          3003,
+          1316
+        ]
+      },
+      "enhance_contrast": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "d040f675eff59f2f99709df04950251ba3cc95357b0299363b9d33ae1f39c22b",
+        "size": [
+          3003,
+          1316
+        ]
+      },
+      "fdi_label": {
+        "data": "38",
+        "kind": "data"
+      },
+      "locate_tooth": {
+        "data": {
+          "bbox": [
+            1953.2,
+            552.7,
+            362.3,
+            238.0
+          ],
+          "confidence": 0.589,
+          "tooth": 38
+        },
+        "kind": "data"
+      },
+      "nudge_crop": {
+        "data": {
+          "bbox": [
+            750.8,
+            223.7,
+            991.0,
+            434.3
+          ],
+          "note": "Call zoom_crop with this bbox to view the adjusted region."
+        },
+        "kind": "data"
+      },
+      "window_level": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "cad5271433c391aebceddd929da84d35729a45ce76d944050acda6370a61af4d",
+        "size": [
+          3003,
+          1316
+        ]
+      },
+      "zoom_crop": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "4e6dad0993ab0820098836f087263150aec84f8a44b8f942000db106ef572547",
+        "size": [
+          1351,
+          593
+        ]
+      }
+    },
+    "val_32.png": {
+      "contralateral_compare": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "450bcf586c7fa00265c3159ed0255fbc0c2d5c58975d96461b479eb630dd1a03",
+        "size": [
+          1108,
+          263
+        ]
+      },
+      "denoise": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "8b6850d0e9ae1bbc505b9b9f0699de070d353ab3e7dd8769d43fd8772aa3d951",
+        "size": [
+          2747,
+          1316
+        ]
+      },
+      "enhance_contrast": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "6d9138fc170b327f28eece5103a0a2bdf0d668ab0123c682d546467e1b1093ff",
+        "size": [
+          2747,
+          1316
+        ]
+      },
+      "fdi_label": {
+        "data": "38",
+        "kind": "data"
+      },
+      "locate_tooth": {
+        "data": {
+          "bbox": [
+            1971.2,
+            580.7,
+            250.5,
+            350.6
+          ],
+          "confidence": 0.332,
+          "tooth": 38
+        },
+        "kind": "data"
+      },
+      "nudge_crop": {
+        "data": {
+          "bbox": [
+            686.8,
+            223.7,
+            906.5,
+            434.3
+          ],
+          "note": "Call zoom_crop with this bbox to view the adjusted region."
+        },
+        "kind": "data"
+      },
+      "window_level": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "607adde101457f2f5dd3cbceb8ecc2075157db56b3031ea5ea0901c66a3c9965",
+        "size": [
+          2747,
+          1316
+        ]
+      },
+      "zoom_crop": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "37eae909defa3597d94155f16091792bd6688198141aa8795d03a0e1b3f79e0f",
+        "size": [
+          1236,
+          593
+        ]
+      }
+    },
+    "val_44.png": {
+      "contralateral_compare": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "8a73068161077662a1db3a0e43694322449e009e51c4ddf747c76458be89be56",
+        "size": [
+          1106,
+          263
+        ]
+      },
+      "denoise": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "9680283c22f3e7f65a2af7bdb95180b4020f004a7bd1efbbbbc76304c9725402",
+        "size": [
+          2744,
+          1316
+        ]
+      },
+      "enhance_contrast": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "8acf20e2ac3b4cf83625461767ed91804dc4c8b36c66f153f612fbada8987170",
+        "size": [
+          2744,
+          1316
+        ]
+      },
+      "fdi_label": {
+        "data": "38",
+        "kind": "data"
+      },
+      "locate_tooth": {
+        "data": {
+          "bbox": [
+            1890.2,
+            536.5,
+            331.6,
+            316.9
+          ],
+          "confidence": 0.416,
+          "tooth": 38
+        },
+        "kind": "data"
+      },
+      "nudge_crop": {
+        "data": {
+          "bbox": [
+            686.0,
+            223.7,
+            905.5,
+            434.3
+          ],
+          "note": "Call zoom_crop with this bbox to view the adjusted region."
+        },
+        "kind": "data"
+      },
+      "window_level": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "b88e753a42679201ae171b92c63bad3a3deca3c83bed7b862a8c3dd1fe41593e",
+        "size": [
+          2744,
+          1316
+        ]
+      },
+      "zoom_crop": {
+        "kind": "image",
+        "mode": "RGB",
+        "pixelsSha256": "a74dc96b33c5e42046c65b78a8570640d0ad2e52c6cdd80f5b60cba1385d4293",
+        "size": [
+          1235,
+          593
+        ]
+      }
+    }
+  },
+  "vlmDental": {
+    "branch": "main",
+    "commit": "1346424dfb4ab85f8522070a82fbc59e1dd89b33",
+    "dirty": false
+  }
+}

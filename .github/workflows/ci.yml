@@ -63,8 +63,16 @@ jobs:
       # Degradation + worker pipeline against the PRODUCTION build and the CI Postgres.
       - run: pip install -r examples/python-worker/requirements.txt pytest "pillow>=10"
       # Python worker handlers, with injected fakes (the real-tools suite needs the research package and is not run here).
+      # `tests/python/test_compat_contract.py` skips visibly without a checkout (the weekly
+      # upstream-compat workflow runs it against upstream `main`).
       - name: python worker unit tests
-        run: python -m pytest -q examples/python-worker/test_dental_handlers.py
+        run: >-
+          python -m pytest -q
+          examples/python-worker/test_dental_handlers.py
+          examples/python-worker/test_vlm_compat.py
+          examples/python-worker/test_worker_software.py
+          examples/python-worker/test_tools_goldens.py
+          tests/python/test_compat_contract.py
       - run: pnpm smoke
       # The worker pipeline runs twice: default DB-polling mode (no Redis in the app's config) ...
       - name: e2e:worker (polling mode)

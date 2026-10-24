@@ -40,6 +40,28 @@ export const RegisterWorkerRequest = z.object({
       torch: z.string().optional(),
       cuda: z.string().optional(),
       vlmDentalCommit: z.string().optional(),
+      // ADR-0024: upstream drift report. Provenance is recorded, never used to gate behaviour; the
+      // job availability rows are what the probe measured on the worker's machine at registration.
+      vlmDentalBranch: z.string().optional(),
+      vlmDentalDirty: z.boolean().optional(),
+      vlmDentalPath: z.string().optional(),
+      packages: z.record(z.string(), z.string().nullable()).optional(),
+      packageErrors: z.record(z.string(), z.string()).optional(),
+      jobs: z
+        .record(
+          z.string(),
+          z.object({
+            available: z.boolean(),
+            reason: z.string().nullable().optional(),
+            warnings: z.array(z.string()).optional(),
+          }),
+        )
+        .optional(),
+      tools: z.array(z.string()).optional(),
+      unknownToApp: z.array(z.string()).optional(),
+      missingUpstream: z.array(z.string()).optional(),
+      groundingWeights: z.string().nullable().optional(),
+      advertisedJobs: z.array(z.string()).optional(),
     })
     .default({}),
   capabilities: z.array(WorkerCapability).default([]),

@@ -461,6 +461,8 @@ export const traces = pgTable(
     verified: boolean("verified").notNull().default(false),
     sourceFile: text("source_file"),
     contentHash: text("content_hash").notNull(),
+    /** Which tolerant reader produced this row (ADR-0024); e.g. `trace.v1`. */
+    adapterVersion: text("adapter_version"),
     nTurns: integer("n_turns").notNull().default(0),
     nToolCalls: integer("n_tool_calls").notNull().default(0),
     formatOk: boolean("format_ok").notNull().default(false),
@@ -574,6 +576,8 @@ export const evalRuns = pgTable(
     sourceFile: text("source_file"),
     /** Worker-chosen identity of an API-ingested run (NULL for file imports); lets chunked uploads retry (ADR-0013). */
     runKey: text("run_key"),
+    /** Which tolerant reader produced this run (ADR-0024); e.g. `eval.v1`. NULL for API-ingested runs. */
+    adapterVersion: text("adapter_version"),
     summary: jsonb("summary").$type<Record<string, number>>().notNull().default({}),
     createdAt: createdAt(),
   },

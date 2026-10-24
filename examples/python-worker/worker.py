@@ -22,6 +22,7 @@ Robustness rules baked in (Colab sessions die; networks flap):
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import signal
 import socket
@@ -36,6 +37,7 @@ import httpx
 from worker_errors import ContractError, NonRetryable
 
 CONTRACT_VERSION = "1"
+COMPAT_REPROBE_S = int(os.environ.get("COMPAT_REPROBE_S", "300"))
 
 
 @dataclass
@@ -99,10 +101,10 @@ class Client:
         raise ContractError(r.status_code, code, f"GET {path} -> {r.status_code} {code}: {detail}",
                             float(ra) if ra and ra.replace(".", "", 1).isdigit() else None)
 
-    def register(self, name: str, runtime: str, jobs: list[str]) -> dict[str, Any]:
+    def register(self, name: str, runtime: str, jobs: list[str], software: dict[str, Any] | None = None) -> dict[str, Any]:
         r = self.post("/register", {
             "name": name, "runtime": runtime,
-            "software": {"python": sys.version.split()[0]},
+            "software": software if software is not None else {"python": sys.version.split()[0]},
             "capabilities": [{"job": j, "versions": [1]} for j in jobs],
         })
         self.worker_id = r["workerId"]
@@ -170,6 +172,65 @@ WORKER_NAME = os.environ.get("WORKER_NAME", f"py-{socket.gethostname()}"[:60])
 RUNTIME = os.environ.get("WORKER_RUNTIME", "local-gpu")  # local-gpu | colab | kaggle | cloud
 
 
+def compat_software() -> dict[str, Any]:
+    """The `software` block sent at registration: provenance + the drift report (ADR-0024).
+
+    Never raises and never gates: a missing or broken checkout just produces a smaller report, so a
+    worker with no VLM-DENTAL still registers (and serves system.ping). `None`/empty values are
+    omitted because the contract types are optional strings/arrays.
+    """
+    software: dict[str, Any] = {"python": sys.version.split()[0]}
+    try:
+        import vlm_compat
+
+        # A broken native dependency upstream can abort the importing process; a child process turns
+        # that into a report instead of killing the worker (ADR-0024).
+        probe = getattr(vlm_compat, "probe_isolated", None) or vlm_compat.probe
+        report = probe()
+    except Exception as e:  # noqa: BLE001 - registration must survive a broken probe
+        software["compatError"] = f"{type(e).__name__}: {e}"
+        return software
+
+    prov = report.get("provenance") or {}
+    packages = report.get("packages") or {}
+    jobs = report.get("jobs") or {}
+
+    def put(key: str, value: Any) -> None:
+        if value not in (None, "", [], {}):
+            software[key] = value
+
+    put("torch", packages.get("torch"))
+    put("vlmDentalCommit", prov.get("commit"))
+    put("vlmDentalBranch", prov.get("branch"))
+    put("vlmDentalDirty", prov.get("dirty"))
+    put("vlmDentalPath", report.get("path"))
+    put("groundingWeights", report.get("groundingWeights"))
+    # Reported even when empty: "probed and found none" is different from "never probed".
+    software["cuda"] = "available" if report.get("cuda") else "unavailable"
+    software["packages"] = packages
+    software["packageErrors"] = report.get("packageErrors") or {}
+    software["jobs"] = {
+        job: {
+            "available": row.get("available", False),
+            "reason": row.get("reason"),
+            "warnings": row.get("warnings") or [],
+        }
+        for job, row in jobs.items()
+    }
+    software["tools"] = report.get("tools") or []
+    software["unknownToApp"] = report.get("unknownToApp") or []
+    software["missingUpstream"] = report.get("missingUpstream") or []
+    software["advertisedJobs"] = report.get("advertisedJobs") or []
+    return software
+
+
+def software_and_signature() -> tuple[dict[str, Any], str]:
+    """Report plus a stable hash, so a changed upstream checkout triggers exactly one re-register."""
+    software = compat_software()
+    digest = hashlib.sha256(json.dumps(software, sort_keys=True, default=str).encode()).hexdigest()
+    return software, digest
+
+
 # --------------------------------------------------------------------------- main loop
 def run_job(client: Client, job: dict[str, Any], cancelled: set[str]) -> None:
     abort = threading.Event()
@@ -216,10 +277,12 @@ def main() -> int:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
 
+    software, software_sig = software_and_signature()
+
     # Register with backoff: the app may still be cold-starting or its DB briefly down.
     for attempt in range(20):
         try:
-            reg = client.register(WORKER_NAME, RUNTIME, list(HANDLERS))
+            reg = client.register(WORKER_NAME, RUNTIME, list(HANDLERS), software=software)
             break
         except ContractError as e:
             if e.status in (401, 426):
@@ -252,7 +315,21 @@ def main() -> int:
     threading.Thread(target=heartbeat_loop, daemon=True).start()
 
     processed = 0
+    next_probe = time.monotonic() + COMPAT_REPROBE_S if COMPAT_REPROBE_S > 0 else None
     while not stop.is_set() and (max_jobs is None or processed < max_jobs):
+        if next_probe is not None and time.monotonic() >= next_probe:
+            # ADR-0024: re-probe so a `git pull` in VLM-DENTAL shows up without restarting the
+            # worker. Handlers are fixed at start-up (they are wired imports), so a newly available
+            # job needs a restart; the report is what the app displays meanwhile.
+            next_probe = time.monotonic() + COMPAT_REPROBE_S
+            try:
+                fresh, fresh_sig = software_and_signature()
+                if fresh_sig != software_sig:
+                    client.register(WORKER_NAME, RUNTIME, list(HANDLERS), software=fresh)
+                    software_sig = fresh_sig
+                    print("[worker] upstream report changed; re-registered with fresh provenance", flush=True)
+            except (ContractError, httpx.HTTPError) as e:
+                print(f"[worker] re-probe registration failed: {e}", flush=True)
         try:
             jobs = client.post("/jobs/claim", {"workerId": client.worker_id, "accepts": list(HANDLERS), "max": 1, "waitMs": 10000})["jobs"]
         except ContractError as e:

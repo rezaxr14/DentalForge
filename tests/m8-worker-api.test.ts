@@ -173,6 +173,42 @@ describe.each(backends)("worker API contract — $name", ({ skip, make }) => {
       expect(bad.status).toBe(422);
     });
 
+    it("register stores the ADR-0024 upstream drift report in software", async () => {
+      const software = {
+        python: "3.12.3",
+        torch: "2.5.1+cu121",
+        cuda: "available",
+        vlmDentalCommit: "1346424dfb4ab85f8522070a82fbc59e1dd89b33",
+        vlmDentalBranch: "main",
+        vlmDentalDirty: false,
+        vlmDentalPath: "C:/work/vlm-dental",
+        packages: { torch: "2.5.1+cu121", transformers: "5.14.1", peft: null },
+        packageErrors: { transformers: "ImportError: hub too new" },
+        jobs: {
+          "tool.execute": { available: true, reason: null, warnings: [] },
+          "agent.run.torch_hf": { available: false, reason: "transformers unusable", warnings: ["peft missing"] },
+        },
+        tools: ["zoom_crop", "locate_tooth"],
+        unknownToApp: ["mystery_tool"],
+        missingUpstream: ["fdi_label"],
+        groundingWeights: "C:/work/vlm-dental/data/models/yolo_cv_best/weights/best.pt",
+        advertisedJobs: ["tool.execute", "agent.run"],
+      };
+      const res = await W.register(
+        wreq("/register", {
+          token,
+          body: { name: "drift-w", runtime: "local-gpu", software, capabilities: [{ job: "tool.execute" }] },
+        }),
+        deps(),
+      );
+      expect(res.status).toBe(200);
+      const w = await store.scoped(org.id).getWorker(((await res.json()) as { workerId: string }).workerId);
+      expect(w!.software).toMatchObject(software);
+      // Provenance is recorded, never promoted to a routing decision.
+      expect(w!.capabilities).toEqual(["tool.execute"]);
+      expect(w!.software.declaredCapabilities).toEqual([{ job: "tool.execute", versions: [1] }]);
+    });
+
     it("heartbeat: unknown worker is 403; known worker gets an empty cancel list", async () => {
       const unknown = await W.heartbeat(wreq("/heartbeat", { token, body: { workerId: "00000000-0000-4000-8000-000000000000" } }), deps());
       expect(unknown.status).toBe(403);

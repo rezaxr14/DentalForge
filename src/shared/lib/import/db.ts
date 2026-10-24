@@ -203,6 +203,7 @@ export async function insertTraceRows(
           verified: r.verified,
           sourceFile: r.sourceFile,
           contentHash: r.contentHash,
+          adapterVersion: r.adapterVersion,
           nTurns: r.nTurns,
           nToolCalls: r.nToolCalls,
           formatOk: r.formatOk,
@@ -327,6 +328,7 @@ export async function insertEvalRows(
       model: parsed.run.model,
       n: parsed.run.n,
       sourceFile: parsed.run.sourceFile,
+      adapterVersion: parsed.run.adapterVersion,
       summary: parsed.run.summary,
     })
     .returning({ id: s.evalRuns.id });
