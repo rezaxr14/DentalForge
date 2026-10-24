@@ -11,6 +11,7 @@
     "test": "vitest run",
     "import:local": "tsx scripts/import-local.ts",
     "diagnose:data": "tsx scripts/diagnose-real-data.ts",
+    "compat": "tsx scripts/compat.ts",
     "ci": "pnpm typecheck && pnpm lint && pnpm test",
     "contract:docs": "tsx scripts/generate-worker-contract.ts",
     "worker:token": "tsx scripts/create-worker-token.ts",
