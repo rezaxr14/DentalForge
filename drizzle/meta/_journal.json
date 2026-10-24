@@ -43,6 +43,13 @@
       "when": 1792140507026,
       "tag": "0005_annotation_client_id_position",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792849160281,
+      "tag": "0006_lively_guardian",
+      "breakpoints": true
     }
   ]
 }
