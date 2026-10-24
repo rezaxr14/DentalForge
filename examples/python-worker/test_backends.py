@@ -386,6 +386,15 @@ def test_the_frame_loop_py_reads_is_a_pandas_row_with_id_and_local_path(tmp_path
     assert isinstance(df, pandas.DataFrame)
 
 
+def fake_frame(image_id: Any, path: Any) -> dict[str, Any]:
+    """The one-row frame the real runner reads.
+
+    CI installs only pytest+pillow, so the pandas-backed default factory would fail there: every
+    torch test that actually runs the loop must inject this (the pandas path has its own test).
+    """
+    return {"id": image_id, "local_path": str(path)}
+
+
 def test_torch_backend_no_tools_uses_the_other_upstream_runner():
     def runner(**kwargs: Any) -> Trajectory:
         raise AssertionError("with_tools runner must not be used for the no_tools cohort")
@@ -393,7 +402,8 @@ def test_torch_backend_no_tools_uses_the_other_upstream_runner():
     def no_tools(**kwargs: Any) -> Trajectory:
         return Trajectory([{"turn": 0, "status": None}], 0, [], True)
 
-    backend = TorchHFBackend(loader=lambda s: (object(), object()), runner=runner, no_tools_runner=no_tools)
+    backend = TorchHFBackend(loader=lambda s: (object(), object()), runner=runner, no_tools_runner=no_tools,
+                             images_df_factory=fake_frame)
     out = backend.run(spec(), image=IMG, image_id=1, mode="no_tools")
     assert out.n_turns == 1 and out.n_tool_calls == 0
 
@@ -410,7 +420,7 @@ def test_an_idle_model_is_released_and_the_next_run_reloads_it():
         return Trajectory([], 0, None, False)
 
     backend = TorchHFBackend(loader=loader, runner=runner, idle_unload_s=10, clock=lambda: now[0],
-                             registry_factory=lambda: object())
+                             images_df_factory=fake_frame, registry_factory=lambda: object())
     backend.run(spec(), image=IMG, image_id=1)
     backend.run(spec(), image=IMG, image_id=1)
     assert loads == ["m"]  # resident
@@ -427,7 +437,7 @@ def test_switching_model_specs_releases_the_previous_one():
         return object(), object()
 
     backend = TorchHFBackend(loader=loader, runner=lambda **k: Trajectory([], 0, None, False),
-                             registry_factory=lambda: object())
+                             images_df_factory=fake_frame, registry_factory=lambda: object())
     backend.run(spec(model_id="a"), image=IMG, image_id=1)
     backend.run(spec(model_id="b"), image=IMG, image_id=1)
     assert loads == ["a", "b"]
