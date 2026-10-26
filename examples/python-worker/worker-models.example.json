@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Copy to worker-models.json (git-ignored) and point WORKER_MODELS_FILE at it.",
+    "Each entry is registered with the app's model registry at worker start; the app assigns the modelId",
+    "that agent.run payloads carry, and the worker maps it back to this entry.",
+    "",
+    "stage: base | sft | grpo | test. 'base' is stored as the app's 'zero_shot'.",
+    "Only add an sft/grpo entry once the adapter directory (adapter_config.json + adapter_model.safetensors)",
+    "or the merged checkpoint directory actually exists. SFT and GRPO have not been run yet.",
+    "A 'test' entry is the LM Studio / OpenAI-compatible backend: it is labelled 'Test backend (not the",
+    "research model)' in the app and its rows are excluded from cohort statistics by default (ADR-0025).",
+    "adapterPath (LoRA) and checkpointDir+checkpointTag (merged) are alternatives and torch_hf only."
+  ],
+  "models": [
+    {
+      "modelId": "qwen3.5-9b-base",
+      "label": "Qwen3.5-9B base (research path, no adapter)",
+      "stage": "base",
+      "backend": "torch_hf",
+      "basePath": "Qwen/Qwen3.5-9B",
+      "quantization": "nf4",
+      "notes": "Loaded through VLM-DENTAL's load_model; 4-bit NF4 when CUDA is present."
+    },
+    {
+      "modelId": "lmstudio-qwen3.5-4b",
+      "label": "Qwen3.5-4B via LM Studio (test backend)",
+      "stage": "test",
+      "backend": "openai_compat",
+      "basePath": "qwen3.5-4b",
+      "quantization": "none",
+      "notes": "Test backend, not the research model. WORKER_OPENAI_BASE_URL defaults to http://localhost:1234/v1."
+    }
+  ]
+}

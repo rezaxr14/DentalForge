@@ -124,6 +124,25 @@ describe("M10: trace adapter", () => {
     expect(d.linesSkipped).toBe(0);
   });
 
+  it("carries a live run's artifact id through the adapter (ADR-0025)", () => {
+    const artifactId = "00000000-0000-4000-8000-0000000000c1";
+    const line = traceLine({
+      turns: [
+        {
+          turn: 0,
+          status: "tool_call",
+          tool_calls_this_turn: [
+            { tool_name: "zoom_crop", tool_args: { bbox: [1, 2, 3, 4] }, tool_ok: true, artifact_id: artifactId },
+          ],
+        },
+      ],
+    });
+    const { row } = readTraceLine(line, "agent.run:openai_compat:test", META);
+    expect(row!.turns[0]!.toolCalls[0]!.artifactId).toBe(artifactId);
+    // It is a known field, not an "unknown upstream field".
+    expect(row!.extra).toEqual({});
+  });
+
   it("counts and explains an unreadable line instead of throwing", () => {
     const lines = [traceLine(), "{not json", JSON.stringify({ image_id: "not-a-number" })];
     const d = scanTraceLines(lines, "file.jsonl", META);
