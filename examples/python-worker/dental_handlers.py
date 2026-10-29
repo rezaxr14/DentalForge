@@ -7,10 +7,14 @@ work this worker cannot do:
     tool.execute   needs `dental_agent` importable (the 8-tool registry).
                    `locate_tooth` additionally needs the YOLO grounding weights; without them
                    that one tool fails the job (non-retryable) instead of returning a fake box.
+    trace.render_artifacts
+                   same prerequisites as `tool.execute`: it re-executes the calls a stored trace
+                   recorded through the same registry, no torch.
     yolo.prelabel  needs `ultralytics` and the grounding weights to be loaded.
+    al.score       same detector as `yolo.prelabel` (it scores its confidences).
 
-Not implemented here (still stubs in worker.py): agent.run, eval.run, al.score,
-trace.render_artifacts, parity.golden.
+`agent.run` and `eval.run` are wired by `worker.py` when a model backend is available;
+`parity.golden` is deliberately a dev CLI, not a job (ADR-0025).
 
 Install the research package next to this worker, e.g. `pip install -e ../../../VLM-DENTAL`
 or `export PYTHONPATH=/path/to/VLM-DENTAL`.
@@ -139,6 +143,41 @@ def make_tool_execute(
     return tool_execute
 
 
+def detect_boxes(model: Any, image: Any, conf: float) -> tuple[list[dict[str, Any]], float]:
+    """Every detection above `conf`, in NATIVE pixels, with FDI numbers. Returns (boxes, inference_ms).
+
+    classIdx = (quadrant-1)*8 + (position-1), the mapping the model was trained with (and
+    `locate_tooth` inverts). Shared by `yolo.prelabel` and `al.score` so both read the same head.
+    """
+    t0 = time.perf_counter()
+    results = model.predict(image, verbose=False, conf=conf)
+    inference_ms = round((time.perf_counter() - t0) * 1000, 1)
+    if not results:
+        raise RuntimeError("model returned no result object")
+
+    boxes = results[0].boxes
+    classes, confs, xywh = boxes.cls.tolist(), boxes.conf.tolist(), boxes.xywh.tolist()
+    out = []
+    for cls, c, (cx, cy, w, h) in zip(classes, confs, xywh):
+        idx = int(cls)
+        if not 0 <= idx <= 31:
+            # Never drop a detection silently: a class outside the 32 FDI positions means these are
+            # not the dental grounding weights this contract describes.
+            raise NonRetryable(f"model produced class index {idx}; expected 0-31 (32 FDI tooth classes)")
+        # Clip BOTH edges to the image (cut the box, never shift it).
+        x0, y0 = max(0.0, cx - w / 2), max(0.0, cy - h / 2)
+        x1, y1 = min(float(image.width), cx + w / 2), min(float(image.height), cy + h / 2)
+        out.append({
+            "bbox": [round(x0, 1), round(y0, 1), round(max(0.0, x1 - x0), 1), round(max(0.0, y1 - y0), 1)],
+            "conf": round(min(max(float(c), 0.0), 1.0), 4),
+            "classIdx": idx,
+            "fdiQuadrant": idx // 8 + 1,
+            "fdiPosition": idx % 8 + 1,
+        })
+    out.sort(key=lambda b: -b["conf"])
+    return out, inference_ms
+
+
 def make_yolo_prelabel(
     *,
     get_model: Callable[[], Any],
@@ -162,32 +201,7 @@ def make_yolo_prelabel(
 
         image = load_image(ctx, p["imageId"])
         model = get_model()
-        t0 = time.perf_counter()
-        results = model.predict(image, verbose=False, conf=conf)
-        inference_ms = round((time.perf_counter() - t0) * 1000, 1)
-        if not results:
-            raise RuntimeError("model returned no result object")
-
-        boxes = results[0].boxes
-        classes, confs, xywh = boxes.cls.tolist(), boxes.conf.tolist(), boxes.xywh.tolist()
-        out = []
-        for cls, c, (cx, cy, w, h) in zip(classes, confs, xywh):
-            idx = int(cls)
-            if not 0 <= idx <= 31:
-                # Never drop a detection silently: a class outside the 32 FDI positions means these are
-                # not the dental grounding weights this contract describes.
-                raise NonRetryable(f"model produced class index {idx}; expected 0-31 (32 FDI tooth classes)")
-            # Clip BOTH edges to the image (cut the box, never shift it).
-            x0, y0 = max(0.0, cx - w / 2), max(0.0, cy - h / 2)
-            x1, y1 = min(float(image.width), cx + w / 2), min(float(image.height), cy + h / 2)
-            out.append({
-                "bbox": [round(x0, 1), round(y0, 1), round(max(0.0, x1 - x0), 1), round(max(0.0, y1 - y0), 1)],
-                "conf": round(min(max(float(c), 0.0), 1.0), 4),
-                "classIdx": idx,
-                "fdiQuadrant": idx // 8 + 1,
-                "fdiPosition": idx % 8 + 1,
-            })
-        out.sort(key=lambda b: -b["conf"])
+        out, inference_ms = detect_boxes(model, image, conf)
         return {"modelId": model_id, "inferenceMs": inference_ms, "boxes": out}
 
     return yolo_prelabel
@@ -227,6 +241,14 @@ def discover(env: dict[str, str] | None = None) -> dict[str, Callable[[JobContex
             load_image=load_image,
             grounding_ready=lambda: grounding_loaded,
         )
+        # Same prerequisites as tool.execute: it re-executes the tools the trace recorded (WP3).
+        import render_artifacts
+
+        handlers["trace.render_artifacts"] = render_artifacts.make_render_artifacts(
+            registry=ToolRegistry.create_default(),
+            execute_tool_call=execute_tool_call,
+            load_image=load_image,
+        )
         if not grounding_loaded:
             print(f"[worker] note: tool.execute is advertised but locate_tooth will fail ({grounder_reason})", flush=True)
     except ImportError as e:
@@ -237,8 +259,15 @@ def discover(env: dict[str, str] | None = None) -> dict[str, Callable[[JobContex
         handlers["yolo.prelabel"] = make_yolo_prelabel(
             get_model=lambda: grounder.model, load_image=load_image, served_model_id=served
         )
+        import al_score
+
+        handlers["al.score"] = al_score.make_al_score(
+            detect=lambda image, conf: detect_boxes(grounder.model, image, conf),
+            load_image=load_image,
+            served_model_id=served,
+        )
         if not served:
-            print("[worker] note: YOLO_MODEL_ID unset; yolo.prelabel answers any modelId and echoes it", flush=True)
+            print("[worker] note: YOLO_MODEL_ID unset; yolo.prelabel and al.score answer any modelId and echo it", flush=True)
     else:
         skipped["yolo.prelabel"] = grounder_reason or "grounding model not loaded"
 
