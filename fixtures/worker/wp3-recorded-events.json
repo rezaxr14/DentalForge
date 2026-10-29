@@ -1,0 +1,223 @@
+{
+  "$comment": "Captured from examples/python-worker through worker.JobContext.emit; the model/tool layer is mocked (see record_wp3_events.py). Do not hand-edit: regenerate with that script.",
+  "contractVersion": "1",
+  "recordedAt": "2026-10-29",
+  "streams": [
+    {
+      "jobType": "eval.run",
+      "events": [
+        {
+          "seq": 1,
+          "type": "partial",
+          "data": {
+            "image_id": 18,
+            "dataset": "dentex",
+            "split": "val",
+            "provider": "local",
+            "model": "app-model",
+            "ground_truth": [
+              {
+                "quadrant": 1,
+                "tooth_position": 1,
+                "diagnosis": "Caries"
+              }
+            ],
+            "predictions": [
+              {
+                "quadrant": 1,
+                "tooth_position": 1,
+                "diagnosis": "Caries"
+              }
+            ],
+            "matched_pairs": [],
+            "fdi_precision": 1.0,
+            "fdi_recall": 1.0,
+            "fdi_f1": 1.0,
+            "exact_precision": 1.0,
+            "exact_recall": 1.0,
+            "exact_f1": 1.0,
+            "closeness_score": 1.0,
+            "spatial_proximity": 1.0,
+            "diagnostic_similarity": 1.0,
+            "fdi_correct": true,
+            "quadrant_correct": true,
+            "tooth_position_correct": true,
+            "diagnosis_correct": true,
+            "exact_match": true,
+            "all_exact_match": true,
+            "final_answer": {
+              "quadrant": 1,
+              "tooth_position": 1,
+              "diagnosis": "Caries"
+            },
+            "raw_output": "{\"final_answer\": []}",
+            "format_ok": true,
+            "finish_reason": "final",
+            "confidence": null,
+            "timestamp": 1793277176.6066906
+          }
+        },
+        {
+          "seq": 2,
+          "type": "progress",
+          "data": {
+            "pct": 50,
+            "done": 1,
+            "total": 2,
+            "evaluated": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        {
+          "seq": 3,
+          "type": "partial",
+          "data": {
+            "image_id": 32,
+            "dataset": "dentex",
+            "split": "val",
+            "provider": "local",
+            "model": "app-model",
+            "ground_truth": [],
+            "predictions": [
+              {
+                "quadrant": 1,
+                "tooth_position": 1,
+                "diagnosis": "Caries"
+              }
+            ],
+            "matched_pairs": [],
+            "fdi_precision": 0.0,
+            "fdi_recall": 0.0,
+            "fdi_f1": 0.0,
+            "exact_precision": 0.0,
+            "exact_recall": 0.0,
+            "exact_f1": 0.0,
+            "closeness_score": 0.0,
+            "spatial_proximity": 0.0,
+            "diagnostic_similarity": 0.0,
+            "fdi_correct": false,
+            "quadrant_correct": false,
+            "tooth_position_correct": false,
+            "diagnosis_correct": false,
+            "exact_match": false,
+            "all_exact_match": false,
+            "final_answer": {
+              "quadrant": 1,
+              "tooth_position": 1,
+              "diagnosis": "Caries"
+            },
+            "raw_output": "{\"final_answer\": []}",
+            "format_ok": true,
+            "finish_reason": "final",
+            "confidence": null,
+            "timestamp": 1793277176.6067345
+          }
+        },
+        {
+          "seq": 4,
+          "type": "progress",
+          "data": {
+            "pct": 100,
+            "done": 2,
+            "total": 2,
+            "evaluated": 2,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      ],
+      "result": {
+        "runId": "44444444-4444-4444-8444-444444444444",
+        "n": 2,
+        "summary": {
+          "fdi_f1": 1.0,
+          "exact_f1": 0.5
+        }
+      }
+    },
+    {
+      "jobType": "al.score",
+      "events": [
+        {
+          "seq": 1,
+          "type": "progress",
+          "data": {
+            "pct": 50,
+            "done": 1,
+            "total": 2,
+            "meanConf": 0.65,
+            "minConf": 0.4,
+            "entropy": 0.8904916402194913,
+            "nBoxes": 2,
+            "inferenceMs": 12.5
+          }
+        },
+        {
+          "seq": 2,
+          "type": "progress",
+          "data": {
+            "pct": 100,
+            "done": 2,
+            "total": 2,
+            "meanConf": 0.65,
+            "minConf": 0.4,
+            "entropy": 0.8904916402194913,
+            "nBoxes": 2,
+            "inferenceMs": 12.5
+          }
+        }
+      ],
+      "result": {
+        "scores": [
+          {
+            "imageId": "11111111-1111-4111-8111-111111111111",
+            "meanConf": 0.65,
+            "minConf": 0.4,
+            "entropy": 0.8904916402194913,
+            "nBoxes": 2
+          },
+          {
+            "imageId": "22222222-2222-4222-8222-222222222222",
+            "meanConf": 0.65,
+            "minConf": 0.4,
+            "entropy": 0.8904916402194913,
+            "nBoxes": 2
+          }
+        ]
+      }
+    },
+    {
+      "jobType": "trace.render_artifacts",
+      "events": [
+        {
+          "seq": 1,
+          "type": "progress",
+          "data": {
+            "pct": 100,
+            "rendered": 2,
+            "reused": 0,
+            "skippedFailed": 0,
+            "skippedData": 0,
+            "failed": 0,
+            "artifacts": 2
+          }
+        }
+      ],
+      "result": {
+        "artifacts": [
+          {
+            "turnIdx": 0,
+            "callIdx": 0,
+            "artifactId": "77777777-7777-4777-8777-777777777777"
+          },
+          {
+            "turnIdx": 0,
+            "callIdx": 1,
+            "artifactId": "88888888-8888-4888-8888-888888888888"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: traceforge
       POSTGRES_DB: traceforge
     ports:
-      - "5433:5432"
+      # 5433 is the documented default (README, .env.example, CI). Override with
+      # TRACEFORGE_DB_PORT in an untracked `.env` when another local cluster owns 5433.
+      - "${TRACEFORGE_DB_PORT:-5433}:5432"
     volumes:
       - traceforge-pgdata:/var/lib/postgresql/data
     healthcheck:

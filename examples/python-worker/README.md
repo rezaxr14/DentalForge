@@ -38,7 +38,14 @@ python worker.py                             # the startup log lists what is adv
   `contralateral_compare`, `nudge_crop`, `fdi_label`, `locate_tooth`). `locate_tooth` needs the YOLO
   grounding weights; without them that tool fails the job instead of returning a made-up box.
 - `yolo.prelabel`: advertised only when `ultralytics` and the grounding weights are loaded.
-- Still stubs (not advertised): `agent.run`, `eval.run`, `al.score`, `trace.render_artifacts`, `parity.golden`.
+- `al.score`: the same detector as `yolo.prelabel`, scoring each image's box confidences (ADR-0025 §1).
+- `trace.render_artifacts`: re-executes a stored trace's tool calls and uploads the images (deduped by
+  sha256). Needs only the same registry as `tool.execute`. Offline: `python render_artifacts.py --trace
+  <file> --out <dir>`.
+- `eval.run`: added by `worker.py` when a model backend is registered; it reuses the `agent.run` path
+  per image, streams `partial` cases and posts them to `/ingest/eval-run`.
+- `parity.golden` is deliberately a dev CLI (`tools_goldens.py`), not a job: putting it on the wire
+  would be a contract change (ADR-0025).
 
 Tests: `pytest test_dental_handlers.py` (fakes; runs anywhere, in CI) and
 `PYTHONPATH=/path/to/VLM-DENTAL pytest test_real_dental_agent.py` (real tools; not in CI).

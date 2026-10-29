@@ -295,6 +295,30 @@ async function main() {
       check("real window_level, canonical view: the 1536x768 FULL canvas", win?.status === "succeeded" && win.result.width === 1536 && win.result.height === 768, JSON.stringify(win));
       const fdi36 = await finish(await enqueue("tool.execute", { imageId, tool: "fdi_label", args: { quadrant: 3, tooth_position: 6 } }), 40_000);
       check("real fdi_label: data result \"36\"", fdi36?.status === "succeeded" && fdi36.result.kind === "data" && fdi36.result.data === "36", JSON.stringify(fdi36));
+
+      // trace.render_artifacts re-executes a stored trace's tool calls (WP3). It needs the same
+      // registry as tool.execute but no torch, so this is the real handler, not a mock.
+      const tr = await dp.query(
+        "INSERT INTO traces (id, org_id, dataset_id, image_id, cohort, mode, verified, content_hash, n_turns, n_tool_calls, format_ok) VALUES (gen_random_uuid(), $1, $2, $3, 'e2e_render', 'with_tools', false, 'e2e-render', 1, 1, true) RETURNING id",
+        [orgId, dset.rows[0].id, imageId],
+      );
+      const turn = await dp.query(
+        "INSERT INTO trace_turns (id, org_id, trace_id, idx, status) VALUES (gen_random_uuid(), $1, $2, 0, 'final') RETURNING id",
+        [orgId, tr.rows[0].id],
+      );
+      await dp.query(
+        "INSERT INTO tool_calls (id, org_id, turn_id, idx, tool_name, args, ok) VALUES (gen_random_uuid(), $1, $2, 0, 'zoom_crop', $3, true)",
+        [orgId, turn.rows[0].id, { bbox: [100, 120, 80, 100] }],
+      );
+      const rendered = await finish(await enqueue("trace.render_artifacts", { traceId: tr.rows[0].id }), 40_000);
+      check(
+        "real trace.render_artifacts: re-runs the recorded zoom_crop and returns a stored artifact",
+        rendered?.status === "succeeded" && rendered.result.artifacts.length === 1 && typeof rendered.result.artifacts[0].artifactId === "string",
+        JSON.stringify(rendered?.error ?? rendered?.result),
+      );
+      const renderedKeys = rendered?.result?.artifacts?.[0] ? Object.keys(rendered.result.artifacts[0]).sort() : [];
+      check("  …with exactly the contract's keys (no dedupe hash leaked)", JSON.stringify(renderedKeys) === JSON.stringify(["artifactId", "callIdx", "turnIdx"]), JSON.stringify(renderedKeys));
+
       const noGround = await finish(await enqueue("tool.execute", { imageId, tool: "locate_tooth", args: { tooth: 38 } }), 40_000);
       // Capability-aware, like the worker itself: on a machine WITHOUT the weights the guard must
       // refuse instead of inventing a box; on one WITH them the tool must actually run. Assuming
