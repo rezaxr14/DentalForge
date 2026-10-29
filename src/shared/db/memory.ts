@@ -101,6 +101,24 @@ class ScopedMemory implements ScopedRepos {
     return [...this.root.images.values()].filter((i) => i.datasetId === datasetId && i.orgId === this.orgId);
   }
 
+  async listImagesPage(filter: {
+    datasetId: string;
+    split?: string | null;
+    limit: number;
+    offset: number;
+  }): Promise<{ images: ImageRecord[]; total: number }> {
+    const matching = (await this.listImages(filter.datasetId))
+      .filter((i) =>
+        filter.split === null || filter.split === undefined
+          ? true
+          : filter.split === ""
+            ? i.split === null || i.split === undefined
+            : i.split === filter.split,
+      )
+      .sort((a, b) => a.sourceImageId - b.sourceImageId || cmp(a.id, b.id));
+    return { images: matching.slice(filter.offset, filter.offset + filter.limit), total: matching.length };
+  }
+
   async createImage(input: Omit<ImageRecord, "id" | "orgId">): Promise<ImageRecord> {
     const ds = this.root.datasets.get(input.datasetId);
     if (!ds || ds.orgId !== this.orgId) throw new Error("dataset not found in org");
@@ -899,6 +917,11 @@ class ScopedMemory implements ScopedRepos {
       })),
     );
     return { outcome: "inserted", trace: structuredClone(trace), sameContent: true };
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    const t = this.root.traces.get(traceId);
+    return t && t.orgId === this.orgId ? structuredClone(t) : null;
   }
 
   async listTraceTurns(traceId: string): Promise<TraceTurnRecord[]> {

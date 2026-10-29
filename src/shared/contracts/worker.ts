@@ -6,6 +6,7 @@
  * Header: `X-Contract-Version: 1` required; errors follow RFC 9457 Problem Details.
  */
 import { z } from "zod";
+import { RUN_KEY_PATTERN } from "./ingest";
 import { Bbox, Finding, PredictedFinding } from "./traces";
 
 export const CONTRACT_VERSION = 1;
@@ -245,7 +246,26 @@ export const EvalRunPayload = z.object({
   dataset: z.string(),
   split: z.string().default("test"),
   canonicalResize: z.boolean().default(false),
-  imageIds: z.array(z.number().int()).optional(),
+  /**
+   * App image ids (UUIDs) to evaluate. Integers are the research-repo's own vocabulary and stay
+   * accepted by the schema, but a worker cannot resolve them to pixels: it refuses them with a reason
+   * (ADR-0025 addendum §2). Omitted = evaluate the split via `GET /images`.
+   */
+  imageIds: z.array(z.union([z.string().uuid(), z.number().int()])).max(500).optional(),
+  /** Dataset row whose images make up the run when `imageIds` is omitted. */
+  datasetId: z.string().uuid().optional(),
+  /** Cap when `imageIds` is omitted. The plan's >10-image gate applies: ask the owner first. */
+  limit: z.number().int().min(1).max(500).optional(),
+  /** Cohort the run used; the model that produced the numbers, not a paper arm. */
+  mode: z.enum(["with_tools", "no_tools"]).default("with_tools"),
+  maxTurns: z.number().int().default(30),
+  maxToolCalls: z.number().int().default(50),
+  seed: z.number().int().optional(),
+  temperature: z.number().min(0).max(2).default(0),
+  /** Recorded as `EvalCase.provider`; `local` for a backend this worker runs itself. */
+  provider: z.string().trim().min(1).max(80).default("local"),
+  /** Worker-chosen run identity; `POST /ingest/eval-run` upserts cases under it. Derived when absent. */
+  runKey: z.string().regex(RUN_KEY_PATTERN).optional(),
 });
 export const EvalRunResult = z.object({
   runId: z.string().uuid(),
@@ -323,6 +343,52 @@ export const ImageMetadataResponse = z.object({
   /** Strict ground truth (`Finding[]`); `[]` is a healthy scan, `null` is unknown. */
   groundTruth: z.array(Finding).nullable(),
 });
+
+/**
+ * `GET /images` (ADR-0025 addendum §2). Lets `eval.run` enumerate a split without a database.
+ * Ordered by `sourceImageId`; `total` is the unpaged count for the same filter.
+ */
+export const ImageListResponse = z.object({
+  images: z.array(
+    z.object({
+      id: z.string().uuid(),
+      sourceImageId: z.number().int(),
+      split: z.string().nullable(),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    }),
+  ),
+  total: z.number().int().min(0),
+});
+export type ImageListResponseT = z.infer<typeof ImageListResponse>;
+
+/**
+ * `GET /traces/{id}` (ADR-0025 addendum §2): only what re-executing the tool calls needs. Thoughts and
+ * raw model output are deliberately absent — a worker has no use for them and they are the largest part
+ * of a trace.
+ */
+export const WorkerTraceResponse = z.object({
+  traceId: z.string().uuid(),
+  imageId: z.string().uuid(),
+  mode: z.enum(["with_tools", "no_tools"]),
+  turns: z.array(
+    z.object({
+      idx: z.number().int().min(0),
+      toolCalls: z.array(
+        z.object({
+          idx: z.number().int().min(0),
+          toolName: z.string(),
+          args: z.record(z.string(), z.unknown()),
+          ok: z.boolean(),
+          error: z.string().nullable(),
+          /** The artifact this call already produced, when it produced one. */
+          artifactId: z.string().uuid().nullable(),
+        }),
+      ),
+    }),
+  ),
+});
+export type WorkerTraceResponseT = z.infer<typeof WorkerTraceResponse>;
 
 // 7. system.ping — contract-level diagnostic (not in plan §10.2). Lets an operator
 // verify the whole pipe (enqueue → claim → events → complete → SSE) with no GPU.
