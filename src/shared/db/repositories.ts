@@ -9,7 +9,7 @@
  *   - tests/m6-repos.test.ts         (drizzle, requires Docker Postgres)
  */
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "./pg";
 import {
   annotationSets,
@@ -166,6 +166,36 @@ class ScopedPg implements ScopedRepos {
       .from(images)
       .where(and(eq(images.datasetId, datasetId), eq(images.orgId, this.orgId)))
       .orderBy(asc(images.createdAt));
+  }
+
+  async listImagesPage(filter: {
+    datasetId: string;
+    split?: string | null;
+    limit: number;
+    offset: number;
+  }): Promise<{ images: ImageRecord[]; total: number }> {
+    if (!(await this.datasetInOrg(filter.datasetId)).length) return { images: [], total: 0 };
+    const where = [
+      eq(images.datasetId, filter.datasetId),
+      eq(images.orgId, this.orgId),
+      // `split: ""` selects rows with no split; `null`/undefined means "do not filter".
+      filter.split === null || filter.split === undefined
+        ? undefined
+        : filter.split === ""
+          ? isNull(images.split)
+          : eq(images.split, filter.split),
+    ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+    const [rows, counted] = await Promise.all([
+      this.db
+        .select()
+        .from(images)
+        .where(and(...where))
+        .orderBy(asc(images.sourceImageId), asc(images.id))
+        .limit(filter.limit)
+        .offset(filter.offset),
+      this.db.select({ n: count() }).from(images).where(and(...where)),
+    ]);
+    return { images: rows, total: Number(counted[0]?.n ?? 0) };
   }
 
   async createImage(input: Omit<ImageRecord, "id" | "orgId">): Promise<ImageRecord> {
@@ -1250,6 +1280,15 @@ class ScopedPg implements ScopedRepos {
       }
       return { outcome: "inserted", trace, sameContent: true } as const;
     });
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(traces)
+      .where(and(eq(traces.id, traceId), eq(traces.orgId, this.orgId)))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async listTraceTurns(traceId: string): Promise<TraceTurnRecord[]> {

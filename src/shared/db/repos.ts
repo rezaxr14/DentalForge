@@ -497,6 +497,17 @@ export interface ScopedRepos {
   listDatasets(): Promise<DatasetRecord[]>;
   createDataset(input: { name: string; source: DatasetRecord["source"]; licenseNote?: string }): Promise<DatasetRecord>;
   listImages(datasetId: string): Promise<ImageRecord[]>;
+  /**
+   * One page of a dataset's images, ordered by `sourceImageId` (stable paging), with the unpaged
+   * total for the same filter. `split: null` means "no split filter"; `split: ""` matches rows whose
+   * split is null. Feeds the worker's `GET /images` (ADR-0025 addendum §2).
+   */
+  listImagesPage(filter: {
+    datasetId: string;
+    split?: string | null;
+    limit: number;
+    offset: number;
+  }): Promise<{ images: ImageRecord[]; total: number }>;
   createImage(input: Omit<ImageRecord, "id" | "orgId">): Promise<ImageRecord>;
   listTraces(filter?: {
     datasetId?: string;
@@ -630,6 +641,8 @@ export interface ScopedRepos {
   ingestTrace(input: IngestTraceInput): Promise<IngestTraceResult>;
   /** Empty when the trace is unknown OR belongs to another org. */
   listTraceTurns(traceId: string): Promise<TraceTurnRecord[]>;
+  /** Null when the trace is unknown OR belongs to another org (never distinguishes the two). */
+  getTrace(traceId: string): Promise<TraceRecord | null>;
 
   /**
    * ONE atomic write: upsert the run by (org, runKey), upsert the cases by (run, sourceImageId), then recompute
