@@ -53,7 +53,10 @@ def probed(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 def test_software_carries_provenance_and_the_drift_report(probed: dict[str, Any]):
     sw = worker.compat_software()
-    assert sw["python"] == "3.12.3"
+    # `compat_software` always reports the RUNNING interpreter, not the probe's copy (the probe is
+    # a child process and may differ). Asserting a hard-coded patch version made this test fail the
+    # moment GitHub's runner image moved from Python 3.12 to 3.14.
+    assert sw["python"] == sys.version.split()[0]
     assert sw["torch"] == "2.5.1+cu121"
     assert sw["cuda"] == "available"
     assert sw["vlmDentalCommit"] == "abc123"
