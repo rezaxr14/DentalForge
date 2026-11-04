@@ -124,11 +124,15 @@ JOB_DEPENDENCIES: dict[str, JobDependency] = {
         optional_packages=("peft",),
         needs_registry=True,
     ),
+    # `eval.run` is the same per-image path as `agent.run` plus VLM-DENTAL's matcher, so the torch
+    # *backend* is not what gates it: a worker serving an `openai_compat` model can run an evaluation.
+    # `transformers` is deliberately absent for the same reason. `torch` stays listed because
+    # `dental_agent/evaluation/__init__.py` imports it, so importing the matcher on a torch-free box
+    # fails — and Table 4.3 says this row needs torch. If no model is registered, `eval.run` refuses
+    # the job with a reason instead of pretending.
     "eval.run": JobDependency(
-        symbols=_TORCH_AGENT_SYMBOLS
-        + (Symbol("dental_agent.data.dentex", "load_dentex_dataset"),),
-        packages=("torch", "transformers"),
-        optional_packages=("peft",),
+        symbols=_OPENAI_SYMBOLS + (Symbol("dental_agent.evaluation.metrics", "match_multi_findings"),),
+        packages=("torch",),
         needs_registry=True,
     ),
 }

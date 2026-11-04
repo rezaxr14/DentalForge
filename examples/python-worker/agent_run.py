@@ -110,6 +110,61 @@ def ingest_live_trace(
     return item.get("traceId")
 
 
+def make_run_one(
+    *,
+    torch_backend: Any = None,
+    openai_backend: Any = None,
+    registry_factory: Callable[[], Any] | None = None,
+    run_loop: Callable[..., RunOutcome] | None = None,
+) -> Callable[..., RunOutcome]:
+    """Build the backend dispatch shared by `agent.run` and `eval.run` (one image -> one `RunOutcome`).
+
+    Extracted so the evaluation harness runs the *same* code as a single live run, including the cohort
+    switch, the turn callback and the artifact sink. Callers own payload validation and model lookup.
+    """
+
+    def run_one(
+        spec: ModelSpec,
+        *,
+        image: Any,
+        image_id: Any,
+        mode: str,
+        max_turns: Any,
+        max_tool_calls: int,
+        canonical_resize: bool,
+        temperature: float,
+        seed: Any,
+        on_turn: Callable[[dict[str, Any]], None] | None,
+        on_artifact: Callable[[int, int, str, bytes], str] | None,
+        should_stop: Any,
+    ) -> RunOutcome:
+        common = {
+            "mode": mode,
+            "max_turns": max_turns,
+            "max_tool_calls": max_tool_calls,
+            "canonical_resize": canonical_resize,
+            "temperature": temperature,
+            "seed": seed,
+            "on_turn": on_turn,
+            "on_artifact": on_artifact,
+            "should_stop": should_stop,
+        }
+        if spec.backend == "torch_hf":
+            return torch_backend.run(spec, image=image, image_id=image_id, **common)
+        if run_loop is None:  # pragma: no cover - wired by worker.py
+            raise NonRetryable("openai_compat loop is not wired")
+        if mode == "with_tools" and registry_factory is None:
+            raise NonRetryable("with_tools needs a ToolRegistry, which this worker did not provide")
+        return run_loop(
+            openai_backend.completer(spec.base_path),
+            registry=registry_factory() if mode == "with_tools" else None,
+            image=image,
+            **common,
+        )
+
+    return run_one
+
+
 def make_agent_run(
     *,
     models: dict[str, ModelSpec],
@@ -179,19 +234,12 @@ def make_agent_run(
             "should_stop": getattr(getattr(ctx, "abort", None), "is_set", None),
         }
 
-        if spec.backend == "torch_hf":
-            outcome = torch_backend.run(spec, image=image, image_id=p["imageId"], **common)
-        else:
-            if run_loop is None:  # pragma: no cover - wired by worker.py
-                raise NonRetryable("openai_compat loop is not wired")
-            if mode == "with_tools" and registry_factory is None:
-                raise NonRetryable("with_tools needs a ToolRegistry, which this worker did not provide")
-            outcome = run_loop(
-                openai_backend.completer(spec.base_path),
-                registry=registry_factory() if mode == "with_tools" else None,
-                image=image,
-                **common,
-            )
+        outcome = make_run_one(
+            torch_backend=torch_backend,
+            openai_backend=openai_backend,
+            registry_factory=registry_factory,
+            run_loop=run_loop,
+        )(spec, image=image, image_id=p["imageId"], **common)
 
         trace_id = ingest_live_trace(
             ctx, image_id=p["imageId"], spec=spec, mode=mode, outcome=outcome
