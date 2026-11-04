@@ -7,6 +7,15 @@ clinical use.**
 Plan: `TRACEFORGE_IMPLEMENTATION_PLAN.md` (M0–M4 done; M5 in progress).
 Decisions: `docs/adr/` (ADR-0001 through ADR-0006).
 
+## Live demo
+
+**https://dentalforge-app.vercel.app** — Next.js app on Vercel, Postgres on
+Supabase. Start at [`/status`](https://dentalforge-app.vercel.app/status) to
+see the capability ladder (database, worker mode, Redis, storage), then browse
+traces, evals, labels, quality, and rewards. Public artifacts are DENTEX-derived
+only; the Tufts data never leaves local development. Research prototype, not for
+clinical use — the demo database is reset periodically.
+
 ## Quickstart
 
 ```bash
@@ -47,6 +56,16 @@ To learn more about TraceForge, start with the plan and ADRs:
 
 ## Deploy on Vercel
 
+Production: **https://dentalforge-app.vercel.app** (Vercel project
+`dentalforge-app`), backed by a Supabase Postgres database. Required production
+env: `DATABASE_URL` (Supabase pooler), `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
+`INVITE_SIGNING_SECRET`, `TRACEFORGE_DATASOURCE=postgres`, `WORKER_MODE=live`.
+Secrets must be unique — the app refuses to boot with the public dev/example
+values (see `src/shared/config/env.ts`). See [`docs/supabase.md`](./docs/supabase.md)
+for the database runbook.
+
 Standard Next.js deploy. Builds are self-hosted (Geist via the `geist`
 package, no Google Fonts fetch). `WORKER_MODE` defaults to `off`; never set
-`HF_TOKEN` on Vercel (local import scripts only).
+`HF_TOKEN` on Vercel (local import scripts only). Storage is currently the
+ephemeral local adapter, so uploads do not persist across deploys — configure R2
+before relying on uploads.
