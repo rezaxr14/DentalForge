@@ -102,6 +102,10 @@ DIRECT_URL='postgresql://<role>.<ref>:<password>@aws-1-<region>.pooler.supabase.
 * The Vercel project's environment variables for the deployment. `DATABASE_URL` is required;
   `DIRECT_URL` is not read at runtime, so do not set it there.
 
+The deployment lives at **https://dentalforge-app.vercel.app** (Vercel project
+`dentalforge-app`). `/api/health` reports `db: up` and `workerMode: live` when the wiring is
+correct; `/status` shows the same capability ladder in the UI.
+
 `src/shared/db/pg.ts` passes the URL straight to `pg.Pool`. `sslmode=no-verify` encrypts the
 connection without verifying the certificate chain; §2 explains why `require` fails here and what
 the upgrade path is.
@@ -130,8 +134,8 @@ Deliberately:
 | Schema applied and baselined (`0000`–`0007`) | done — `pnpm db:migrate` is a no-op |
 | `DATABASE_URL` / `DIRECT_URL` in `.env.local` | done — pooler `aws-1`, port 6543 / 5432 |
 | PostgREST grants revoked (no RLS advisory) | done — `get_advisors` returns no lints |
-| Vercel `DATABASE_URL` set | **not yet** — needs the Vercel project |
-| Test fixtures wiped from the dev database | **not yet** — 165 empty orgs and 122 fixture datasets from earlier test runs; ask before dropping |
+| Vercel `DATABASE_URL` set | done — production/preview/development on `dentalforge-app` |
+| Test fixtures wiped from the dev database | done — all app tables truncated, 0 rows |
 
 The hosted database currently holds **no real data**: every organization has zero members, every
 dataset is a `dentex` fixture row, and there are no users, jobs, traces or eval runs. A reset is
