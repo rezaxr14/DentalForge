@@ -286,6 +286,70 @@ export async function imageUrl(req: Request, deps: WorkerDeps, imageId: string):
   }
 }
 
+// ---- GET /images?datasetId=&split=&limit=&offset= --------------------------
+/**
+ * One page of a dataset's images (ADR-0025 addendum §2). `eval.run` uses it to enumerate a split
+ * without a database. Ordered by `sourceImageId` so paging is stable; `total` is the unpaged count.
+ */
+export async function listImages(req: Request, deps: WorkerDeps): Promise<Response> {
+  const auth = await authenticateWorker(req, deps.store, "jobs:read");
+  if (auth instanceof Response) return auth;
+  const q = new URL(req.url).searchParams;
+  const datasetId = q.get("datasetId") ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(datasetId)) {
+    return validationProblem(["datasetId: required, must be a dataset UUID"]);
+  }
+  const limitRaw = q.get("limit") ?? "100";
+  const offsetRaw = q.get("offset") ?? "0";
+  const limit = Number(limitRaw);
+  const offset = Number(offsetRaw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) return validationProblem(["limit: integer 1-500"]);
+  if (!Number.isInteger(offset) || offset < 0) return validationProblem(["offset: integer >= 0"]);
+  const dataset = (await auth.repos.listDatasets()).find((d) => d.id === datasetId);
+  if (!dataset) return problem(404, "not_found", "Dataset not found");
+  // `split=` (empty) means "rows with no split"; an absent parameter means "no split filter".
+  const split = q.has("split") ? q.get("split")! : null;
+  const page = await auth.repos.listImagesPage({ datasetId, split, limit, offset });
+  return json({
+    images: page.images.map((i) => ({
+      id: i.id,
+      sourceImageId: i.sourceImageId,
+      split: i.split ?? null,
+      width: i.width,
+      height: i.height,
+    })),
+    total: page.total,
+  });
+}
+
+// ---- GET /traces/:id -------------------------------------------------------
+/** The tool calls a re-execution needs (ADR-0025 addendum §2). No thoughts, no raw model output. */
+export async function getWorkerTrace(req: Request, deps: WorkerDeps, traceId: string): Promise<Response> {
+  const auth = await authenticateWorker(req, deps.store, "jobs:read");
+  if (auth instanceof Response) return auth;
+  if (!/^[0-9a-f-]{36}$/i.test(traceId)) return problem(404, "not_found", "Trace not found");
+  const trace = await auth.repos.getTrace(traceId);
+  // Same answer for "unknown" and "another tenant's": no existence oracle.
+  if (!trace) return problem(404, "not_found", "Trace not found");
+  const turns = await auth.repos.listTraceTurns(traceId);
+  return json({
+    traceId: trace.id,
+    imageId: trace.imageId,
+    mode: trace.mode,
+    turns: turns.map((t) => ({
+      idx: t.idx,
+      toolCalls: t.toolCalls.map((c) => ({
+        idx: c.idx,
+        toolName: c.toolName,
+        args: c.args ?? {},
+        ok: c.ok,
+        error: c.error,
+        artifactId: c.artifactId ?? null,
+      })),
+    })),
+  });
+}
+
 // ---- Documented-but-deferred endpoints (plan §10.1) -----------------------
 // ---- POST /models/register -------------------------------------------------
 /** Upsert by (org, name, stage). Needs `jobs:write`; the ONNX artifact must be a `model` artifact of THIS org. */

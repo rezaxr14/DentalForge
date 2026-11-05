@@ -28,6 +28,7 @@ import {
   FailJobResponse,
   HeartbeatRequest,
   HeartbeatResponse,
+  ImageListResponse,
   ImageMetadataResponse,
   JobEventsRequest,
   JobEventsResponse,
@@ -36,6 +37,7 @@ import {
   ProblemDetails,
   RegisterWorkerRequest,
   RegisterWorkerResponse,
+  WorkerTraceResponse,
 } from "./worker";
 
 type Json = Record<string, unknown>;
@@ -86,6 +88,8 @@ export function buildWorkerOpenApi(): Json {
     RegisterModelRequest: input(RegisterModelRequest),
     RegisterModelResponse: output(RegisterModelResponse),
     ImageMetadataResponse: output(ImageMetadataResponse),
+    ImageListResponse: output(ImageListResponse),
+    WorkerTraceResponse: output(WorkerTraceResponse),
     IngestMetricsRequest: input(IngestMetricsRequest),
     IngestMetricsResponse: output(IngestMetricsResponse),
     IngestEvalRunRequest: input(IngestEvalRunRequest),
@@ -157,6 +161,37 @@ export function buildWorkerOpenApi(): Json {
           responses: {
             "200": { description: "OK", content: content("ImageMetadataResponse") },
             "404": problemRes("Unknown image or variant"),
+          },
+          security: [{ workerToken: [] }],
+        },
+      },
+      "/images": {
+        get: {
+          summary: "One page of a dataset's images, ordered by sourceImageId (for eval.run)",
+          parameters: [
+            contractHeader,
+            { name: "datasetId", in: "query", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "split", in: "query", required: false, description: "Empty string selects rows with no split.", schema: { type: "string" } },
+            { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500, default: 100 } },
+            { name: "offset", in: "query", required: false, schema: { type: "integer", minimum: 0, default: 0 } },
+          ],
+          responses: {
+            "200": { description: "OK", content: content("ImageListResponse") },
+            "404": problemRes("Unknown dataset"),
+          },
+          security: [{ workerToken: [] }],
+        },
+      },
+      "/traces/{id}": {
+        get: {
+          summary: "The tool calls of a stored trace, for trace.render_artifacts",
+          parameters: [
+            contractHeader,
+            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          responses: {
+            "200": { description: "OK", content: content("WorkerTraceResponse") },
+            "404": problemRes("Unknown trace (also returned for another tenant's trace)"),
           },
           security: [{ workerToken: [] }],
         },

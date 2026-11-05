@@ -126,3 +126,78 @@ Not verified here:
 - The weekly `upstream-compat.yml` run (it now also runs the conformance test); only its commands were run locally.
 - The `E2E_REDIS_URL` (bus-enabled) variant of the e2e.
 - Behaviour on a machine without the grounding weights: the capability-aware tests take the other branch, so the *guard* is proven, and the run branch was exercised on this machine.
+
+---
+
+## Addendum (WP3): `eval.run`, `al.score`, `trace.render_artifacts`
+
+Date: 2026-10-27 · Status: decided before the code, per WP3.
+
+### 1. Active-learning entropy is defined over retained detections
+
+`al.score` returns four numbers per image. Three are obvious; `entropy` is not, so it is defined here
+first and the handler implements exactly this.
+
+- Input: the grounding detector's boxes for one image at the run's confidence threshold (`confThreshold`,
+  default `0.25`, the same threshold `yolo.prelabel` uses). Let `c_1 … c_N` be their confidences.
+- `nBoxes = N`. `meanConf = mean(c_i)`, `minConf = min(c_i)`; for `N = 0` both are `0`, not `NaN`.
+- `p_i = c_i / Σ c_j` (a distribution over *detections*, not over classes).
+- `entropy = H(p) / log2(N)` where `H = -Σ p_i log2 p_i`, i.e. **normalized Shannon entropy in bits**,
+  in `[0, 1]`; `0` when `N ≤ 1`.
+
+Why this and not class-probability entropy: Ultralytics' `Results.boxes` exposes only the winning class's
+confidence, not a full 32-class distribution, and re-running the head to get one would invent a number the
+research code never produced. Confidence-spread entropy answers the question the AL queue actually asks —
+"how ambiguous is this detector on this image?" — and `nBoxes` keeps a single confident box from looking as
+certain as an empty image. Normalizing by `log2(N)` makes images with different detection counts comparable;
+without it, a 12-box image outranks a 2-box image purely because it has more boxes.
+
+Rejected alternative: entropy of the class histogram over detections, which would reward images where the
+model happens to scatter across many FDI codes regardless of how sure it is.
+
+### 2. Two read endpoints join the worker contract
+
+`trace.render_artifacts` is declared as `{traceId}` only, so the worker must be able to read the trace; and
+`eval.run` has to enumerate the images of a split without a database. Both are additions to contract v1,
+regenerated into `docs/worker-openapi.json` / `docs/worker-contract.md`:
+
+- `GET /images?datasetId=<uuid>&split=<label>&limit=<1..500>&offset=<n>` → `{images:[{id, sourceImageId,
+  split, width, height}], total}`. Org-scoped, ordered by `sourceImageId`, so paging is stable. Replaces
+  the old assumption that the app always enumerates ids for the worker.
+- `GET /traces/{id}` → `{traceId, imageId, dataset, mode, turns:[{idx, toolCalls:[{idx, toolName, args,
+  ok, error, artifactId}]}]}`. Only what a re-execution needs; no thoughts, no raw model output.
+  `404` for an unknown trace **and** for another tenant's trace (identical responses: no existence oracle).
+
+`EvalRunPayload.imageIds` widens to accept the app's UUIDs (`z.union([uuid, int])`). Integers stay valid for
+the research-repo vocabulary the contract already documented, and the handler refuses them with a precise
+reason instead of guessing, exactly as `agent.run` does today.
+
+### 3. `eval.run` chunks, upserts, and is idempotent without a new key
+
+- The worker posts **one chunk per ≤100 cases**, which is `MAX_EVAL_CASES_PER_REQUEST`; `imageIds` are
+  unique, so a chunk can never trip the server's duplicate-`image_id` rule. A single image is one case, so
+  a chunk boundary never splits an image's metrics.
+- The run identity is the worker-chosen `runKey`. Because cases upsert on `(run, image_id)`, a retried chunk
+  overwrites instead of duplicating — that is the retry semantics the plan asks for, and it needs no
+  `Idempotency-Key` header on the ingest route (which has none). A *different* run must use a different
+  `runKey`; the server already answers `409 run_mismatch` otherwise.
+- Per-case metrics come from VLM-DENTAL's own `match_multi_findings`, imported at call time. Reimplementing
+  the matcher in the worker would be a second source of truth for the numbers the paper reports. When the
+  checkout or its numeric dependencies are absent, the job fails **retryable** with that reason — it never
+  falls back to a made-up score.
+- A failed case does not abort the run: it is reported as a `log` event and excluded from the chunk, so
+  `n` counts real evaluations. If *no* case succeeds the job fails, so an empty run can never look green.
+
+### 4. `trace.render_artifacts` dedupes by sha256
+
+Re-execution is deterministic per (image, tool, args), so two turns asking the same question produce the
+same PNG. The handler hashes the bytes, uploads each distinct hash once, and points every matching
+`(turnIdx, callIdx)` at that artifact. Artifacts are keyed by `(turnIdx, callIdx)` in the result, so the
+ordering the trace page needs survives dedupe. The offline CLI (`render_artifacts.py --trace <file>`)
+writes the same PNGs to a directory instead of uploading, which is what WP7 uses to build demo assets.
+
+### 5. `parity.golden` stays a dev CLI
+
+It ships as `examples/python-worker/tools_goldens.py` (WP1) writing `fixtures/goldens/vlm_tools.json`, and
+the browser ports are compared against `fixtures/goldens/{m2_goldens,m3_quality,m4_tools}.json`. It is
+**not** a job type and never enters the production contract; promoting it would need its own ADR.

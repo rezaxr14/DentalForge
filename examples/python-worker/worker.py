@@ -130,20 +130,8 @@ def system_ping(ctx: JobContext) -> dict[str, Any]:
     return {"echo": p.get("message", "ping"), "workerName": WORKER_NAME, "steps": steps}
 
 
-def eval_run(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Evaluate a model; stream case rows as `partial` events.
-
-    VLM-DENTAL: `scripts/run_zero_shot.py` / `dental_agent/evaluation/`. Return {runId (uuid), n, summary:{...}}.
-    """
-    raise NotImplementedError("wire the evaluation harness here")
-
-
-def al_score(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Uncertainty scores for the active-learning queue ({scores:[{imageId, meanConf, minConf, entropy, nBoxes}]})."""
-    raise NotImplementedError("score images with the YOLO model here")
-
-
-# Only IMPLEMENTED handlers are advertised. Move a stub in here once it works.
+# Only IMPLEMENTED handlers are advertised. `eval.run`, `al.score` and `trace.render_artifacts` are
+# wired by `_enable_dental_handlers()` / `enable_agent_run()` when their prerequisites hold (WP3).
 HANDLERS: dict[str, Callable[[JobContext], dict[str, Any]]] = {
     "system.ping": system_ping,
 }
@@ -215,6 +203,23 @@ def enable_agent_run(models: dict[str, Any]) -> None:
         load_image=ImageSource(),
         registry_factory=registry_factory,
         run_loop=run_loop,
+    )
+
+    # `eval.run` reuses the exact per-image path (WP3): same backend, same cohort switch, same budgets.
+    try:
+        import eval_run as eval_run_module
+    except ImportError as e:
+        print(f"[worker] not advertising eval.run: {e}", flush=True)
+        return
+    HANDLERS["eval.run"] = eval_run_module.make_eval_run(
+        models=models,
+        run_one=agent_run_module.make_run_one(
+            torch_backend=torch_backend,
+            openai_backend=openai_backend,
+            registry_factory=registry_factory,
+            run_loop=run_loop,
+        ),
+        load_image=ImageSource(),
     )
 
 WORKER_NAME = os.environ.get("WORKER_NAME", f"py-{socket.gethostname()}"[:60])

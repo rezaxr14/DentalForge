@@ -118,13 +118,34 @@ export async function evalRun(ctx: JobContext) {
   return { runId: randomUUID(), n: cases.length, summary: { fdi_f1: mean("fdi_f1"), exact_f1: mean("exact_f1") } };
 }
 
+/**
+ * Normalized Shannon entropy over retained box confidences — the definition fixed in ADR-0025
+ * (WP3 addendum §1), so the mock cannot disagree with the real handler about what `entropy` means.
+ */
+function detectionEntropy(confs: number[]): number {
+  const positive = confs.filter((c) => c > 0);
+  if (positive.length <= 1) return 0;
+  const total = positive.reduce((s, c) => s + c, 0);
+  const h = -positive.reduce((s, c) => {
+    const p = c / total;
+    return s + p * Math.log2(p);
+  }, 0);
+  return Math.min(1, Math.max(0, h / Math.log2(positive.length)));
+}
+
 export async function alScore(ctx: JobContext) {
   const p = AlScorePayload.parse(ctx.job.payload);
   const scores = p.imageIds.map((id) => {
     const fx = labelFixture(id);
     const confs = fx?.predictions.map((b) => b.confidence) ?? [];
     const mean = confs.length ? confs.reduce((s, c) => s + c, 0) / confs.length : 0;
-    return { imageId: id, meanConf: mean, minConf: confs.length ? Math.min(...confs) : 0, entropy: confs.length ? -Math.log(Math.max(mean, 1e-9)) : 0, nBoxes: confs.length };
+    return {
+      imageId: id,
+      meanConf: mean,
+      minConf: confs.length ? Math.min(...confs) : 0,
+      entropy: detectionEntropy(confs),
+      nBoxes: confs.length,
+    };
   });
   return { scores };
 }
