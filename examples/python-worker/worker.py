@@ -130,16 +130,6 @@ def system_ping(ctx: JobContext) -> dict[str, Any]:
     return {"echo": p.get("message", "ping"), "workerName": WORKER_NAME, "steps": steps}
 
 
-def agent_run(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Run the agent loop, streaming one `turn` event per turn.
-
-    VLM-DENTAL: `dental_agent/agent/langgraph_loop.py`. Emit each turn record
-    (turn, raw_output, parsed, status, tool_calls_this_turn) via ctx.emit("turn", ...), upload tool
-    images as artifacts, and return {finalAnswer, nTurns, nToolCalls, formatOk, rewardComponents?}.
-    """
-    raise NotImplementedError("wire the LangGraph agent loop here")
-
-
 def eval_run(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
     """STUB. Evaluate a model; stream case rows as `partial` events.
 
@@ -167,6 +157,65 @@ def _enable_dental_handlers() -> None:
         print(f"[worker] dental handlers unavailable: {e}", flush=True)
         return
     HANDLERS.update(dental_handlers.discover())
+
+
+def load_agent_models() -> list[Any]:
+    """The owner's `WORKER_MODELS_FILE`. A malformed file stops the worker instead of serving nothing."""
+    try:
+        from backends.base import load_models_file
+    except ImportError as e:  # pragma: no cover - backends is part of this directory
+        print(f"[worker] model backends unavailable: {e}", flush=True)
+        return []
+    return load_models_file(os.environ.get("WORKER_MODELS_FILE"))
+
+
+def register_models(client: "Client", specs: list[Any]) -> dict[str, Any]:
+    """Register each local model with the app; return {app modelId: spec} for `agent.run`."""
+    models: dict[str, Any] = {}
+    for spec in specs:
+        try:
+            r = client.post("/models/register", spec.registry_body())
+        except ContractError as e:
+            # 422 = this app does not accept the entry (e.g. an older server without stage `test`).
+            # Never advertise agent.run for a model the app cannot address.
+            print(f"[worker] could not register model {spec.model_id!r}: {e}", flush=True)
+            continue
+        models[r["modelId"]] = spec
+        print(f"[worker] model {spec.model_id!r} -> {r['modelId']} ({spec.backend}, stage {spec.app_stage})", flush=True)
+    return models
+
+
+def enable_agent_run(models: dict[str, Any]) -> None:
+    """Wire `agent.run` once at least one model is registered (WP2)."""
+    if not models:
+        print("[worker] not advertising agent.run: no model registered", flush=True)
+        return
+    try:
+        import agent_run as agent_run_module
+        from backends.openai_compat import OpenAICompatBackend, run_loop
+        from backends.torch_hf import TorchHFBackend
+        from dental_handlers import ImageSource
+    except ImportError as e:
+        print(f"[worker] not advertising agent.run: {e}", flush=True)
+        return
+
+    needs_torch = any(spec.backend == "torch_hf" for spec in models.values())
+    torch_backend = TorchHFBackend() if needs_torch else None
+    openai_backend = OpenAICompatBackend() if any(spec.backend == "openai_compat" for spec in models.values()) else None
+
+    def registry_factory() -> Any:
+        from dental_agent.tools.registry import ToolRegistry
+
+        return ToolRegistry.create_default()
+
+    HANDLERS["agent.run"] = agent_run_module.make_agent_run(
+        models=models,
+        torch_backend=torch_backend,
+        openai_backend=openai_backend,
+        load_image=ImageSource(),
+        registry_factory=registry_factory,
+        run_loop=run_loop,
+    )
 
 WORKER_NAME = os.environ.get("WORKER_NAME", f"py-{socket.gethostname()}"[:60])
 RUNTIME = os.environ.get("WORKER_RUNTIME", "local-gpu")  # local-gpu | colab | kaggle | cloud
@@ -254,11 +303,16 @@ def run_job(client: Client, job: dict[str, Any], cancelled: set[str]) -> None:
             return
         raise
     except Exception as e:  # noqa: BLE001 - every handler failure is reported to the server
-        retryable = not isinstance(e, (NonRetryable, NotImplementedError))
+        # A backend error carries its own retryability (`ModelUnavailable` is worth retrying; a bad
+        # payload is not). Everything else keeps the old rule.
+        retryable = getattr(e, "retryable", None)
+        if retryable is None:
+            retryable = not isinstance(e, (NonRetryable, NotImplementedError))
+        code = getattr(e, "code", "handler_error")
         print(f"[worker] job {short} failed: {e}", flush=True)
         try:
             client.post(f"/jobs/{job['id']}/fail",
-                        {"error": {"code": "handler_error", "message": str(e)[:500], "retryable": retryable}})
+                        {"error": {"code": code, "message": str(e)[:500], "retryable": retryable}})
         except ContractError as fe:
             print(f"[worker] fail() also failed: {fe}", flush=True)
 
@@ -271,6 +325,13 @@ def main() -> int:
         return 2
     max_jobs = int(os.environ["MAX_JOBS"]) if os.environ.get("MAX_JOBS") else None
     _enable_dental_handlers()
+    try:
+        specs = load_agent_models()
+    except (OSError, ValueError) as e:
+        print(f"[worker] fatal: WORKER_MODELS_FILE: {e}", file=sys.stderr)
+        return 2
+    if specs:
+        print(f"[worker] {len(specs)} model(s) configured in {os.environ.get('WORKER_MODELS_FILE')}", flush=True)
 
     client = Client(base, token)
     stop = threading.Event()
@@ -282,6 +343,10 @@ def main() -> int:
     # Register with backoff: the app may still be cold-starting or its DB briefly down.
     for attempt in range(20):
         try:
+            if specs and "agent.run" not in HANDLERS:
+                # The app assigns a modelId per entry; `agent.run` is advertised only once at least
+                # one model is addressable, so the app never routes a run this worker cannot serve.
+                enable_agent_run(register_models(client, specs))
             reg = client.register(WORKER_NAME, RUNTIME, list(HANDLERS), software=software)
             break
         except ContractError as e:

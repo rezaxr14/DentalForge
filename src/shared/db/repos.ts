@@ -66,6 +66,9 @@ export interface TraceRecord {
   formatOk: boolean;
   /** Optional so older constructors (fixtures, createTrace callers) stay valid. */
   verifierReason?: string | null;
+  /** Live-run provenance (ADR-0025); null/absent for imported traces. */
+  backend?: string | null;
+  stage?: string | null;
   groundTruth: unknown;
   finalAnswer: unknown;
 }
@@ -82,6 +85,9 @@ export interface EvalRunRecord {
   /** Set only for runs created through `ingest/eval-run` (ADR-0013); optional so older constructors stay valid. */
   runKey?: string | null;
   canonicalResize?: boolean;
+  /** Live-run provenance (ADR-0025); absent for file imports. */
+  backend?: string | null;
+  stage?: string | null;
   createdAt: Date;
 }
 
@@ -275,7 +281,7 @@ export interface ModelRecord {
   orgId: string;
   name: string;
   kind: "yolo" | "vlm" | "api";
-  stage: "zero_shot" | "sft" | "grpo" | "yolo";
+  stage: "zero_shot" | "sft" | "grpo" | "yolo" | "test";
   hfPath: string | null;
   onnxArtifactId: string | null;
   meta: Record<string, unknown>;
@@ -344,6 +350,8 @@ export interface TraceToolCallInput {
   error: string | null;
   trueBbox: unknown;
   perturbTier: string | null;
+  /** Stored tool-image artifact this call produced (ADR-0025); null when the tool returned data. */
+  artifactId?: string | null;
 }
 
 export interface TraceTurnInput {
@@ -375,6 +383,9 @@ export interface IngestTraceInput {
   nToolCalls: number;
   formatOk: boolean;
   verifierReason: string | null;
+  /** Live-run provenance (ADR-0025); null for file imports. */
+  backend?: string | null;
+  stage?: string | null;
   groundTruth: unknown;
   finalAnswer: unknown;
   turns: TraceTurnInput[];
@@ -428,7 +439,16 @@ export interface EvalCaseRecord {
 export interface IngestEvalInput {
   /** Worker-chosen identity of the run within the organization. */
   runKey: string;
-  run: { dataset: string; split: string; provider: string; model: string; canonicalResize: boolean };
+  run: {
+    dataset: string;
+    split: string;
+    provider: string;
+    model: string;
+    canonicalResize: boolean;
+    /** Live-run provenance (ADR-0025); null/absent for file imports. */
+    backend?: string | null;
+    stage?: string | null;
+  };
   cases: EvalCaseInput[];
 }
 
@@ -478,7 +498,17 @@ export interface ScopedRepos {
   createDataset(input: { name: string; source: DatasetRecord["source"]; licenseNote?: string }): Promise<DatasetRecord>;
   listImages(datasetId: string): Promise<ImageRecord[]>;
   createImage(input: Omit<ImageRecord, "id" | "orgId">): Promise<ImageRecord>;
-  listTraces(filter?: { datasetId?: string; mode?: TraceRecord["mode"] }): Promise<TraceRecord[]>;
+  listTraces(filter?: {
+    datasetId?: string;
+    mode?: TraceRecord["mode"];
+    /** Only traces recorded for this image row. */
+    imageId?: string;
+    /**
+     * Exclude `stage = 'test'` rows (the LM Studio test backend), for cohort statistics and
+     * benchmark tables (ADR-0025). Trace Explorer passes false: a test run is still a real trace.
+     */
+    researchOnly?: boolean;
+  }): Promise<TraceRecord[]>;
   createTrace(input: Omit<TraceRecord, "id" | "orgId">): Promise<TraceRecord>;
   listEvalRuns(): Promise<EvalRunRecord[]>;
   createEvalRun(input: Omit<EvalRunRecord, "id" | "orgId" | "createdAt">): Promise<EvalRunRecord>;

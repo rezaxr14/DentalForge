@@ -10,7 +10,7 @@
  *   Python reference worker (a second language) handles a job on the same wire.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import pg from "pg";
 
@@ -34,6 +34,13 @@ const ENV = {
   BETTER_AUTH_SECRET: "e2e-better-auth-secret-0123456789abcdefghij",
   INVITE_SIGNING_SECRET: "e2e-invite-secret-0123456789",
   WORKER_MODE: "live",
+  // Without this the pages read the committed FIXTURES even though every write below lands in
+  // Postgres: the trace page then answers "Trace not found" for a trace the run just stored, which
+  // is how the missing read-path proof hid. Production sets it; the e2e must mirror production.
+  TRACEFORGE_DATASOURCE: "postgres",
+  // ...and `resolveDataSource` resolves the org by this slug, so it must be THIS run's org, not
+  // the default `demo`. Two env vars, both required, both read only by the read path.
+  IMPORT_ORG_SLUG: SLUG,
   // Optional realtime bus (ADR-0015): with it the WHOLE pipeline below also runs on the bus-enabled code path.
   ...(process.env.E2E_REDIS_URL ? { REDIS_URL: process.env.E2E_REDIS_URL } : {}),
 };
@@ -227,18 +234,27 @@ async function main() {
   await stop(mock);
   const py = run(PY, ["examples/python-worker/worker.py"], {
     TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-e2e", MAX_JOBS: "1", STEP_DELAY_S: "0.05",
+    // Deterministic: a developer's shell may export a model file; this worker must advertise no agent.run.
+    WORKER_MODELS_FILE: "",
   }, "python-worker");
+  // Cold start of the venv Python (torch + ultralytics + YOLO weights) can outlast the old 30 s
+  // window on a loaded machine, and a start-up timeout says nothing about the wire contract. Wait
+  // for registration with its own budget, then give the JOB a fair one.
+  const pyUp = await waitFor(async () => /registered as/.test(py.out), { timeoutMs: 90_000 });
   const pyJob = await enqueue("system.ping", { message: "from python", steps: 2 });
   const pyDone = await finish(pyJob, 30_000);
-  check("Python reference worker completes a job on the same contract", pyDone?.status === "succeeded" && pyDone.result.workerName === "py-e2e" && pyDone.result.echo === "from python", `${JSON.stringify(pyDone)}\n${py.out}`);
+  check("Python reference worker completes a job on the same contract", Boolean(pyUp) && pyDone?.status === "succeeded" && pyDone.result.workerName === "py-e2e" && pyDone.result.echo === "from python", `${JSON.stringify(pyDone)}\n${py.out}`);
   const pyExit = await waitFor(async () => py.child.exitCode !== null, { timeoutMs: 20_000 });
   check("  …and exits cleanly after MAX_JOBS", pyExit && py.child.exitCode === 0, py.out.slice(-300));
 
   // ---- capabilities are honest: the python worker only advertises what it can do ------
   const wantsAgent = await enqueue("agent.run", { imageId: 1, modelId: "demo", mode: "with_tools" });
-  const py2 = run(PY, ["examples/python-worker/worker.py"], { TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-e2e", STEP_DELAY_S: "0.05" }, "python-worker-2");
+  const py2 = run(PY, ["examples/python-worker/worker.py"], {
+    TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-e2e", STEP_DELAY_S: "0.05",
+    WORKER_MODELS_FILE: "",
+  }, "python-worker-2");
   await sleep(4000);
-  check("a worker that does not advertise agent.run is never handed one", (await job(wantsAgent)).status === "queued");
+  check("a worker that registers no model never advertises agent.run", (await job(wantsAgent)).status === "queued");
   await api(`/api/jobs/${wantsAgent}/cancel`, { method: "POST" });
   const sp = await (await api("/status")).text();
   check("/status page renders live workers and the resolved ladder", /py-e2e/.test(sp) && /Capability ladder/.test(sp) && /mock-worker/.test(sp));
@@ -264,21 +280,35 @@ async function main() {
       const imageId = img.rows[0].id;
       const dental = run(PY, ["examples/python-worker/worker.py"], {
         TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-dental", PYTHONPATH: process.env.E2E_DENTAL_AGENT_PATH,
+        WORKER_MODELS_FILE: "",
       }, "python-dental-worker");
       await waitFor(async () => /registered as/.test(dental.out), { timeoutMs: 30_000 });
       const adv = /advertising \[([^\]]*)\]/.exec(dental.out)?.[1] ?? "";
       check("the dental worker advertises tool.execute (and only what it can run)", adv.includes("tool.execute") && !adv.includes("agent.run") && !adv.includes("eval.run"), dental.out.slice(-400));
 
       const zoom = await finish(await enqueue("tool.execute", { imageId, tool: "zoom_crop", args: { bbox: [100, 120, 80, 100] } }), 40_000);
-      const artifactOnDisk = (id) => existsSync(join(root, "public", "demo-assets", orgId, "artifacts")) && readdirSync(join(root, "public", "demo-assets", orgId, "artifacts"), { recursive: true }).some((f) => String(f).includes("zoom_crop_") || String(f).includes("window_level_"));
-      check("real zoom_crop: succeeded, image result with a stored PNG artifact", zoom?.status === "succeeded" && zoom.result.kind === "image" && zoom.result.width > 0 && zoom.result.artifactId && artifactOnDisk(zoom.result.artifactId), JSON.stringify(zoom));
+      // A real image tool must leave a PNG behind; the storage key is generated by the gateway, so
+      // this looks for the tool-named file rather than pretending to know the key.
+      const artifactOnDisk = () => existsSync(join(root, "public", "demo-assets", orgId, "artifacts")) && readdirSync(join(root, "public", "demo-assets", orgId, "artifacts"), { recursive: true }).some((f) => String(f).includes("zoom_crop_") || String(f).includes("window_level_"));
+      check("real zoom_crop: succeeded, image result with a stored PNG artifact", zoom?.status === "succeeded" && zoom.result.kind === "image" && zoom.result.width > 0 && zoom.result.artifactId && artifactOnDisk(), JSON.stringify(zoom));
       const win = await finish(await enqueue("tool.execute", { imageId, tool: "window_level", args: { preset: "bone" }, view: "canonical" }), 40_000);
       check("real window_level, canonical view: the 1536x768 FULL canvas", win?.status === "succeeded" && win.result.width === 1536 && win.result.height === 768, JSON.stringify(win));
       const fdi36 = await finish(await enqueue("tool.execute", { imageId, tool: "fdi_label", args: { quadrant: 3, tooth_position: 6 } }), 40_000);
       check("real fdi_label: data result \"36\"", fdi36?.status === "succeeded" && fdi36.result.kind === "data" && fdi36.result.data === "36", JSON.stringify(fdi36));
       const noGround = await finish(await enqueue("tool.execute", { imageId, tool: "locate_tooth", args: { tooth: 38 } }), 40_000);
-      check("locate_tooth without grounding weights fails the job instead of inventing a box", noGround?.status === "failed" && /grounding weights/.test(JSON.stringify(noGround)), JSON.stringify(noGround));
-      check("  …and it is not retried: one attempt, although more were allowed", noGround?.attempts === 1 && noGround.maxAttempts > 1, JSON.stringify(noGround));
+      // Capability-aware, like the worker itself: on a machine WITHOUT the weights the guard must
+      // refuse instead of inventing a box; on one WITH them the tool must actually run. Assuming
+      // "no weights here" made this check fail on the GPU box.
+      if (adv.includes("yolo.prelabel")) {
+        check(
+          "locate_tooth with grounding weights runs (a real box or a tool-level 'not found'), never the guard",
+          noGround?.status === "succeeded" && noGround.result?.kind === "data" && !/grounding weights/.test(JSON.stringify(noGround)),
+          JSON.stringify(noGround),
+        );
+      } else {
+        check("locate_tooth without grounding weights fails the job instead of inventing a box", noGround?.status === "failed" && /grounding weights/.test(JSON.stringify(noGround)), JSON.stringify(noGround));
+        check("  …and it is not retried: one attempt, although more were allowed", noGround?.attempts === 1 && noGround.maxAttempts > 1, JSON.stringify(noGround));
+      }
       await stop(dental);
       // The later ingest checks look up "the" image of this org; leave no trace of this section.
       await dp.query("DELETE FROM images WHERE id = $1", [imageId]);
@@ -288,6 +318,125 @@ async function main() {
     }
   } else {
     console.log("  note real-handler checks NOT run (set E2E_DENTAL_AGENT_PATH to the VLM-DENTAL checkout to run them)");
+  }
+
+  // ---- a live agent.run on the local test backend (LM Studio), opt-in --------------------------
+  // E2E_LIVE_AGENT=1 + E2E_DENTAL_AGENT_PATH=<VLM-DENTAL checkout> + a model loaded in LM Studio.
+  // WORKER_OPENAI_BASE_URL defaults to http://localhost:1234/v1; E2E_LIVE_AGENT_MODEL is the model
+  // name LM Studio serves. Single image, single run: the heavy-run gate in the plan allows this.
+  if (process.env.E2E_LIVE_AGENT) {
+    if (!process.env.E2E_DENTAL_AGENT_PATH) {
+      check("live agent.run needs E2E_DENTAL_AGENT_PATH (the VLM-DENTAL checkout)", false);
+    } else {
+      const modelName = process.env.E2E_LIVE_AGENT_MODEL ?? "qwen3.5-4b";
+      const baseUrl = process.env.WORKER_OPENAI_BASE_URL ?? "http://localhost:1234/v1";
+      const dp = new pg.Pool({ connectionString: DB_URL });
+      let live;
+      try {
+        const keyRel = `${orgId}/images/e2e-live.png`;
+        const pngPath = join(root, "public", "demo-assets", keyRel);
+        mkdirSync(dirname(pngPath), { recursive: true });
+        // A REAL radiograph is what makes a small test model actually reach for a tool: given a noise
+        // mosaic it (correctly) found nothing worth zooming into and answered in one turn with zero
+        // tool calls, which proves nothing about the artifact path. E2E_LIVE_AGENT_IMAGE wins;
+        // otherwise the checkout's DENTEX validation panorama; otherwise a synthetic mosaic, and the
+        // artifact checks print a visible note instead of pretending a model behaved.
+        const dentexDefault = join(
+          process.env.E2E_DENTAL_AGENT_PATH,
+          "data", "dentex", "DENTEX", "validation_data", "quadrant_enumeration_disease", "xrays", "val_18.png",
+        );
+        const liveSource = [process.env.E2E_LIVE_AGENT_IMAGE, dentexDefault].find((p) => p && existsSync(p)) ?? null;
+        const genCode = liveSource
+          ? "import sys\nfrom PIL import Image\nimg = Image.open(sys.argv[1]).convert('RGB')\nimg.save(sys.argv[2])\nprint(img.width, img.height)"
+          : "import sys\nfrom PIL import Image\nimg = Image.new('RGB', (800, 400), (30, 30, 30))\nfor x in range(0, 800, 20):\n    for y in range(80, 320):\n        v = 30 + (x * 5 + y * 3) % 220\n        img.putpixel((x, y), (v, v, v))\nimg.save(sys.argv[1])\nprint(img.width, img.height)";
+        const gen = spawnSync(PY, ["-c", genCode, ...(liveSource ? [liveSource, pngPath] : [pngPath])], { encoding: "utf8" });
+        const [imgW, imgH] = (gen.stdout ?? "").trim().split(/\s+/).map(Number);
+        check(
+          liveSource
+            ? "seeded a real radiograph for the live run"
+            : "seeded a synthetic 800x400 PNG for the live run (no E2E_LIVE_AGENT_IMAGE / DENTEX panorama found)",
+          gen.status === 0 && existsSync(pngPath) && imgW > 0 && imgH > 0,
+          gen.stderr,
+        );
+        // `upload` on purpose: /ingest/traces resolves a dataset by its SOURCE, and the ingest checks
+        // later seed a `dentex` dataset. A second `dentex` dataset here would make that resolution
+        // ambiguous (first row wins) and reject their known image.
+        const dset = await dp.query("INSERT INTO datasets (id, org_id, name, source) VALUES (gen_random_uuid(), $1, 'E2E-LIVE', 'upload') RETURNING id", [orgId]);
+        const img = await dp.query(
+          "INSERT INTO images (id, org_id, dataset_id, source_image_id, content_hash, width, height, storage_key) VALUES (gen_random_uuid(), $1, $2, 902, 'e2e-live', $3, $4, $5) RETURNING id",
+          [orgId, dset.rows[0].id, imgW, imgH, keyRel],
+        );
+        const imageId = img.rows[0].id;
+        // The worker reads ground truth from an already-imported trace and refuses to run without it.
+        // This row is an E2E FIXTURE (cohort `e2e_fixture`), not a DENTEX label: the run under test is
+        // "does a live trace carry its provenance", not "is this the right diagnosis". The org and its
+        // rows are deleted at the end of the run.
+        const gt = [{ quadrant: 3, tooth_position: 8, diagnosis: "Caries", bbox: [300, 150, 80, 90] }];
+        await dp.query(
+          "INSERT INTO traces (id, org_id, dataset_id, image_id, cohort, mode, verified, content_hash, n_turns, n_tool_calls, format_ok, ground_truth, final_answer) VALUES (gen_random_uuid(), $1, $2, $3, 'e2e_fixture', 'with_tools', true, 'e2e-live-seed', 1, 0, true, $4, '[]')",
+          [orgId, dset.rows[0].id, imageId, JSON.stringify(gt)],
+        );
+
+        const modelsFile = join(root, "public", "demo-assets", orgId, "worker-models.json");
+        writeFileSync(modelsFile, JSON.stringify({
+          models: [{ modelId: "live-test", backend: "openai_compat", stage: "test", basePath: modelName, notes: "e2e live run" }],
+        }));
+        live = run(PY, ["examples/python-worker/worker.py"], {
+          TRACEFORGE_URL: BASE, TRACEFORGE_TOKEN: token, WORKER_NAME: "py-live", PYTHONPATH: process.env.E2E_DENTAL_AGENT_PATH,
+          WORKER_MODELS_FILE: modelsFile, WORKER_OPENAI_BASE_URL: baseUrl,
+        }, "python-live-worker");
+        const registered = await waitFor(async () => /advertising \[[^\]]*agent\.run/.test(live.out), { timeoutMs: 90_000 });
+        check("the live worker registers a test model and advertises agent.run", Boolean(registered), live.out.slice(-800));
+
+        const mr = await dp.query("SELECT id FROM model_registry WHERE org_id = $1 AND name = 'live-test' AND stage = 'test'", [orgId]);
+        const modelId = mr.rows[0]?.id;
+        check("the test model is in the app's registry with stage `test`", Boolean(modelId), JSON.stringify(mr.rows));
+        if (modelId) {
+          const liveJob = await enqueue("agent.run", { imageId, modelId, mode: "with_tools", maxTurns: 12, maxToolCalls: 4, temperature: 0 });
+          const done = await finish(liveJob, 240_000);
+          check("agent.run on the test backend succeeds", done?.status === "succeeded", JSON.stringify(done?.error ?? done?.result).slice(0, 600));
+          const traceId = done?.result?.traceId;
+          check("  …and names the trace it stored", typeof traceId === "string", JSON.stringify(done?.result));
+          if (traceId) {
+            const tr = await dp.query("SELECT backend, stage, n_turns, n_tool_calls FROM traces WHERE id = $1", [traceId]);
+            check("the stored trace carries backend/stage", tr.rows[0]?.backend === "openai_compat" && tr.rows[0]?.stage === "test", JSON.stringify(tr.rows[0]));
+            const arts = await dp.query(
+              "SELECT count(*)::int AS n FROM tool_calls c JOIN trace_turns t ON c.turn_id = t.id WHERE t.trace_id = $1 AND c.artifact_id IS NOT NULL",
+              [traceId],
+            );
+            const liveCalls = await dp.query(
+              "SELECT c.tool_name, c.artifact_id FROM tool_calls c JOIN trace_turns t ON c.turn_id = t.id WHERE t.trace_id = $1 ORDER BY t.idx, c.idx",
+              [traceId],
+            );
+            const pageRes = await api(`/traces/${traceId}`);
+            const html = await pageRes.text();
+            if (liveCalls.rows.length > 0) {
+              check("  …and at least one tool image is stored as an artifact", arts.rows[0].n > 0, JSON.stringify({ n: arts.rows[0].n, calls: liveCalls.rows }));
+              check("  …and Trace Explorer opens it with the stored tool image", /stored artifact/.test(html) && /Test backend/.test(html), JSON.stringify({
+                status: pageRes.status,
+                notFound: /Trace not found/.test(html),
+                heading: (html.match(/Trace [0-9a-f]{8}/) ?? [null])[0],
+                testBackend: /Test backend/.test(html),
+                artifactFigure: (html.match(/data-tool-image="artifact"/g) ?? []).length,
+                placeholders: (html.match(/data-tool-image="placeholder"/g) ?? []).length,
+                htmlLength: html.length,
+              }));
+            } else {
+              // Not a silent pass: a model that answers in one turn never exercises the artifact path,
+              // so this says so out loud. The stored-artifact rendering itself is covered by the
+              // deterministic suite; the live check only claims what actually happened.
+              console.log("  note the test model answered WITHOUT tool calls: no artifact could be stored");
+              check("  …and Trace Explorer opens it (marked as the test backend)", /Test backend/.test(html));
+            }
+          }
+        }
+      } finally {
+        if (live) await stop(live);
+        await dp.end();
+      }
+    }
+  } else {
+    console.log("  note live agent.run checks NOT run (set E2E_LIVE_AGENT=1, E2E_DENTAL_AGENT_PATH and load a model in LM Studio)");
   }
 
   // ---- models/register + ingest/metrics over real HTTP, then the rows in real Postgres ----
@@ -353,11 +502,13 @@ async function main() {
       t2.json.existing === 1 && t2.json.results[0].sameContent === true && t2.json.results[0].traceId === t1.json.results[0].traceId,
       JSON.stringify(t2),
     );
+    const traceId = t1.json.results[0].traceId;
     const counts = await tp.query(
-      `SELECT (SELECT count(*)::int FROM traces WHERE org_id = $1) AS traces,
-              (SELECT count(*)::int FROM trace_turns WHERE org_id = $1) AS turns,
-              (SELECT count(*)::int FROM tool_calls WHERE org_id = $1) AS calls`,
-      [orgId],
+      `SELECT (SELECT count(*)::int FROM traces WHERE org_id = $1 AND id = $2) AS traces,
+              (SELECT count(*)::int FROM trace_turns WHERE org_id = $1 AND trace_id = $2) AS turns,
+              (SELECT count(*)::int FROM tool_calls c JOIN trace_turns t ON c.turn_id = t.id
+                WHERE c.org_id = $1 AND t.trace_id = $2) AS calls`,
+      [orgId, traceId],
     );
     const wantCalls = fixture.turns.reduce((n, t) => n + (t.tool_calls_this_turn?.length ?? 0), 0);
     check(

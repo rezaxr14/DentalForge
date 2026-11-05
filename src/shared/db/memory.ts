@@ -109,12 +109,19 @@ class ScopedMemory implements ScopedRepos {
     return rec;
   }
 
-  async listTraces(filter?: { datasetId?: string; mode?: TraceRecord["mode"] }): Promise<TraceRecord[]> {
+  async listTraces(filter?: {
+    datasetId?: string;
+    mode?: TraceRecord["mode"];
+    imageId?: string;
+    researchOnly?: boolean;
+  }): Promise<TraceRecord[]> {
     return [...this.root.traces.values()].filter(
       (t) =>
         t.orgId === this.orgId &&
         (filter?.datasetId === undefined || t.datasetId === filter.datasetId) &&
-        (filter?.mode === undefined || t.mode === filter.mode),
+        (filter?.mode === undefined || t.mode === filter.mode) &&
+        (filter?.imageId === undefined || t.imageId === filter.imageId) &&
+        (!filter?.researchOnly || t.stage !== "test"),
     );
   }
 
@@ -872,6 +879,8 @@ class ScopedMemory implements ScopedRepos {
       nToolCalls: input.nToolCalls,
       formatOk: input.formatOk,
       verifierReason: input.verifierReason,
+      backend: input.backend ?? null,
+      stage: input.stage ?? null,
       groundTruth: structuredClone(input.groundTruth),
       finalAnswer: structuredClone(input.finalAnswer),
     };
@@ -917,6 +926,8 @@ class ScopedMemory implements ScopedRepos {
         provider: input.run.provider,
         model: input.run.model,
         canonicalResize: input.run.canonicalResize,
+        backend: input.run.backend ?? null,
+        stage: input.run.stage ?? null,
         n: 0,
         summary: {},
         runKey: input.runKey,

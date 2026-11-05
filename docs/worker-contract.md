@@ -731,7 +731,8 @@ Request/response bodies are listed under **Schemas** below.
         "zero_shot",
         "sft",
         "grpo",
-        "yolo"
+        "yolo",
+        "test"
       ]
     },
     "hfPath": {
@@ -791,7 +792,8 @@ Request/response bodies are listed under **Schemas** below.
         "zero_shot",
         "sft",
         "grpo",
-        "yolo"
+        "yolo",
+        "test"
       ]
     }
   },
@@ -801,6 +803,152 @@ Request/response bodies are listed under **Schemas** below.
     "name",
     "kind",
     "stage"
+  ],
+  "additionalProperties": false
+}
+```
+
+### ImageMetadataResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "expiresInSeconds": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "width": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "height": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "imageId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "sourceImageId": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "datasetId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "dataset": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "dentex",
+            "tufts",
+            "upload"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "datasetName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "split": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "groundTruth": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "quadrant": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              },
+              "tooth_position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "diagnosis": {
+                "type": "string"
+              },
+              "raw_diagnosis": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "bbox": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 4,
+                "maxItems": 4
+              }
+            },
+            "required": [
+              "quadrant",
+              "tooth_position",
+              "diagnosis"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "url",
+    "expiresInSeconds",
+    "width",
+    "height",
+    "imageId",
+    "sourceImageId",
+    "datasetId",
+    "dataset",
+    "datasetName",
+    "split",
+    "groundTruth"
   ],
   "additionalProperties": false
 }
@@ -1013,6 +1161,22 @@ Request/response bodies are listed under **Schemas** below.
     "canonicalResize": {
       "default": false,
       "type": "boolean"
+    },
+    "backend": {
+      "type": "string",
+      "enum": [
+        "torch_hf",
+        "openai_compat"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "base",
+        "sft",
+        "grpo",
+        "test"
+      ]
     },
     "cases": {
       "minItems": 1,
@@ -1510,6 +1674,22 @@ Request/response bodies are listed under **Schemas** below.
           "type": "string",
           "minLength": 1,
           "maxLength": 300
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "torch_hf",
+            "openai_compat"
+          ]
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "base",
+            "sft",
+            "grpo",
+            "test"
+          ]
         }
       },
       "required": [
@@ -1643,8 +1823,8 @@ Request/response bodies are listed under **Schemas** below.
                               },
                               "tooth_position": {
                                 "type": "integer",
-                                "minimum": 1,
-                                "maximum": 8
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
                               },
                               "diagnosis": {
                                 "type": "string"
@@ -1653,9 +1833,16 @@ Request/response bodies are listed under **Schemas** below.
                                 "type": "string"
                               },
                               "confidence": {
-                                "type": "number",
-                                "minimum": 0,
-                                "maximum": 1
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "bbox": {
                                 "type": "array",
@@ -1744,6 +1931,11 @@ Request/response bodies are listed under **Schemas** below.
                           "small",
                           "big"
                         ]
+                      },
+                      "artifact_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
                     "required": [
@@ -1788,8 +1980,8 @@ Request/response bodies are listed under **Schemas** below.
                     },
                     "tooth_position": {
                       "type": "integer",
-                      "minimum": 1,
-                      "maximum": 8
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "diagnosis": {
                       "type": "string"
@@ -1798,9 +1990,16 @@ Request/response bodies are listed under **Schemas** below.
                       "type": "string"
                     },
                     "confidence": {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "bbox": {
                       "type": "array",
@@ -2580,6 +2779,12 @@ Request/response bodies are listed under **Schemas** below.
       "type": "integer",
       "minimum": -9007199254740991,
       "maximum": 9007199254740991
+    },
+    "temperature": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
     }
   },
   "required": [
@@ -2608,8 +2813,8 @@ Request/response bodies are listed under **Schemas** below.
           },
           "tooth_position": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 8
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "diagnosis": {
             "type": "string"
@@ -2618,9 +2823,16 @@ Request/response bodies are listed under **Schemas** below.
             "type": "string"
           },
           "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bbox": {
             "type": "array",
@@ -2663,6 +2875,11 @@ Request/response bodies are listed under **Schemas** below.
     },
     "formatOk": {
       "type": "boolean"
+    },
+    "traceId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
     },
     "rewardComponents": {
       "type": "object",

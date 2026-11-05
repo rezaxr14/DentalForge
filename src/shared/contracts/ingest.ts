@@ -18,7 +18,12 @@ const finiteFloat4 = z
 
 // --- POST /models/register -------------------------------------------------
 export const ModelKind = z.enum(["yolo", "vlm", "api"]);
-export const ModelStage = z.enum(["zero_shot", "sft", "grpo", "yolo"]);
+/**
+ * `test` is the local LM Studio / API-served backend used only to exercise the pipeline
+ * before a trained adapter exists (ADR-0025). Rows with stage `test` are excluded from
+ * cohort statistics and benchmark tables by default.
+ */
+export const ModelStage = z.enum(["zero_shot", "sft", "grpo", "yolo", "test"]);
 
 export const RegisterModelRequest = z
   .object({
@@ -136,6 +141,15 @@ export type IngestMetricsResponseT = z.infer<typeof IngestMetricsResponse>;
 export const COHORT_PATTERN = /^[a-z0-9][a-z0-9_]{0,63}$/;
 export const MAX_TRACES_PER_REQUEST = 100;
 
+/** Which worker backend produced a live run (ADR-0025). Omitted for file imports. */
+export const RunBackend = z.enum(["torch_hf", "openai_compat"]);
+/**
+ * The model stage a live run used. Deliberately the worker's own vocabulary (`base`, not the model
+ * registry's `zero_shot`): this is provenance for the run, not a registry key. `test` marks the
+ * LM Studio backend and is excluded from cohort statistics and benchmark tables by default.
+ */
+export const RunStage = z.enum(["base", "sft", "grpo", "test"]);
+
 export const TraceBatchSource = z.object({
   cohort: z
     .string()
@@ -146,6 +160,10 @@ export const TraceBatchSource = z.object({
   verified: z.boolean().default(true),
   /** Free-form provenance label stored with each new trace (e.g. the run or file the worker produced them from). */
   sourceFile: z.string().trim().min(1).max(300).optional(),
+  /** Backend that produced these live traces; omitted for file imports (ADR-0025). */
+  backend: RunBackend.optional(),
+  /** Model stage of the run; `test` is excluded from cohort statistics/benchmarks by default (ADR-0025). */
+  stage: RunStage.optional(),
 });
 
 /**
@@ -200,6 +218,10 @@ export const IngestEvalRunRequest = z
     runKey: z.string().regex(RUN_KEY_PATTERN, "letters, digits, . _ : - ; up to 120 characters; must start with a letter or digit"),
     /** Whether images were resized to the canonical size before inference. Fixed when the run is created. */
     canonicalResize: z.boolean().default(false),
+    /** Backend that produced this run; omitted for file imports (ADR-0025). */
+    backend: RunBackend.optional(),
+    /** Model stage of the run; `test` is excluded from benchmark tables by default (ADR-0025). */
+    stage: RunStage.optional(),
     /** One chunk of the run (an eval case is the same record the zero-shot runner writes as a JSONL line). */
     cases: z.array(EvalCase).min(1).max(MAX_EVAL_CASES_PER_REQUEST),
   })

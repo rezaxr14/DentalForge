@@ -109,6 +109,7 @@ export interface ParsedTurn {
     error: string | null;
     trueBbox: unknown;
     perturbTier: string | null;
+    artifactId?: string | null;
   }[];
 }
 
@@ -250,6 +251,7 @@ export function readTraceLine(
           error: c.tool_error ?? null,
           trueBbox: c.true_bbox ?? null,
           perturbTier: c.perturb_tier ?? null,
+          artifactId: c.artifact_id ?? null,
         };
       }),
     };

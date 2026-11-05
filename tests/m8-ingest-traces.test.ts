@@ -207,6 +207,42 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
       await expect(r.ingestTrace(dupCalls)).rejects.toThrow();
       expect((await r.listTraces()).length).toBe(before);
     });
+
+    it("stores live-run provenance and the artifact id of a tool image (ADR-0025)", async () => {
+      const r = store.scoped(a.org.id);
+      const ARTIFACT = "00000000-0000-4000-8000-0000000000c1";
+      const base = input(a.dentex.id, WITH_TOOLS, { cohort: "live", backend: "openai_compat", stage: "test" });
+      const out = await r.ingestTrace({
+        ...base,
+        turns: base.turns.map((t, i) => ({
+          ...t,
+          toolCalls: t.toolCalls.map((c, j) => (i === 0 && j === 0 ? { ...c, artifactId: ARTIFACT } : c)),
+        })),
+      });
+      if (out.outcome !== "inserted") throw new Error(out.outcome);
+      expect(out.trace).toMatchObject({ backend: "openai_compat", stage: "test" });
+
+      const turns = await r.listTraceTurns(out.trace.id);
+      expect(turns[0]!.toolCalls[0]!.artifactId).toBe(ARTIFACT);
+      expect(turns[1]!.toolCalls.every((c) => !c.artifactId)).toBe(true);
+
+      // The Trace Explorer read path carries both, so the page can show the test badge and the image.
+      if (store instanceof DrizzleOrgStore) {
+        const { postgresSource } = await import("@/shared/lib/datasource");
+        const detail = await postgresSource(getPgDb(), a.org.id).getTraceDetail(out.trace.id);
+        expect(detail).toMatchObject({ backend: "openai_compat", stage: "test" });
+        const call = detail!.trace.turns[0]!.tool_calls_this_turn?.[0] as { artifact_id?: string };
+        expect(call.artifact_id).toBe(ARTIFACT);
+      }
+
+      // `researchOnly` drops the test backend, but Trace Explorer (no filter) still sees it.
+      const byImage = await r.listTraces({ imageId: out.trace.imageId });
+      expect(byImage.some((t) => t.id === out.trace.id)).toBe(true);
+      const research = await r.listTraces({ imageId: out.trace.imageId, researchOnly: true });
+      expect(research.some((t) => t.id === out.trace.id)).toBe(false);
+      // imported traces (stage null) survive the research filter
+      expect(research.length).toBeGreaterThan(0);
+    });
   });
 
   // ------------------------------------------------------------------ HTTP
@@ -283,6 +319,8 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
         ["upper-case cohort", { source: src({ cohort: "Dentex" }), traces: [WITH_TOOLS] }],
         ["cohort with a space", { source: src({ cohort: "a b" }), traces: [WITH_TOOLS] }],
         ["bad mode", { source: src({ mode: "tools" }), traces: [WITH_TOOLS] }],
+        ["bad backend", { source: src({ backend: "peft" }), traces: [WITH_TOOLS] }],
+        ["bad stage", { source: src({ stage: "zero_shot" }), traces: [WITH_TOOLS] }],
         ["trace without ground_truth", { source: src(), traces: [noGt] }],
         ["trace image_id is a string", { source: src(), traces: [{ ...WITH_TOOLS, image_id: "1" }] }],
       ];
@@ -305,6 +343,51 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
       const replay = await ok(body);
       expect(replay).toMatchObject({ inserted: 0, existing: 2, rejected: 0 });
       expect(replay.results.map((r) => [r.outcome, r.sameContent, r.traceId])).toEqual(first.results.map((r) => ["existing", true, r.traceId]));
+    });
+
+    it("GET /images/{id} also returns the identity and ground truth a live run needs (ADR-0025)", async () => {
+      const r = store.scoped(a.org.id);
+      const images = await r.listImages(a.dentex.id);
+      const known = images.find((i) => i.sourceImageId === 1)!;
+      const unknown = images.find((i) => i.sourceImageId === 2)!;
+      const get = (id: string) =>
+        W.imageUrl(
+          new Request(`http://test.local/api/worker/v1/images/${id}`, {
+            method: "GET",
+            headers: { authorization: `Bearer ${readTok}`, "x-contract-version": "1" },
+          }),
+          deps,
+          id,
+        );
+      const res = await get(known.id);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        imageId: known.id,
+        sourceImageId: 1,
+        datasetId: a.dentex.id,
+        dataset: "dentex",
+        split: null,
+        width: 100,
+        height: 50,
+      });
+      expect(Array.isArray(body.groundTruth)).toBe(true);
+      expect((body.groundTruth as unknown[]).length).toBeGreaterThan(0);
+
+      // No trace for image 2 yet: unknown truth is `null`, never an invented healthy scan.
+      const bare = (await (await get(unknown.id)).json()) as Record<string, unknown>;
+      expect(bare.groundTruth).toBeNull();
+    });
+
+    it("a live run's backend and stage travel with the batch and are stored on each trace", async () => {
+      const res = await ok({
+        source: src({ cohort: "live_http", backend: "openai_compat", stage: "test", sourceFile: "agent.run:openai_compat:test" }),
+        traces: [WITH_TOOLS],
+      });
+      const trace = (await store.scoped(a.org.id).listTraces()).find((t) => t.id === res.results[0]!.traceId)!;
+      expect(trace).toMatchObject({ backend: "openai_compat", stage: "test", sourceFile: "agent.run:openai_compat:test", verified: true });
+      const research = await store.scoped(a.org.id).listTraces({ researchOnly: true });
+      expect(research.some((t) => t.id === trace.id)).toBe(false);
     });
 
     it("the hash ignores messages, image_path and key order: a re-send in another shape is still the same content", async () => {
