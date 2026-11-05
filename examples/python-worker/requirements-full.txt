@@ -1,0 +1,13 @@
+# Full worker environment: the REAL backends (torch_hf, yolo.prelabel, al.score).
+#
+# Do not install this file into a fresh environment expecting a working GPU stack.
+# Install VLM-DENTAL's own requirements first, in the environment where that repo
+# already works, then add the worker's small needs:
+#
+#   pip install -r /path/to/VLM-DENTAL/requirements-gpu.txt
+#   pip install -r requirements-full.txt
+#
+# VLM-DENTAL's pins are intentionally not copied here: this repo must not drift
+# from upstream's chosen torch/CUDA stack (ADR-0024).
+httpx==0.27.2
+jsonschema==4.23.0
