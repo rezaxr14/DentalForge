@@ -123,6 +123,38 @@ describe("M7: Importer parsing and deduplication", () => {
     expect(parsed?.turns[0]?.toolCalls[0]?.toolName).toBe("locate_tooth");
   });
 
+  it("counts no-tools runs from turns, not the stale file-level tool_calls field", () => {
+    const meta = traceFileMeta("train_cot_traces_dentex_no_tools.jsonl");
+    const rawLine = JSON.stringify({
+      image_id: 255,
+      image_path: "",
+      dataset: "dentex",
+      ground_truth: [{ quadrant: 1, tooth_position: 6, diagnosis: "Caries" }],
+      turns: [
+        {
+          turn: 0,
+          raw_output: "Final answer",
+          parsed: {
+            thought: "Single-shot diagnosis",
+            final_answer: [{ quadrant: 1, tooth_position: 6, diagnosis: "Caries" }],
+          },
+        },
+      ],
+      // Real no-tools files can carry a non-zero file-level counter even though
+      // the turns contain no tool calls; the UI must show 0, not 1.
+      tool_calls: 1,
+      final_answer: [{ quadrant: 1, tooth_position: 6, diagnosis: "Caries" }],
+      messages: [],
+      format_ok: true,
+    });
+
+    const parsed = parseTraceLine(rawLine, "train_cot_traces_dentex_no_tools.jsonl", meta);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.mode).toBe("no_tools");
+    expect(parsed?.nTurns).toBe(1);
+    expect(parsed?.nToolCalls).toBe(0);
+  });
+
   it("handles model dumping final_answer in tool_calls slot without error (ADR-0008 reality override)", () => {
     const meta = traceFileMeta("train_cot_traces_dentex.jsonl");
     const rawLine = JSON.stringify({
@@ -252,6 +284,16 @@ describe("M7: DataSource abstraction", () => {
 
     const missing = await src.getTraceDetail("nonexistent-id-9999");
     expect(missing).toBeNull();
+  });
+
+  it("fixtureSource never exposes non-DENTEX traces to public pages", async () => {
+    const src = fixtureSource();
+    const traces = await src.listTraces();
+    expect(traces.length).toBeGreaterThan(0);
+    expect(traces.every((t) => t.dataset.toLowerCase() === "dentex")).toBe(true);
+    // The file stays committed for cross-dataset ingestion tests, but the
+    // public DataSource must refuse it by id as well as by listing.
+    expect(await src.getTraceDetail("verified_tufts_all")).toBeNull();
   });
 
   it("fixtureSource returns eval runs and cases with provenance 'fixture'", async () => {
