@@ -131,9 +131,10 @@ export function parseTraceLine(
   });
 
   const nToolCalls =
-    typeof t.tool_calls === "number"
-      ? t.tool_calls
-      : turns.reduce((n, turn) => n + turn.toolCalls.length, 0);
+    meta.mode === "no_tools"
+      ? 0
+      : turns.reduce((n, turn) => n + turn.toolCalls.length, 0) ||
+        (typeof t.tool_calls === "number" ? t.tool_calls : 0);
 
   return {
     dataset: t.dataset,

@@ -1,0 +1,100 @@
+import Link from "next/link";
+import type { TraceListRow } from "@/shared/lib/datasource";
+import { publicImageUrl } from "@/shared/lib/image-url";
+import { Badge, CardLink, caseName } from "./primitives";
+
+/** Grid card for one trace. Everything on it comes from the row (no invented numbers). */
+export function TraceCard({ row }: { row: TraceListRow }) {
+  const img = publicImageUrl(row.imageKey);
+  const title = caseName(row.dataset, row.imageId);
+  return (
+    <CardLink href={`/traces/${row.id}`} className="overflow-hidden">
+      <div className="relative aspect-[16/7] overflow-hidden bg-zinc-950">
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={img}
+            alt={`Radiograph for ${title}`}
+            loading="lazy"
+            className="h-full w-full object-cover opacity-90 transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-950 text-xs text-zinc-500">
+            no public image
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-2">
+          <span className="text-sm font-semibold text-white">{title}</span>
+          <span className="font-mono text-[10px] text-zinc-300">{row.dataset}</span>
+        </div>
+        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+          <Badge tone={row.verified ? "success" : "warning"}>{row.verified ? "verified" : "unverified"}</Badge>
+          <Badge tone={row.mode === "with_tools" ? "violet" : "neutral"}>
+            {row.mode === "with_tools" ? "with tools" : "no tools"}
+          </Badge>
+        </div>
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap gap-1.5">
+          {row.conditions.length > 0 ? (
+            row.conditions.slice(0, 4).map((c) => (
+              <Badge key={c} tone="info">
+                {c}
+              </Badge>
+            ))
+          ) : (
+            <Badge tone="neutral">healthy / no findings</Badge>
+          )}
+          {row.conditions.length > 4 && <Badge tone="neutral">+{row.conditions.length - 4}</Badge>}
+        </div>
+        <dl className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-md bg-muted/60 px-2 py-1.5">
+            <dt className="text-[10px] tracking-wide text-zinc-500 uppercase">Turns</dt>
+            <dd className="text-sm font-semibold tabular-nums">{row.nTurns}</dd>
+          </div>
+          <div className="rounded-md bg-muted/60 px-2 py-1.5">
+            <dt className="text-[10px] tracking-wide text-zinc-500 uppercase">Tools</dt>
+            <dd className="text-sm font-semibold tabular-nums">{row.nToolCalls}</dd>
+          </div>
+          <div className="rounded-md bg-muted/60 px-2 py-1.5">
+            <dt className="text-[10px] tracking-wide text-zinc-500 uppercase">Findings</dt>
+            <dd className="text-sm font-semibold tabular-nums">{row.nFindings}</dd>
+          </div>
+        </dl>
+        <div className="flex items-center justify-between text-xs">
+          <span className="truncate font-mono text-[10px] text-zinc-500" title={row.file}>
+            {row.cohort}
+          </span>
+          <span className={row.formatOk ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+            {row.formatOk ? "format ok" : "format failed"}
+          </span>
+        </div>
+      </div>
+    </CardLink>
+  );
+}
+
+/** Compact row for dense lists / the landing page. */
+export function TraceRowLink({ row }: { row: TraceListRow }) {
+  const img = publicImageUrl(row.imageKey);
+  return (
+    <Link
+      href={`/traces/${row.id}`}
+      className="group flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 transition-colors hover:bg-accent"
+    >
+      {img ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={img} alt="" className="h-10 w-16 rounded object-cover" loading="lazy" />
+      ) : (
+        <div className="h-10 w-16 rounded bg-muted" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{caseName(row.dataset, row.imageId)}</div>
+        <div className="truncate text-xs text-zinc-500">
+          {row.nTurns} turns · {row.nToolCalls} tools · {row.nFindings} findings
+        </div>
+      </div>
+      <span className="text-xs text-zinc-500 transition-transform group-hover:translate-x-0.5">→</span>
+    </Link>
+  );
+}

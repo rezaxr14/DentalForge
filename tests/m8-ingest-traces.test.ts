@@ -74,7 +74,7 @@ describe("prepareTrace / canonicalJson (pure)", () => {
   it("reuses the importer's interpretation: counts, status, thought, tool calls", () => {
     const item = IngestTrace.parse(WITH_TOOLS);
     const p = prepareTrace(item, { cohort: "dentex", mode: "with_tools", verified: true }, "ds")!;
-    expect(p).toMatchObject({ datasetId: "ds", sourceImageId: 1, cohort: "dentex", mode: "with_tools", verified: true, nTurns: 4, nToolCalls: 42, formatOk: true });
+    expect(p).toMatchObject({ datasetId: "ds", sourceImageId: 1, cohort: "dentex", mode: "with_tools", verified: true, nTurns: 4, nToolCalls: 15, formatOk: true });
     expect(p.turns.map((t) => [t.idx, t.status, t.toolCalls.length])).toEqual([[0, "tool_executed", 4], [1, "tool_executed", 3], [2, "tool_executed", 4], [3, "tool_executed", 4]]);
     expect(p.turns[0]!.toolCalls[0]!.toolName).toBe(callRows(WITH_TOOLS)[0]!.tool_name);
   });
@@ -124,7 +124,7 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
       const r = store.scoped(a.org.id);
       const out = await r.ingestTrace(input(a.dentex.id, WITH_TOOLS));
       if (out.outcome !== "inserted") throw new Error(out.outcome);
-      expect(out.trace).toMatchObject({ cohort: "dentex", mode: "with_tools", verified: true, nTurns: 4, nToolCalls: 42, formatOk: true, orgId: a.org.id });
+      expect(out.trace).toMatchObject({ cohort: "dentex", mode: "with_tools", verified: true, nTurns: 4, nToolCalls: 15, formatOk: true, orgId: a.org.id });
       expect(out.trace.verifierReason).toBe(WITH_TOOLS.verifier_reason);
 
       const turns = await r.listTraceTurns(out.trace.id);
