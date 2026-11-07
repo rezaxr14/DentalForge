@@ -1,70 +1,138 @@
 import Link from "next/link";
 import { resolveDataSource } from "@/shared/lib/resolve-source";
+import { Badge, EmptyState, Stat } from "@/shared/ui/primitives";
 import { PageShell } from "@/shared/ui/page";
+import { TraceCard } from "@/shared/ui/trace-card";
+
+type Mode = "all" | "with_tools" | "no_tools" | "failing";
+
+const FILTERS: { key: Mode; label: string }[] = [
+  { key: "all", label: "All traces" },
+  { key: "with_tools", label: "With tools" },
+  { key: "no_tools", label: "No tools" },
+  { key: "failing", label: "Format failures" },
+];
 
 function ProvenanceBadge({ provenance }: { provenance: string }) {
-  const label = provenance === "postgres" ? "postgres" : "fixture replay";
   return (
-    <span className="ml-2 rounded bg-zinc-100 dark:bg-muted px-1.5 py-0.5 text-xs text-zinc-600">
-      {label}
-    </span>
+    <Badge tone={provenance === "postgres" ? "success" : "warning"}>
+      {provenance === "postgres" ? "imported data" : "fixture replay"}
+    </Badge>
   );
 }
 
-export default async function TracesPage() {
+export default async function TracesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string; q?: string }>;
+}) {
   const { source, fallbackReason } = await resolveDataSource();
-  const traces = await source.listTraces();
+  const all = await source.listTraces();
+  const sp = await searchParams;
+  const mode: Mode = FILTERS.some((f) => f.key === sp.mode) ? (sp.mode as Mode) : "all";
+  const q = (sp.q ?? "").trim().toLowerCase();
+
+  let traces = all;
+  if (mode === "with_tools") traces = traces.filter((t) => t.mode === "with_tools");
+  if (mode === "no_tools") traces = traces.filter((t) => t.mode === "no_tools");
+  if (mode === "failing") traces = traces.filter((t) => !t.formatOk);
+  if (q) {
+    traces = traces.filter(
+      (t) =>
+        String(t.imageId).includes(q) ||
+        t.conditions.some((c) => c.toLowerCase().includes(q)) ||
+        t.dataset.toLowerCase().includes(q),
+    );
+  }
+
+  const withTools = all.filter((t) => t.mode === "with_tools").length;
+  const findings = all.reduce((n, t) => n + t.nFindings, 0);
+  const verified = all.filter((t) => t.verified).length;
+  const formatOk = all.filter((t) => t.formatOk).length;
+
   return (
-    <PageShell>
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Trace Explorer
+    <PageShell className="py-10">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-3xl font-semibold tracking-tight">Trace Explorer</h1>
         <ProvenanceBadge provenance={source.provenance} />
-      </h1>
-      <p className="mt-1 text-sm text-zinc-600">
-        {traces.length} traces. All counts computed from{" "}
-        {source.provenance === "postgres" ? "imported" : "fixture"} data.
+      </div>
+      <p className="mt-2 max-w-3xl text-sm text-zinc-600">
+        Multi-turn dental-agent traces over real DENTEX radiographs. Each card is one recorded
+        trajectory: its tool calls, verifier outcome and the findings the model returned.
       </p>
       {fallbackReason && (
-        <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 dark:bg-muted px-3 py-2 text-xs text-zinc-600">
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
           {fallbackReason}
         </p>
       )}
-      <table className="mt-6 w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-zinc-500">
-            <th className="py-2 pr-4">Trace</th>
-            <th className="py-2 pr-4">Dataset</th>
-            <th className="py-2 pr-4">Mode</th>
-            <th className="py-2 pr-4">Turns</th>
-            <th className="py-2 pr-4">Tool calls</th>
-            <th className="py-2 pr-4">Findings</th>
-            <th className="py-2">Format</th>
-          </tr>
-        </thead>
-        <tbody>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <Stat label="Traces" value={all.length} hint={`${verified} verified`} />
+        <Stat label="With tools" value={withTools} hint={`${all.length - withTools} no-tools`} tone="info" />
+        <Stat label="Tool calls" value={all.reduce((n, t) => n + t.nToolCalls, 0)} />
+        <Stat label="Findings" value={findings} hint="recorded answers + GT" />
+        <Stat
+          label="Format pass"
+          value={`${all.length ? Math.round((formatOk / all.length) * 100) : 0}%`}
+          hint={`${formatOk}/${all.length} parse cleanly`}
+          tone={formatOk === all.length ? "success" : "warning"}
+        />
+      </div>
+
+      <div className="mt-8 flex flex-wrap items-center gap-2">
+        {FILTERS.map((f) => (
+          <Link
+            key={f.key}
+            href={`/traces${f.key === "all" ? "" : `?mode=${f.key}`}`}
+            aria-current={mode === f.key ? "page" : undefined}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              mode === f.key
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-card text-zinc-600 hover:bg-accent"
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
+        <form action="/traces" className="ms-auto flex items-center gap-2">
+          {mode !== "all" && <input type="hidden" name="mode" value={mode} />}
+          <input
+            type="search"
+            name="q"
+            defaultValue={sp.q ?? ""}
+            placeholder="Filter by case id or diagnosis…"
+            aria-label="Filter traces"
+            className="w-56 rounded-full border border-border bg-card px-3 py-1 text-xs outline-none placeholder:text-zinc-500 focus:border-zinc-400"
+          />
+          <button
+            type="submit"
+            className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium hover:bg-accent"
+          >
+            Filter
+          </button>
+        </form>
+      </div>
+
+      <p className="mt-4 text-xs text-zinc-500">
+        Showing {traces.length} of {all.length} traces
+        {q ? ` matching “${sp.q}”` : ""}.
+      </p>
+
+      {traces.length === 0 ? (
+        <div className="mt-6">
+          <EmptyState title="No traces match this filter">
+            Clear the filter or search for a case id such as <span className="font-mono">255</span>.
+          </EmptyState>
+        </div>
+      ) : (
+        <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {traces.map((t) => (
-            <tr key={t.id} className="border-b hover:bg-zinc-50 dark:hover:bg-accent">
-              <td className="py-2 pr-4">
-                <Link href={`/traces/${t.id}`} className="font-medium underline">
-                  {t.id.slice(0, 8)}
-                </Link>
-                {!t.verified && (
-                  <span className="ml-2 rounded bg-zinc-200 dark:bg-accent px-1 text-xs">unverified</span>
-                )}
-              </td>
-              <td className="py-2 pr-4">
-                {t.dataset} · img {t.imageId}
-              </td>
-              <td className="py-2 pr-4">{t.mode}</td>
-              <td className="py-2 pr-4">{t.nTurns}</td>
-              <td className="py-2 pr-4">{t.nToolCalls}</td>
-              <td className="py-2 pr-4">{t.nFindings}</td>
-              <td className="py-2">{t.formatOk ? "ok" : "—"}</td>
-            </tr>
+            <li key={t.id}>
+              <TraceCard row={t} />
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ul>
+      )}
     </PageShell>
   );
 }
-
