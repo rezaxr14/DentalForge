@@ -16,6 +16,34 @@ export interface ImageSource {
   height: number;
   bytes: number;
   sha256: string;
+  /** Public/static key to store instead of the local path (demo seed). */
+  storageKey?: string;
+}
+
+/**
+ * DENTEX trace `image_id` is the COCO image id, NOT the filename number
+ * (`255 → train_477.png`). The importer must use the COCO `images` map, or it
+ * silently shows the wrong radiograph. Returns null when the map is absent.
+ */
+export function loadDentexImageMap(dataRoot: string): Map<number, string> | null {
+  const cocoPath = join(
+    dataRoot,
+    "dentex",
+    "DENTEX",
+    "training_data",
+    "quadrant-enumeration-disease",
+    "train_quadrant_enumeration_disease.json",
+  );
+  if (!existsSync(cocoPath)) return null;
+  try {
+    const coco = JSON.parse(readFileSync(cocoPath, "utf8")) as {
+      images?: { id: number; file_name: string }[];
+    };
+    if (!Array.isArray(coco.images)) return null;
+    return new Map(coco.images.map((im) => [Number(im.id), im.file_name]));
+  } catch {
+    return null;
+  }
 }
 
 /** Local (dataset, image_id) → file path. Verified against the real tree. */
@@ -23,12 +51,16 @@ export function resolveImagePath(
   dataRoot: string,
   dataset: string,
   imageId: number,
+  dentexMap?: Map<number, string> | null,
 ): string | null {
   const dir =
     dataset === "tufts"
       ? join(dataRoot, "Tufts", "Radiographs")
       : join(dataRoot, "dentex", "DENTEX", "training_data", "quadrant-enumeration-disease", "xrays");
-  const file = dataset === "tufts" ? `${imageId}.JPG` : `train_${imageId}.png`;
+  const file =
+    dataset === "tufts"
+      ? `${imageId}.JPG`
+      : (dentexMap?.get(imageId) ?? `train_${imageId}.png`);
   const path = join(dir, file);
   return existsSync(path) ? path : null;
 }

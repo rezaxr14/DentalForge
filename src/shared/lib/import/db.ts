@@ -162,7 +162,7 @@ export async function insertTraceRows(
         contentHash: src.sha256,
         width: src.width,
         height: src.height,
-        storageKey: src.path,
+        storageKey: src.storageKey ?? src.path,
         split: "train",
       })
       .onConflictDoNothing()

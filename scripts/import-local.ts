@@ -19,7 +19,7 @@ import { getPgDb, getPool } from "@/shared/db/pg";
 import { DrizzleOrgStore } from "@/shared/db/repositories";
 import { getEnv } from "@/shared/config/env";
 import { traceFileMeta, parseTraceLine, parseEvalFileDetailed } from "@/shared/lib/import/parse";
-import { resolveImagePath, readImageSource } from "@/shared/lib/import/imageMeta";
+import { resolveImagePath, readImageSource, loadDentexImageMap } from "@/shared/lib/import/imageMeta";
 import {
   emptyStats,
   ensureDatasets,
@@ -39,10 +39,11 @@ const ORG_SLUG = process.env.IMPORT_ORG_SLUG ?? "demo";
 
 /** Content-hash cache: sha256 of a 4 MB PNG should be read once. */
 const imageCache = new Map<string, ReturnType<typeof readImageSource> | null>();
+const dentexImageMap = loadDentexImageMap(VLM_DATA);
 const resolve: ImageResolver = (dataset, imageId) => {
   const key = `${dataset}:${imageId}`;
   if (!imageCache.has(key)) {
-    const path = resolveImagePath(VLM_DATA, dataset, imageId);
+    const path = resolveImagePath(VLM_DATA, dataset, imageId, dentexImageMap);
     imageCache.set(key, path ? readImageSource(path) : null);
   }
   return imageCache.get(key) ?? null;
