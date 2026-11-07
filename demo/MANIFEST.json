@@ -1,0 +1,21 @@
+{
+  "vlmDental": {
+    "commit": "9beab8a8eee0e4949c6b1a837184419dfd21eb41",
+    "branch": "main",
+    "dirty": true
+  },
+  "buildDate": "2026-11-07T07:35:21.973580+00:00",
+  "counts": {
+    "images": 22,
+    "traces": 38,
+    "evalRuns": 8,
+    "evalCases": 395,
+    "artifacts": 40,
+    "artifactLinks": 15
+  },
+  "licenses": {
+    "dentex": "CC-BY-NC-SA-4.0",
+    "ultralytics": "AGPL-3.0"
+  },
+  "bundleBytes": 1976447
+}

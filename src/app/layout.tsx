@@ -26,6 +26,7 @@ const nav = [
   { href: "/rewards", label: "Rewards" },
   { href: "/agent", label: "Agent" },
   { href: "/training", label: "Training" },
+  { href: "/about-data", label: "Data" },
   { href: "/settings", label: "Settings" },
 ];
 

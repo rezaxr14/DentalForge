@@ -35,11 +35,38 @@ export interface TraceDetail {
   id: string;
   trace: VerifiedTraceT;
   provenance: DataProvenance;
+  /** Trace-level facts that are not part of the VerifiedTrace file contract. */
+  mode: "with_tools" | "no_tools";
+  cohort: string;
+  verified: boolean;
+  /** Radiograph backing the trace, when the source can resolve one. */
+  image: TraceImage | null;
+}
+
+export interface TraceImage {
+  storageKey: string;
+  width: number;
+  height: number;
+  dataset: string;
+  sourceImageId: number;
 }
 
 export interface EvalCaseDetail {
   id: string;
   evalCase: EvalCaseT;
+  provenance: DataProvenance;
+}
+
+/** One eval run with its cases — the leaderboard's drill-down. */
+export interface EvalRunDetail {
+  id: string;
+  model: string;
+  provider: string;
+  dataset: string;
+  split: string;
+  n: number;
+  summary: Record<string, number>;
+  cases: EvalCaseT[];
   provenance: DataProvenance;
 }
 
@@ -63,6 +90,7 @@ export interface DataSource {
   listTraces(): Promise<TraceListRow[]>;
   getTraceDetail(id: string): Promise<TraceDetail | null>;
   listEvalRuns(): Promise<LeaderboardRow[]>;
+  getEvalRun(id: string): Promise<EvalRunDetail | null>;
   getEvalCase(id: string): Promise<EvalCaseDetail | null>;
   /** Stored image artifacts for trace tool calls (fixture source: none exist yet). */
   getArtifactImages(ids: string[]): Promise<ArtifactImageRef[]>;
@@ -70,11 +98,15 @@ export interface DataSource {
 
 /** Committed sanitized fixtures — always available, no DB needed. */
 export function fixtureSource(): DataSource {
+  // Public pages are DENTEX-only. The committed fixtures still include one
+  // Tufts trace for the cross-dataset ingestion tests, but it must never reach
+  // a rendered page (plan §7: Tufts data is never public).
+  const publicTraces = () => listFixtureTraces().filter((t) => t.dataset.toLowerCase() === "dentex");
   return {
     provenance: "fixture",
     listTraces: () =>
       Promise.resolve(
-        listFixtureTraces().map((t) => ({ ...t, provenance: "fixture" as const })),
+        publicTraces().map((t) => ({ ...t, provenance: "fixture" as const })),
       ),
     getTraceDetail: (id) => {
       let raw: unknown;
@@ -85,12 +117,56 @@ export function fixtureSource(): DataSource {
       }
       const parsed = VerifiedTrace.safeParse(raw);
       if (!parsed.success) return Promise.resolve(null);
-      return Promise.resolve({ id, trace: parsed.data, provenance: "fixture" as const });
+      const t = parsed.data;
+      if (t.dataset.toLowerCase() !== "dentex") return Promise.resolve(null);
+      const summary = listFixtureTraces().find((r) => r.id === id);
+      // The committed fixtures ship five DENTEX derivatives under public/labels.
+      const label = t.image_id >= 1 && t.image_id <= 5 ? t.image_id : null;
+      return Promise.resolve({
+        id,
+        trace: t,
+        provenance: "fixture" as const,
+        mode: summary?.mode ?? (t.tool_calls ? "with_tools" : "no_tools"),
+        cohort: summary?.cohort ?? "fixture",
+        verified: summary?.verified ?? true,
+        image: label
+          ? {
+              storageKey: `labels/${label}.jpg`,
+              width: 1600,
+              height: 767,
+              dataset: t.dataset,
+              sourceImageId: t.image_id,
+            }
+          : null,
+      });
     },
     listEvalRuns: () =>
       Promise.resolve(
         listFixtureEvals().map((r) => ({ ...r, provenance: "fixture" as const })),
       ),
+    getEvalRun: (id) => {
+      const row = listFixtureEvals().find((r) => r.id === id);
+      if (!row) return Promise.resolve(null);
+      let raw: unknown;
+      try {
+        raw = getFixtureEval(id);
+      } catch {
+        return Promise.resolve(null);
+      }
+      const parsed = EvalCase.safeParse(raw);
+      if (!parsed.success) return Promise.resolve(null);
+      return Promise.resolve({
+        id,
+        model: row.model,
+        provider: row.provider,
+        dataset: row.dataset,
+        split: parsed.data.split,
+        n: row.n,
+        summary: { exact_f1: row.exactF1, fdi_f1: row.fdiF1 },
+        cases: [parsed.data],
+        provenance: "fixture" as const,
+      });
+    },
     getEvalCase: (id) => {
       let raw: unknown;
       try {
@@ -115,6 +191,7 @@ export function postgresSource(db: Db, orgId: string): DataSource {
     listTraces: () => listTraceRows(db, orgId),
     getTraceDetail: (id) => getTraceRow(db, orgId, id),
     listEvalRuns: () => listEvalRunRows(db, orgId),
+    getEvalRun: (id) => getEvalRunRow(db, orgId, id),
     getEvalCase: (id) => getEvalCaseRow(db, orgId, id),
     getArtifactImages: (ids) => getArtifactImageRows(db, orgId, ids),
   };
@@ -132,8 +209,12 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
       nToolCalls: s.traces.nToolCalls,
       formatOk: s.traces.formatOk,
       finalAnswer: s.traces.finalAnswer,
+      groundTruth: s.traces.groundTruth,
       datasetSource: s.datasets.source,
       sourceImageId: s.images.sourceImageId,
+      imageStorageKey: s.images.storageKey,
+      imageWidth: s.images.width,
+      imageHeight: s.images.height,
     })
     .from(s.traces)
     .innerJoin(s.images, eq(s.traces.imageId, s.images.id))
@@ -142,6 +223,16 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
     .orderBy(asc(s.traces.createdAt));
   return rows.map((r) => {
     const finalAnswer = Array.isArray(r.finalAnswer) ? r.finalAnswer : [];
+    const conditions = new Set<string>();
+    for (const list of [r.groundTruth, r.finalAnswer]) {
+      if (!Array.isArray(list)) continue;
+      for (const f of list) {
+        if (f && typeof f === "object" && "diagnosis" in f) {
+          const d = (f as { diagnosis?: unknown }).diagnosis;
+          if (typeof d === "string" && d.length > 0) conditions.add(d);
+        }
+      }
+    }
     return {
       id: r.id,
       file: r.sourceFile ?? "",
@@ -155,8 +246,17 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
       nFindings: finalAnswer.length,
       verified: r.verified ?? false,
       provenance: "postgres" as const,
+      imageKey: r.imageStorageKey,
+      imageWidth: r.imageWidth,
+      imageHeight: r.imageHeight,
+      conditions: [...conditions],
     };
   });
+}
+
+/** A path id is only meaningful if it is a UUID; otherwise the DB would throw. */
+function isUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
 async function getTraceRow(
@@ -164,16 +264,22 @@ async function getTraceRow(
   orgId: string,
   id: string,
 ): Promise<TraceDetail | null> {
+  if (!isUuid(id)) return null;
   const rows = await db
     .select({
       id: s.traces.id,
       verified: s.traces.verified,
+      mode: s.traces.mode,
+      cohort: s.traces.cohort,
       formatOk: s.traces.formatOk,
       verifierReason: s.traces.verifierReason,
       groundTruth: s.traces.groundTruth,
       finalAnswer: s.traces.finalAnswer,
       datasetSource: s.datasets.source,
       sourceImageId: s.images.sourceImageId,
+      imageWidth: s.images.width,
+      imageHeight: s.images.height,
+      imageStorageKey: s.images.storageKey,
     })
     .from(s.traces)
     .innerJoin(s.images, eq(s.traces.imageId, s.images.id))
@@ -239,7 +345,23 @@ async function getTraceRow(
   };
   const parsed = VerifiedTrace.safeParse(raw);
   if (!parsed.success) return null;
-  return { id, trace: parsed.data, provenance: "postgres" as const };
+  return {
+    id,
+    trace: parsed.data,
+    provenance: "postgres" as const,
+    mode: t.mode,
+    cohort: t.cohort,
+    verified: t.verified ?? false,
+    image: t.imageStorageKey
+      ? {
+          storageKey: t.imageStorageKey,
+          width: t.imageWidth ?? 0,
+          height: t.imageHeight ?? 0,
+          dataset: t.datasetSource,
+          sourceImageId: t.sourceImageId,
+        }
+      : null,
+  };
 }
 
 async function listEvalRunRows(db: Db, orgId: string): Promise<LeaderboardRow[]> {
@@ -286,11 +408,86 @@ async function getArtifactImageRows(
     .map((r) => ({ id: r.id, storageKey: r.storageKey, provenance: r.provenance }));
 }
 
+type EvalCaseRow = typeof s.evalCases.$inferSelect;
+
+function evalCaseRaw(
+  c: EvalCaseRow,
+  run: { dataset: string; split: string; provider: string; model: string },
+): unknown {
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  return {
+    image_id: c.sourceImageId ?? 0,
+    dataset: run.dataset,
+    split: run.split,
+    provider: run.provider,
+    model: run.model,
+    ground_truth: arr(c.groundTruth),
+    predictions: arr(c.predictionsJson),
+    matched_pairs: arr(c.matchedPairs),
+    fdi_precision: 0,
+    fdi_recall: 0,
+    fdi_f1: c.fdiF1 ?? 0,
+    exact_precision: 0,
+    exact_recall: 0,
+    exact_f1: c.exactF1 ?? 0,
+    closeness_score: c.closeness ?? 0,
+    spatial_proximity: 0,
+    diagnostic_similarity: 0,
+    fdi_correct: false,
+    quadrant_correct: false,
+    tooth_position_correct: false,
+    diagnosis_correct: false,
+    exact_match: false,
+    all_exact_match: false,
+    raw_output: c.rawOutput ?? "",
+    format_ok: c.formatOk ?? false,
+    finish_reason: "",
+    ...(c.confidence != null ? { confidence: c.confidence } : {}),
+  };
+}
+
+async function getEvalRunRow(
+  db: Db,
+  orgId: string,
+  id: string,
+): Promise<EvalRunDetail | null> {
+  if (!isUuid(id)) return null;
+  const runRows = await db
+    .select()
+    .from(s.evalRuns)
+    .where(and(eq(s.evalRuns.orgId, orgId), eq(s.evalRuns.id, id)))
+    .limit(1);
+  const run = runRows[0];
+  if (!run) return null;
+  const caseRows = await db
+    .select()
+    .from(s.evalCases)
+    .where(and(eq(s.evalCases.orgId, orgId), eq(s.evalCases.runId, id)))
+    .orderBy(asc(s.evalCases.sourceImageId));
+  const cases: EvalCaseT[] = [];
+  for (const c of caseRows) {
+    const parsed = EvalCase.safeParse(evalCaseRaw(c, run));
+    if (parsed.success) cases.push(parsed.data);
+  }
+  return {
+    id,
+    model: run.model,
+    provider: run.provider,
+    dataset: run.dataset,
+    split: run.split,
+    n: run.n ?? cases.length,
+    summary: (run.summary ?? {}) as Record<string, number>,
+    cases,
+    provenance: "postgres" as const,
+  };
+}
+
 async function getEvalCaseRow(
   db: Db,
   orgId: string,
   id: string,
 ): Promise<EvalCaseDetail | null> {
+  if (!isUuid(id)) return null;
   const rows = await db
     .select({
       id: s.evalCases.id,
@@ -314,37 +511,14 @@ async function getEvalCaseRow(
     .limit(1);
   const c = rows[0];
   if (!c) return null;
-  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-  const raw = {
-    image_id: 0,
-    dataset: c.runDataset,
-    split: c.runSplit,
-    provider: c.runProvider,
-    model: c.runModel,
-    ground_truth: arr(c.groundTruth),
-    predictions: arr(c.predictions),
-    matched_pairs: arr(c.matchedPairs),
-    fdi_precision: 0,
-    fdi_recall: 0,
-    fdi_f1: c.fdiF1 ?? 0,
-    exact_precision: 0,
-    exact_recall: 0,
-    exact_f1: c.exactF1 ?? 0,
-    closeness_score: c.closeness ?? 0,
-    spatial_proximity: 0,
-    diagnostic_similarity: 0,
-    fdi_correct: false,
-    quadrant_correct: false,
-    tooth_position_correct: false,
-    diagnosis_correct: false,
-    exact_match: false,
-    all_exact_match: false,
-    raw_output: c.rawOutput ?? "",
-    format_ok: c.formatOk ?? false,
-    finish_reason: "",
-    ...(c.confidence != null ? { confidence: c.confidence } : {}),
-  };
-  const parsed = EvalCase.safeParse(raw);
+  const parsed = EvalCase.safeParse(
+    evalCaseRaw(c as unknown as EvalCaseRow, {
+      dataset: c.runDataset,
+      split: c.runSplit,
+      provider: c.runProvider,
+      model: c.runModel,
+    }),
+  );
   if (!parsed.success) return null;
   return { id, evalCase: parsed.data, provenance: "postgres" as const };
 }
