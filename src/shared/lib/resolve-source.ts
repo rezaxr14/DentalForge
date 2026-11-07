@@ -28,13 +28,23 @@ async function resolveOrgId(): Promise<string | null> {
   const { auth } = await import("@/shared/auth");
   const session = await auth.api.getSession({ headers: await headers() });
   const userId = session?.user?.id;
-  if (!userId) return null;
   const slug = process.env.IMPORT_ORG_SLUG ?? "demo";
   const store = new DrizzleOrgStore(getPgDb());
-  const org = await store.getOrgBySlug(slug);
-  if (!org) return null;
-  const m = await store.membership(userId, org.id);
-  return m ? org.id : null;
+  if (userId) {
+    const org = await store.getOrgBySlug(slug);
+    if (org) {
+      const m = await store.membership(userId, org.id);
+      if (m) return org.id;
+    }
+  }
+  // Public demo (WP7): anonymous visitors read the seeded Demo org, which is
+  // DENTEX-only and read-only in practice (every write needs a session).
+  const demoSlug = process.env.DEMO_ORG_SLUG;
+  if (demoSlug) {
+    const demo = await store.getOrgBySlug(demoSlug);
+    return demo?.id ?? null;
+  }
+  return null;
 }
 
 export async function resolveDataSource(): Promise<SourceResolution> {
