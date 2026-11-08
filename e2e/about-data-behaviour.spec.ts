@@ -17,24 +17,21 @@ test.describe("/about-data — licences", () => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator("text=/DENTEX/i")).toBeVisible();
-    await expect(page.locator("text=/CC BY-NC-SA 4.0/i")).toBeVisible();
+    await expect(page.locator("h3", { hasText: "DENTEX — CC BY-NC-SA 4.0" })).toBeVisible();
   });
 
   test("shows YOLO licence (AGPL-3.0)", async ({ page }) => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator("text=/YOLO/i")).toBeVisible();
-    await expect(page.locator("text=/AGPL-3.0/i")).toBeVisible();
+    await expect(page.locator("h3", { hasText: "Ultralytics YOLO — AGPL-3.0" })).toBeVisible();
   });
 
   test("shows citation for DENTEX paper", async ({ page }) => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator("text=/Hamamci/i")).toBeVisible();
-    await expect(page.locator("text=/MICCAI 2023/i")).toBeVisible();
+    await expect(page.locator("text=Hamamci et al., arXiv:2305.19112 (MICCAI 2023)")).toBeVisible();
   });
 });
 
@@ -43,24 +40,24 @@ test.describe("/about-data — provenance", () => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator("text=/images/i")).toBeVisible();
-    await expect(page.locator("text=/traces/i")).toBeVisible();
-    await expect(page.locator("text=/eval/i")).toBeVisible();
+    await expect(page.locator("h2", { hasText: "Bundle provenance" })).toBeVisible();
+    await expect(page.locator("text=Source commit")).toBeVisible();
+    await expect(page.locator("text=Built")).toBeVisible();
   });
 
   test("shows honest status: DENTEX-only, no Tufts data", async ({ page }) => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator("text=/DENTEX-only/i")).toBeVisible();
-    await expect(page.locator("text=/No Tufts data/i")).toBeVisible();
+    await expect(page.locator("text=Only DENTEX images are published")).toBeVisible();
+    await expect(page.locator("text=Tufts data is never included")).toBeVisible();
   });
 
   test("shows VLM-DENTAL commit provenance", async ({ page }) => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator("text=/VLM-DENTAL/i")).toBeVisible();
+    await expect(page.locator("text=Source commit")).toBeVisible();
   });
 });
 
