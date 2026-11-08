@@ -48,7 +48,8 @@ yarn-error.log*
 next-env.d.ts
 
 # local-storage adapter output (worker artifacts uploaded in dev/e2e)
-/public/demo-assets/
+
 __pycache__/
 *.pyc
 /perf-results/
+
