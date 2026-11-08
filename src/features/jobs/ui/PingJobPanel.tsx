@@ -59,7 +59,7 @@ export function PingJobPanel({ canEnqueue, workerOnline }: { canEnqueue: boolean
       </div>
 
       {problem && (
-        <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-400">
           {problem.title ?? "Request failed"}
           {problem.detail ? ` — ${problem.detail}` : ""}
         </p>
@@ -81,7 +81,7 @@ export function PingJobPanel({ canEnqueue, workerOnline }: { canEnqueue: boolean
           {stream.job?.status === "succeeded" && (
             <pre className="mt-2 overflow-x-auto rounded bg-zinc-100 p-2 text-xs dark:bg-zinc-900">{JSON.stringify(stream.job.result, null, 2)}</pre>
           )}
-          {stream.error && <p className="mt-2 text-xs text-amber-600">{stream.error}</p>}
+          {stream.error && <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{stream.error}</p>}
         </div>
       )}
     </div>

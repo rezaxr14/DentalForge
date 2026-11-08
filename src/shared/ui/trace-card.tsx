@@ -65,7 +65,7 @@ export function TraceCard({ row }: { row: TraceListRow }) {
           <span className="truncate font-mono text-[10px] text-zinc-500" title={row.file}>
             {row.cohort}
           </span>
-          <span className={row.formatOk ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+          <span className={row.formatOk ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}>
             {row.formatOk ? "format ok" : "format failed"}
           </span>
         </div>

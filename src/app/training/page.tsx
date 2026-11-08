@@ -313,7 +313,7 @@ export default async function TrainingPage() {
               <li>No target or expected numbers are shown in any cell.</li>
               <li>Zero-shot numbers come from the recorded eval runs.</li>
             </ul>
-            <Link href="/evals" className="mt-3 inline-block text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+            <Link href="/evals" className="mt-3 inline-block text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
               Open the eval leaderboard →
             </Link>
           </Card>

@@ -226,7 +226,7 @@ export default async function Home() {
               </div>
               <div className="mt-3 font-medium">{m.name}</div>
               <div className="mt-1 text-sm text-zinc-600">{m.desc}</div>
-              <div className="mt-3 text-xs font-medium text-sky-600 transition-transform group-hover:translate-x-0.5 dark:text-sky-400">
+              <div className="mt-3 text-xs font-medium text-sky-700 transition-transform group-hover:translate-x-0.5 dark:text-sky-400">
                 Open →
               </div>
             </CardLink>
@@ -243,7 +243,7 @@ export default async function Home() {
                   <h2 className="text-lg font-semibold tracking-tight">Recent traces</h2>
                   <p className="mt-1 text-sm text-zinc-600">Recorded trajectories with the richest tool use.</p>
                 </div>
-                <Link href="/traces" className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+                <Link href="/traces" className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
                   All traces →
                 </Link>
               </div>
@@ -260,7 +260,7 @@ export default async function Home() {
                   <h2 className="text-lg font-semibold tracking-tight">Zero-shot leaderboard</h2>
                   <p className="mt-1 text-sm text-zinc-600">Exact F1 on DENTEX test images.</p>
                 </div>
-                <Link href="/evals" className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+                <Link href="/evals" className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
                   Full leaderboard →
                 </Link>
               </div>
@@ -293,7 +293,7 @@ export default async function Home() {
                   The Training Hub shows the pipeline and the empty states instead of invented metrics.
                   Only zero-shot runs and the DENTEX-only grounding checkpoint exist today.
                 </p>
-                <Link href="/training" className="mt-2 inline-block text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+                <Link href="/training" className="mt-2 inline-block text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
                   Open the Training Hub →
                 </Link>
               </Card>
@@ -324,7 +324,7 @@ export default async function Home() {
               <p className="mt-2 text-xs text-zinc-600">
                 DENTEX: Hamamci et al., arXiv:2305.19112 (MICCAI 2023). YOLO weights: Ultralytics AGPL-3.0.
               </p>
-              <Link href="/about-data" className="mt-2 inline-block text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+              <Link href="/about-data" className="mt-2 inline-block text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
                 Read the full notice →
               </Link>
             </div>

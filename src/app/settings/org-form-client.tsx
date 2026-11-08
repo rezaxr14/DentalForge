@@ -59,7 +59,7 @@ export default function OrgFormClient() {
         {pending ? "Creating…" : "Create"}
       </button>
       {error ? (
-        <p role="alert" className="w-full text-sm text-red-600">
+        <p role="alert" className="w-full text-sm text-red-700 dark:text-red-400">
           {error}
         </p>
       ) : null}

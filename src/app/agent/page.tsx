@@ -337,14 +337,14 @@ export default async function AgentPage({
                 </div>
                 <div className="rounded-lg bg-muted/60 px-2 py-1.5">
                   <dt className="text-zinc-500">Format</dt>
-                  <dd className={compare.formatOk ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+                  <dd className={compare.formatOk ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}>
                     {compare.formatOk ? "pass" : "fail"}
                   </dd>
                 </div>
               </dl>
               <a
                 href={`/agent?trace=${compare.id}`}
-                className="mt-3 inline-block text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
+                className="mt-3 inline-block text-xs font-medium text-sky-700 hover:underline dark:text-sky-400"
               >
                 Replay this run →
               </a>
