@@ -208,7 +208,7 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
       expect((await r.listTraces()).length).toBe(before);
     });
 
-    it("stores live-run provenance and the artifact id of a tool image (ADR-0025)", async () => {
+    it("stores live-run provenance and the artifact id of a tool image (ADR-0031)", async () => {
       const r = store.scoped(a.org.id);
       const ARTIFACT = "00000000-0000-4000-8000-0000000000c1";
       const base = input(a.dentex.id, WITH_TOOLS, { cohort: "live", backend: "openai_compat", stage: "test" });
@@ -345,7 +345,7 @@ describe.each(backends)("trace ingestion — $name", ({ skip, make }) => {
       expect(replay.results.map((r) => [r.outcome, r.sameContent, r.traceId])).toEqual(first.results.map((r) => ["existing", true, r.traceId]));
     });
 
-    it("GET /images/{id} also returns the identity and ground truth a live run needs (ADR-0025)", async () => {
+    it("GET /images/{id} also returns the identity and ground truth a live run needs (ADR-0031)", async () => {
       const r = store.scoped(a.org.id);
       const images = await r.listImages(a.dentex.id);
       const known = images.find((i) => i.sourceImageId === 1)!;

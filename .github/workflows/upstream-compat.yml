@@ -1,6 +1,6 @@
 name: upstream-compat
 
-# Weekly drift detection against the public VLM-DENTAL `main` (ADR-0024).
+# Weekly drift detection against the public VLM-DENTAL `main` (ADR-0030).
 #
 # This workflow is deliberately NOT a required check: a commit in VLM-DENTAL must never turn
 # DentalForge's own CI red. A failure here means "upstream changed, look at the report", so it

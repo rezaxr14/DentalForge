@@ -41,7 +41,7 @@ export const RegisterWorkerRequest = z.object({
       torch: z.string().optional(),
       cuda: z.string().optional(),
       vlmDentalCommit: z.string().optional(),
-      // ADR-0024: upstream drift report. Provenance is recorded, never used to gate behaviour; the
+      // ADR-0030: upstream drift report. Provenance is recorded, never used to gate behaviour; the
       // job availability rows are what the probe measured on the worker's machine at registration.
       vlmDentalBranch: z.string().optional(),
       vlmDentalDirty: z.boolean().optional(),
@@ -249,7 +249,7 @@ export const EvalRunPayload = z.object({
   /**
    * App image ids (UUIDs) to evaluate. Integers are the research-repo's own vocabulary and stay
    * accepted by the schema, but a worker cannot resolve them to pixels: it refuses them with a reason
-   * (ADR-0025 addendum §2). Omitted = evaluate the split via `GET /images`.
+   * (ADR-0031 addendum §2). Omitted = evaluate the split via `GET /images`.
    */
   imageIds: z.array(z.union([z.string().uuid(), z.number().int()])).max(500).optional(),
   /** Dataset row whose images make up the run when `imageIds` is omitted. */
@@ -311,7 +311,7 @@ export const AgentRunResult = z.object({
   nTurns: z.number().int().min(0),
   nToolCalls: z.number().int().min(0),
   formatOk: z.boolean(),
-  /** The trace this run was stored as, when the worker could ingest one (ADR-0025). */
+  /** The trace this run was stored as, when the worker could ingest one (ADR-0031). */
   traceId: z.string().uuid().optional(),
   rewardComponents: z
     .object({
@@ -324,7 +324,7 @@ export const AgentRunResult = z.object({
 });
 
 /**
- * `GET /images/{id}` response (ADR-0025). The download URL and size were always here; a live run
+ * `GET /images/{id}` response (ADR-0031). The download URL and size were always here; a live run
  * also needs the image's identity and ground truth to post a trace. `groundTruth: null` means the
  * app does not know it, and the worker must skip ingestion rather than invent a healthy scan.
  */
@@ -345,7 +345,7 @@ export const ImageMetadataResponse = z.object({
 });
 
 /**
- * `GET /images` (ADR-0025 addendum §2). Lets `eval.run` enumerate a split without a database.
+ * `GET /images` (ADR-0031 addendum §2). Lets `eval.run` enumerate a split without a database.
  * Ordered by `sourceImageId`; `total` is the unpaged count for the same filter.
  */
 export const ImageListResponse = z.object({
@@ -363,7 +363,7 @@ export const ImageListResponse = z.object({
 export type ImageListResponseT = z.infer<typeof ImageListResponse>;
 
 /**
- * `GET /traces/{id}` (ADR-0025 addendum §2): only what re-executing the tool calls needs. Thoughts and
+ * `GET /traces/{id}` (ADR-0031 addendum §2): only what re-executing the tool calls needs. Thoughts and
  * raw model output are deliberately absent — a worker has no use for them and they are the largest part
  * of a trace.
  */

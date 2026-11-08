@@ -1,6 +1,6 @@
 /**
  * `pnpm compat` — probe the local VLM-DENTAL checkout and print what this machine can actually run
- * (ADR-0024). Read-only: the probe imports modules and inspects signatures, never loads a model.
+ * (ADR-0030). Read-only: the probe imports modules and inspects signatures, never loads a model.
  *
  * Python selection: `VLM_PYTHON`, then `<VLM_DENTAL_PATH>/.venv/Scripts/python.exe` (Windows) or
  * `<path>/.venv/bin/python`, then `python`. Exit 0 when the probe ran; 2 when no checkout was found.

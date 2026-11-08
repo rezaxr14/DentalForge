@@ -1,4 +1,4 @@
-"""Unit tests for the VLM-DENTAL compatibility probe (ADR-0024).
+"""Unit tests for the VLM-DENTAL compatibility probe (ADR-0030).
 
 These tests never touch the owner's checkout: each builds a tiny fake `dental_agent` package in a
 temporary directory, so a passing run proves the probe reacts to the SHAPE of the package rather than

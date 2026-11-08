@@ -227,7 +227,7 @@ RUNTIME = os.environ.get("WORKER_RUNTIME", "local-gpu")  # local-gpu | colab | k
 
 
 def compat_software() -> dict[str, Any]:
-    """The `software` block sent at registration: provenance + the drift report (ADR-0024).
+    """The `software` block sent at registration: provenance + the drift report (ADR-0030).
 
     Never raises and never gates: a missing or broken checkout just produces a smaller report, so a
     worker with no VLM-DENTAL still registers (and serves system.ping). `None`/empty values are
@@ -238,7 +238,7 @@ def compat_software() -> dict[str, Any]:
         import vlm_compat
 
         # A broken native dependency upstream can abort the importing process; a child process turns
-        # that into a report instead of killing the worker (ADR-0024).
+        # that into a report instead of killing the worker (ADR-0030).
         probe = getattr(vlm_compat, "probe_isolated", None) or vlm_compat.probe
         report = probe()
     except Exception as e:  # noqa: BLE001 - registration must survive a broken probe
@@ -388,7 +388,7 @@ def main() -> int:
     next_probe = time.monotonic() + COMPAT_REPROBE_S if COMPAT_REPROBE_S > 0 else None
     while not stop.is_set() and (max_jobs is None or processed < max_jobs):
         if next_probe is not None and time.monotonic() >= next_probe:
-            # ADR-0024: re-probe so a `git pull` in VLM-DENTAL shows up without restarting the
+            # ADR-0030: re-probe so a `git pull` in VLM-DENTAL shows up without restarting the
             # worker. Handlers are fixed at start-up (they are wired imports), so a newly available
             # job needs a restart; the report is what the app displays meanwhile.
             next_probe = time.monotonic() + COMPAT_REPROBE_S

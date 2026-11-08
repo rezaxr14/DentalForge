@@ -1,4 +1,4 @@
-"""Worker registration provenance (ADR-0024): the `software` block and re-register trigger.
+"""Worker registration provenance (ADR-0030): the `software` block and re-register trigger.
 
 These tests use a fake probe, so they run on a machine with no VLM-DENTAL checkout.
 """

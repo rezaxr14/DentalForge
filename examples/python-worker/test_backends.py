@@ -296,7 +296,7 @@ def test_a_tool_image_is_offered_as_an_artifact_and_kept_in_the_observation():
     assert out.turns[0]["status"] == "tool_executed"
     assert len(artifacts) == 1 and artifacts[0][0] == 0 and artifacts[0][2] == "zoom_crop"
     Image.open(io.BytesIO(artifacts[0][3])).verify()
-    # the stored id is on the turn, so the app can link the trace to the image (ADR-0025)
+    # the stored id is on the turn, so the app can link the trace to the image (ADR-0031)
     assert out.turns[0]["tool_calls_this_turn"][0]["artifact_id"] == "00000000-0000-4000-8000-0000000000a1"
     parts = backend.seen[1][-1]["content"]
     assert parts[0]["type"] == "image" and parts[1] == {"type": "text", "text": "Result of zoom_crop:"}

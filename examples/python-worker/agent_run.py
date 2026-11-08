@@ -60,7 +60,7 @@ def ingest_live_trace(
     mode: str,
     outcome: RunOutcome,
 ) -> str | None:
-    """Store the run as a trace so Trace Explorer can open it (ADR-0025). Returns its id or None.
+    """Store the run as a trace so Trace Explorer can open it (ADR-0031). Returns its id or None.
 
     The ground truth comes from the app (`GET /images/{id}`): this worker only has pixels. If the
     app knows no ground truth for the image, ingestion is SKIPPED with a log - a live run must never

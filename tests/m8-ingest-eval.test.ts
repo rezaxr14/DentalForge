@@ -126,7 +126,7 @@ describe.each(backends)("eval run ingestion — $name", ({ skip, make }) => {
       expect((await r.listEvalRuns()).filter((x) => x.runKey === "r-create")).toHaveLength(1);
     });
 
-    it("stores live-run provenance on the run (ADR-0025)", async () => {
+    it("stores live-run provenance on the run (ADR-0031)", async () => {
       const r = store.scoped(a.id);
       const out = await r.ingestEvalCases({
         runKey: "r-provenance",

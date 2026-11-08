@@ -1,4 +1,4 @@
-"""`eval.run`: chunking, skip rules, idempotent run identity, case shape (WP3, ADR-0025 addendum §3)."""
+"""`eval.run`: chunking, skip rules, idempotent run identity, case shape (WP3, ADR-0031 addendum §3)."""
 from __future__ import annotations
 
 import sys

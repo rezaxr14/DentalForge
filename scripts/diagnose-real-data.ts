@@ -6,7 +6,7 @@
  * many lines it affects and one example VALUE DESCRIPTION (type/number/null/length — never strings from the data).
  * One run shows every mismatch, instead of the first failure per line (ADR-0014).
  *
- * ADR-0024 adds the adapter counts: lines read, lines skipped, unknown field names (kept under `extra`, never
+ * ADR-0030 adds the adapter counts: lines read, lines skipped, unknown field names (kept under `extra`, never
  * dropped silently) and observed schema-shape variants, per file.
  *
  * Exit code 0 when every line validates, 1 otherwise, 2 when no data was found.

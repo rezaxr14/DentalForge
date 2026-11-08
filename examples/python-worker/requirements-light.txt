@@ -1,4 +1,4 @@
-# Torch-free worker environment (VLM_INTEGRATION plan section 4.3, ADR-0024).
+# Torch-free worker environment (VLM_INTEGRATION plan section 4.3, ADR-0030).
 #
 # This set is enough for `tool.execute`, `trace.render_artifacts` and the
 # `openai_compat` test backend (LM Studio). It is also what the weekly upstream

@@ -22,7 +22,7 @@ export interface TraceSummary {
   formatOk: boolean;
   nFindings: number;
   verified: boolean;
-  /** Live-run provenance (ADR-0025); absent for fixture traces. */
+  /** Live-run provenance (ADR-0031); absent for fixture traces. */
   backend?: string | null;
   stage?: string | null;
 }

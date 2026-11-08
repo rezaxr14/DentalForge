@@ -225,7 +225,7 @@ async function main() {
   );
   const al = await finish(await enqueue("al.score", { imageIds: [1, 2], modelId: "yolo_cv_best" }));
   check(
-    "al.score returns the ADR-0025 numbers: entropy in [0,1], a box count and no NaN",
+    "al.score returns the ADR-0031 numbers: entropy in [0,1], a box count and no NaN",
     al?.status === "succeeded" &&
       al.result.scores.length === 2 &&
       al.result.scores.every(

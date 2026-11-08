@@ -1,5 +1,5 @@
 /**
- * Tolerant, versioned readers for VLM-DENTAL data shapes (ADR-0024).
+ * Tolerant, versioned readers for VLM-DENTAL data shapes (ADR-0030).
  *
  * The app must never break because VLM-DENTAL moved. Every reader here:
  *  - keeps unknown fields instead of dropping them (`extra` + schema `.passthrough()`),

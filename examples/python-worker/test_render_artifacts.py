@@ -1,4 +1,4 @@
-"""`trace.render_artifacts`: dedupe, skip rules, CLI shape (WP3, ADR-0025 addendum §4). Torch-free."""
+"""`trace.render_artifacts`: dedupe, skip rules, CLI shape (WP3, ADR-0031 addendum §4). Torch-free."""
 from __future__ import annotations
 
 import json

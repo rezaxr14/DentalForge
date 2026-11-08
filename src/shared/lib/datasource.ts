@@ -35,7 +35,7 @@ export interface TraceDetail {
   id: string;
   trace: VerifiedTraceT;
   provenance: DataProvenance;
-  /** Live-run provenance (ADR-0025); absent for fixture traces and imported traces. */
+  /** Live-run provenance (ADR-0031); absent for fixture traces and imported traces. */
   backend?: string | null;
   stage?: string | null;
 }

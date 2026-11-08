@@ -1,7 +1,7 @@
 """`al.score`: how uncertain the grounding detector is on each image (WP3).
 
 The active-learning queue needs a ranking it can explain, so the entropy here is **defined in
-ADR-0025 (WP3 addendum §1)** before the code:
+ADR-0031 (WP3 addendum §1)** before the code:
 
     p_i      = c_i / sum(c_j)                 over the detector's retained boxes
     entropy  = H(p) / log2(N)   H in bits     normalized, 0 when N <= 1, 0 when N == 0

@@ -1,4 +1,4 @@
-# ADR-0024 — VLM-DENTAL compatibility layer: feature detection, versioned adapters, drift reports
+# ADR-0030 — VLM-DENTAL compatibility layer: feature detection, versioned adapters, drift reports
 
 Date: 2026-10-24 · Status: **implemented and tested** · Builds on ADR-0014 (tolerant model output, strict ground truth) and ADR-0013 (chunked ingest identity)
 

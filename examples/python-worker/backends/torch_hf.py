@@ -12,7 +12,7 @@ Design points that matter:
   * **The loop is upstream's.** `run_agent` / `run_agent_no_tools` are called directly, so the
     cohort switch and the tool-call budget are the research settings, not a copy.
   * **Turns are delivered at completion.** Upstream has no per-turn hook, so this backend emits
-    every `turn` event after the run returns. The UI says so (ADR-0025). An optional progress tap on
+    every `turn` event after the run returns. The UI says so (ADR-0031). An optional progress tap on
     `generate_agent_reply` is not installed by default: it mutates a module the research code owns
     and its only benefit is cosmetic.
   * **No tool images.** `AgentTrajectory` records tool calls but not the images tools returned, so

@@ -1,4 +1,4 @@
-"""Compatibility contract against a real VLM-DENTAL checkout (ADR-0024).
+"""Compatibility contract against a real VLM-DENTAL checkout (ADR-0030).
 
 Runs in two places:
 

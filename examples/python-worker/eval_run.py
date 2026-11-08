@@ -3,7 +3,7 @@
 The handler is a loop around the *same* per-image path `agent.run` uses (`make_run_one`), so an
 evaluation cannot drift from a live run: same cohort switch, same budgets, same backend.
 
-Design points fixed in ADR-0025 (WP3 addendum §3):
+Design points fixed in ADR-0031 (WP3 addendum §3):
 
   * **Per-case metrics come from VLM-DENTAL**, not from a second implementation here. The matcher is
     imported at call time; when the checkout or its numeric dependencies are missing the job fails

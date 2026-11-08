@@ -1,5 +1,5 @@
 /**
- * Shared adapter vocabulary (ADR-0024). Kept separate from `trace.ts` so a new reader can be added
+ * Shared adapter vocabulary (ADR-0030). Kept separate from `trace.ts` so a new reader can be added
  * without importing the trace schemas.
  */
 export interface AdapterSkip {

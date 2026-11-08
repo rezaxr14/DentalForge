@@ -1,6 +1,6 @@
 """`trace.render_artifacts`: re-execute a stored trace's tool calls and store the images (WP3).
 
-A `torch_hf` run cannot hand out the images its tools produced (ADR-0025), and an imported trace
+A `torch_hf` run cannot hand out the images its tools produced (ADR-0031), and an imported trace
 never carried them. This handler rebuilds them: it reads the trace's tool calls, runs each one on the
 source image with the same dispatch the agent loops use, and uploads the results.
 

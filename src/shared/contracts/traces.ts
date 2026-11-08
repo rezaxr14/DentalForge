@@ -72,7 +72,7 @@ export const ToolCallRecord = z
     true_bbox: Bbox.optional(),
     perturb_tier: z.enum(["small", "big"]).optional(),
     /**
-     * Stored tool-image artifact this call produced (ADR-0025). A live run uploads its tool images
+     * Stored tool-image artifact this call produced (ADR-0031). A live run uploads its tool images
      * as artifacts and names them here, so Trace Explorer can open the real image instead of the
      * placeholder. Absent on imported traces (they have no artifact storage).
      */

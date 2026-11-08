@@ -66,7 +66,7 @@ export interface TraceRecord {
   formatOk: boolean;
   /** Optional so older constructors (fixtures, createTrace callers) stay valid. */
   verifierReason?: string | null;
-  /** Live-run provenance (ADR-0025); null/absent for imported traces. */
+  /** Live-run provenance (ADR-0031); null/absent for imported traces. */
   backend?: string | null;
   stage?: string | null;
   groundTruth: unknown;
@@ -85,7 +85,7 @@ export interface EvalRunRecord {
   /** Set only for runs created through `ingest/eval-run` (ADR-0013); optional so older constructors stay valid. */
   runKey?: string | null;
   canonicalResize?: boolean;
-  /** Live-run provenance (ADR-0025); absent for file imports. */
+  /** Live-run provenance (ADR-0031); absent for file imports. */
   backend?: string | null;
   stage?: string | null;
   createdAt: Date;
@@ -350,7 +350,7 @@ export interface TraceToolCallInput {
   error: string | null;
   trueBbox: unknown;
   perturbTier: string | null;
-  /** Stored tool-image artifact this call produced (ADR-0025); null when the tool returned data. */
+  /** Stored tool-image artifact this call produced (ADR-0031); null when the tool returned data. */
   artifactId?: string | null;
 }
 
@@ -383,7 +383,7 @@ export interface IngestTraceInput {
   nToolCalls: number;
   formatOk: boolean;
   verifierReason: string | null;
-  /** Live-run provenance (ADR-0025); null for file imports. */
+  /** Live-run provenance (ADR-0031); null for file imports. */
   backend?: string | null;
   stage?: string | null;
   groundTruth: unknown;
@@ -445,7 +445,7 @@ export interface IngestEvalInput {
     provider: string;
     model: string;
     canonicalResize: boolean;
-    /** Live-run provenance (ADR-0025); null/absent for file imports. */
+    /** Live-run provenance (ADR-0031); null/absent for file imports. */
     backend?: string | null;
     stage?: string | null;
   };
@@ -500,7 +500,7 @@ export interface ScopedRepos {
   /**
    * One page of a dataset's images, ordered by `sourceImageId` (stable paging), with the unpaged
    * total for the same filter. `split: null` means "no split filter"; `split: ""` matches rows whose
-   * split is null. Feeds the worker's `GET /images` (ADR-0025 addendum §2).
+   * split is null. Feeds the worker's `GET /images` (ADR-0031 addendum §2).
    */
   listImagesPage(filter: {
     datasetId: string;
@@ -516,7 +516,7 @@ export interface ScopedRepos {
     imageId?: string;
     /**
      * Exclude `stage = 'test'` rows (the LM Studio test backend), for cohort statistics and
-     * benchmark tables (ADR-0025). Trace Explorer passes false: a test run is still a real trace.
+     * benchmark tables (ADR-0031). Trace Explorer passes false: a test run is still a real trace.
      */
     researchOnly?: boolean;
   }): Promise<TraceRecord[]>;

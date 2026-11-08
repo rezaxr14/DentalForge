@@ -1,4 +1,4 @@
-"""Unit tests for the tool-golden helpers (ADR-0024). No checkout, no model: pure functions only."""
+"""Unit tests for the tool-golden helpers (ADR-0030). No checkout, no model: pure functions only."""
 from __future__ import annotations
 
 from PIL import Image

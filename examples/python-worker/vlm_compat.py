@@ -1,4 +1,4 @@
-"""Compatibility probe for a VLM-DENTAL checkout (ADR-0024).
+"""Compatibility probe for a VLM-DENTAL checkout (ADR-0030).
 
 VLM-DENTAL is under continuous development, so the worker never pins a commit. Instead it
 **feature-detects** what the checkout on this machine can actually do, advertises exactly those

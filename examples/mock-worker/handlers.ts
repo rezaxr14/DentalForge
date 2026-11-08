@@ -119,7 +119,7 @@ export async function evalRun(ctx: JobContext) {
 }
 
 /**
- * Normalized Shannon entropy over retained box confidences — the definition fixed in ADR-0025
+ * Normalized Shannon entropy over retained box confidences — the definition fixed in ADR-0031
  * (WP3 addendum §1), so the mock cannot disagree with the real handler about what `entropy` means.
  */
 function detectionEntropy(confs: number[]): number {

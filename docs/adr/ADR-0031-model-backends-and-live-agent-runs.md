@@ -1,6 +1,6 @@
-# ADR-0025 — Model backends and live `agent.run`: the test-stage firewall, provenance, and what a live trace can prove
+# ADR-0031 — Model backends and live `agent.run`: the test-stage firewall, provenance, and what a live trace can prove
 
-Date: 2026-10-24 · Status: **implemented and tested** · Builds on ADR-0024 (compatibility layer), ADR-0014 (tolerant model output), ADR-0008 (fixture fallback)
+Date: 2026-10-24 · Status: **implemented and tested** · Builds on ADR-0030 (compatibility layer), ADR-0014 (tolerant model output), ADR-0008 (fixture fallback)
 
 ## Context
 
@@ -44,7 +44,7 @@ traces.stage IS DISTINCT FROM 'test'
 
 not `<> 'test'`. Every trace imported from a file has `stage = NULL` (unknown, and honest about it), and `NULL <> 'test'` is `NULL`, which would drop **all** imported DENTEX traces from every research view. `IS DISTINCT FROM` keeps them. The in-memory store implements the same predicate, so the two stores agree. Trace Explorer itself passes no filter and shows a "Test backend (not the research model)" badge on the detail page, so a reviewer can see the run without it entering a cohort.
 
-`backend` / `stage` are **nullable** on `traces` and `eval_runs`; `NULL` means "imported before this layer existed". Nothing gates on them; they are provenance (the rule from ADR-0024: record, never pin).
+`backend` / `stage` are **nullable** on `traces` and `eval_runs`; `NULL` means "imported before this layer existed". Nothing gates on them; they are provenance (the rule from ADR-0030: record, never pin).
 
 ### 4. The `openai_compat` loop is a copy, and the copy is tested
 

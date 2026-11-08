@@ -230,7 +230,7 @@ def test_a_cancelled_job_is_not_started():
     assert torch.calls[0]["should_stop"]() is True
 
 
-# ---- live trace ingestion (ADR-0025) --------------------------------------
+# ---- live trace ingestion (ADR-0031) --------------------------------------
 
 META = {
     "sourceImageId": 18,

@@ -1,5 +1,5 @@
 /**
- * M10: versioned, tolerant readers (ADR-0024).
+ * M10: versioned, tolerant readers (ADR-0030).
  *
  * These tests are the negative controls for the adapter layer: a line with unknown fields, a line
  * missing optional fields, and a line that cannot be read at all. Each must be counted and reported,
@@ -124,7 +124,7 @@ describe("M10: trace adapter", () => {
     expect(d.linesSkipped).toBe(0);
   });
 
-  it("carries a live run's artifact id through the adapter (ADR-0025)", () => {
+  it("carries a live run's artifact id through the adapter (ADR-0031)", () => {
     const artifactId = "00000000-0000-4000-8000-0000000000c1";
     const line = traceLine({
       turns: [

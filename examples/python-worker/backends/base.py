@@ -11,7 +11,7 @@ backends exist:
 without a model or a network.
 
 Nothing here imports torch, transformers or the research package at module scope: the worker must
-start and register on a machine that has neither (ADR-0024).
+start and register on a machine that has neither (ADR-0030).
 """
 from __future__ import annotations
 

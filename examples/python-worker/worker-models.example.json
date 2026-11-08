@@ -8,7 +8,7 @@
     "Only add an sft/grpo entry once the adapter directory (adapter_config.json + adapter_model.safetensors)",
     "or the merged checkpoint directory actually exists. SFT and GRPO have not been run yet.",
     "A 'test' entry is the LM Studio / OpenAI-compatible backend: it is labelled 'Test backend (not the",
-    "research model)' in the app and its rows are excluded from cohort statistics by default (ADR-0025).",
+    "research model)' in the app and its rows are excluded from cohort statistics by default (ADR-0031).",
     "adapterPath (LoRA) and checkpointDir+checkpointTag (merged) are alternatives and torch_hf only."
   ],
   "models": [

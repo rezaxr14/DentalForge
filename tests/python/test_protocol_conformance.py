@@ -1,4 +1,4 @@
-"""Protocol conformance: replay a recorded VLM-DENTAL trace through our loop (ADR-0025).
+"""Protocol conformance: replay a recorded VLM-DENTAL trace through our loop (ADR-0031).
 
 `examples/python-worker/backends/openai_compat.py` is a deliberate line-for-line copy of the message
 protocol in `dental_agent/agent/loop.py`, because SFT and GRPO were trained on those exact messages.

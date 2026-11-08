@@ -260,7 +260,7 @@ export async function imageUrl(req: Request, deps: WorkerDeps, imageId: string):
   try {
     const ttl = 300;
     const url = await deps.storage.presignDownload(image.storageKey, ttl);
-    // Live-run provenance (ADR-0025): a worker needs the dataset identity and the image's ground
+    // Live-run provenance (ADR-0031): a worker needs the dataset identity and the image's ground
     // truth to post a trace it just produced. The GT comes from an already-imported trace for this
     // image; `null` means "unknown", and the worker must skip ingestion rather than invent a
     // healthy scan.
@@ -288,7 +288,7 @@ export async function imageUrl(req: Request, deps: WorkerDeps, imageId: string):
 
 // ---- GET /images?datasetId=&split=&limit=&offset= --------------------------
 /**
- * One page of a dataset's images (ADR-0025 addendum §2). `eval.run` uses it to enumerate a split
+ * One page of a dataset's images (ADR-0031 addendum §2). `eval.run` uses it to enumerate a split
  * without a database. Ordered by `sourceImageId` so paging is stable; `total` is the unpaged count.
  */
 export async function listImages(req: Request, deps: WorkerDeps): Promise<Response> {
@@ -323,7 +323,7 @@ export async function listImages(req: Request, deps: WorkerDeps): Promise<Respon
 }
 
 // ---- GET /traces/:id -------------------------------------------------------
-/** The tool calls a re-execution needs (ADR-0025 addendum §2). No thoughts, no raw model output. */
+/** The tool calls a re-execution needs (ADR-0031 addendum §2). No thoughts, no raw model output. */
 export async function getWorkerTrace(req: Request, deps: WorkerDeps, traceId: string): Promise<Response> {
   const auth = await authenticateWorker(req, deps.store, "jobs:read");
   if (auth instanceof Response) return auth;

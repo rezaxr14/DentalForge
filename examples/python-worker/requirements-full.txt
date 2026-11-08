@@ -8,6 +8,6 @@
 #   pip install -r requirements-full.txt
 #
 # VLM-DENTAL's pins are intentionally not copied here: this repo must not drift
-# from upstream's chosen torch/CUDA stack (ADR-0024).
+# from upstream's chosen torch/CUDA stack (ADR-0030).
 httpx==0.27.2
 jsonschema==4.23.0

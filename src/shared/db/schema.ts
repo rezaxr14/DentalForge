@@ -461,10 +461,10 @@ export const traces = pgTable(
     verified: boolean("verified").notNull().default(false),
     sourceFile: text("source_file"),
     contentHash: text("content_hash").notNull(),
-    /** Which tolerant reader produced this row (ADR-0024); e.g. `trace.v1`. */
+    /** Which tolerant reader produced this row (ADR-0030); e.g. `trace.v1`. */
     adapterVersion: text("adapter_version"),
     /**
-     * Which backend produced a LIVE run (ADR-0025): `torch_hf` or `openai_compat`. NULL for
+     * Which backend produced a LIVE run (ADR-0031): `torch_hf` or `openai_compat`. NULL for
      * imported traces (they came from a file, not a worker backend).
      */
     backend: text("backend"),
@@ -587,11 +587,11 @@ export const evalRuns = pgTable(
     sourceFile: text("source_file"),
     /** Worker-chosen identity of an API-ingested run (NULL for file imports); lets chunked uploads retry (ADR-0013). */
     runKey: text("run_key"),
-    /** Which tolerant reader produced this run (ADR-0024); e.g. `eval.v1`. NULL for API-ingested runs. */
+    /** Which tolerant reader produced this run (ADR-0030); e.g. `eval.v1`. NULL for API-ingested runs. */
     adapterVersion: text("adapter_version"),
-    /** Backend that produced an API-ingested run (ADR-0025); NULL for file imports. */
+    /** Backend that produced an API-ingested run (ADR-0031); NULL for file imports. */
     backend: text("backend"),
-    /** Model stage of an API-ingested run (ADR-0025); NULL for file imports. `test` is excluded from benchmarks. */
+    /** Model stage of an API-ingested run (ADR-0031); NULL for file imports. `test` is excluded from benchmarks. */
     stage: text("stage"),
     summary: jsonb("summary").$type<Record<string, number>>().notNull().default({}),
     createdAt: createdAt(),

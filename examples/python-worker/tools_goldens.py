@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Golden generator/checker for the eight VLM-DENTAL tools (ADR-0024).
+"""Golden generator/checker for the eight VLM-DENTAL tools (ADR-0030).
 
 The compatibility contract (`tests/python/test_compat_contract.py`) runs every tool on the three
 tracked sample images and compares the results with `fixtures/goldens/vlm_tools.json`. A mismatch is

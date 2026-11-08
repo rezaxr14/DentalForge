@@ -173,7 +173,7 @@ describe.each(backends)("worker API contract — $name", ({ skip, make }) => {
       expect(bad.status).toBe(422);
     });
 
-    it("register stores the ADR-0024 upstream drift report in software", async () => {
+    it("register stores the ADR-0030 upstream drift report in software", async () => {
       const software = {
         python: "3.12.3",
         torch: "2.5.1+cu121",

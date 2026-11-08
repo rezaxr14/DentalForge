@@ -40,12 +40,12 @@ python worker.py                             # the startup log lists what is adv
 - `trace.render_artifacts`: re-runs the tool calls of a stored trace and uploads the images
   (`render_artifacts.py`). Same prerequisites as `tool.execute`; dedupes identical PNGs by sha256.
 - `yolo.prelabel`, `al.score`: advertised only when `ultralytics` and the grounding weights are loaded.
-  `al.score`'s entropy is the normalized Shannon entropy over retained box confidences (ADR-0025).
+  `al.score`'s entropy is the normalized Shannon entropy over retained box confidences (ADR-0031).
 - `agent.run` (`agent_run.py`): advertised once a model is registered from `WORKER_MODELS_FILE`.
 - `eval.run` (`eval_run.py`): same per-image path as `agent.run`; per-case metrics come from
   VLM-DENTAL's `match_multi_findings`, never from a second implementation. Chunks cases at 100 and
   posts them to `/ingest/eval-run`, which upserts on `(run, image_id)`.
-- `parity.golden` is **not** a job type: it ships as the dev CLI `tools_goldens.py` (ADR-0025 §5).
+- `parity.golden` is **not** a job type: it ships as the dev CLI `tools_goldens.py` (ADR-0031 §5).
 
 Tests: `pytest test_dental_handlers.py` (fakes; runs anywhere, in CI) and
 `PYTHONPATH=/path/to/VLM-DENTAL pytest test_real_dental_agent.py` (real tools; not in CI).

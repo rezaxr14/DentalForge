@@ -1,4 +1,4 @@
-"""`al.score` arithmetic and handler behaviour (WP3, ADR-0025 addendum §1). Torch-free."""
+"""`al.score` arithmetic and handler behaviour (WP3, ADR-0031 addendum §1). Torch-free."""
 from __future__ import annotations
 
 import math

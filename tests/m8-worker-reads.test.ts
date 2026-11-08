@@ -1,5 +1,5 @@
 /**
- * WP3 worker read endpoints (ADR-0025 addendum §2): `GET /images` and `GET /traces/{id}`.
+ * WP3 worker read endpoints (ADR-0031 addendum §2): `GET /images` and `GET /traces/{id}`.
  *
  * Both exist only so a worker can do its job — `eval.run` enumerates a split, `trace.render_artifacts`
  * re-executes a stored trace — so the tests pin the two things that matter: the page is stable and
