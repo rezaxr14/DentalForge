@@ -2,6 +2,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { getEnv } from "@/shared/config/env";
 import * as schema from "./schema";
+import { resolveDbTransport } from "./ssl";
 
 /**
  * Postgres client (plan §9.4: DB is one of the two boot-critical services).
@@ -14,30 +15,10 @@ export function getPool(): pg.Pool {
   if (!g.__tfPool) {
     const env = getEnv();
     const isProd = env.NODE_ENV === "production";
-    const isCI = process.env.CI === "true";
-    const connectionString = env.DATABASE_URL;
-    
-    // Parse SSL mode from connection string if present
-    const sslModeMatch = connectionString.match(/sslmode=([^&]+)/);
-    const urlSslMode = sslModeMatch ? sslModeMatch[1] : undefined;
-    
-    // In CI, disable SSL entirely since CI Postgres doesn't support SSL
-    // In production with explicit sslmode, respect the URL setting
-    // Otherwise in production, require valid certificates
-    let ssl: pg.PoolConfig["ssl"] = false;
-    if (isCI) {
-      ssl = false;
-    } else if (isProd) {
-      if (urlSslMode === "require" || urlSslMode === "verify-ca" || urlSslMode === "verify-full") {
-        ssl = { rejectUnauthorized: true };
-      } else if (urlSslMode === "prefer" || urlSslMode === "allow") {
-        ssl = { rejectUnauthorized: false };
-      } else {
-        // Default production behavior: require valid certificates
-        ssl = { rejectUnauthorized: true };
-      }
-    }
-    
+    // Transport security comes from the URL (see ssl.ts), never from a CI flag.
+    const { connectionString, ssl, warning } = resolveDbTransport(env.DATABASE_URL, { production: isProd });
+    if (warning) console.warn(`[db] ${warning}`);
+
     g.__tfPool = new pg.Pool({
       connectionString,
       // Lower pool for serverless (prevents connection exhaustion under load).
