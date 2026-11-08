@@ -22,6 +22,7 @@ Robustness rules baked in (Colab sessions die; networks flap):
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import signal
 import socket
@@ -36,6 +37,7 @@ import httpx
 from worker_errors import ContractError, NonRetryable
 
 CONTRACT_VERSION = "1"
+COMPAT_REPROBE_S = int(os.environ.get("COMPAT_REPROBE_S", "300"))
 
 
 @dataclass
@@ -99,10 +101,10 @@ class Client:
         raise ContractError(r.status_code, code, f"GET {path} -> {r.status_code} {code}: {detail}",
                             float(ra) if ra and ra.replace(".", "", 1).isdigit() else None)
 
-    def register(self, name: str, runtime: str, jobs: list[str]) -> dict[str, Any]:
+    def register(self, name: str, runtime: str, jobs: list[str], software: dict[str, Any] | None = None) -> dict[str, Any]:
         r = self.post("/register", {
             "name": name, "runtime": runtime,
-            "software": {"python": sys.version.split()[0]},
+            "software": software if software is not None else {"python": sys.version.split()[0]},
             "capabilities": [{"job": j, "versions": [1]} for j in jobs],
         })
         self.worker_id = r["workerId"]
@@ -128,30 +130,8 @@ def system_ping(ctx: JobContext) -> dict[str, Any]:
     return {"echo": p.get("message", "ping"), "workerName": WORKER_NAME, "steps": steps}
 
 
-def agent_run(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Run the agent loop, streaming one `turn` event per turn.
-
-    VLM-DENTAL: `dental_agent/agent/langgraph_loop.py`. Emit each turn record
-    (turn, raw_output, parsed, status, tool_calls_this_turn) via ctx.emit("turn", ...), upload tool
-    images as artifacts, and return {finalAnswer, nTurns, nToolCalls, formatOk, rewardComponents?}.
-    """
-    raise NotImplementedError("wire the LangGraph agent loop here")
-
-
-def eval_run(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Evaluate a model; stream case rows as `partial` events.
-
-    VLM-DENTAL: `scripts/run_zero_shot.py` / `dental_agent/evaluation/`. Return {runId (uuid), n, summary:{...}}.
-    """
-    raise NotImplementedError("wire the evaluation harness here")
-
-
-def al_score(ctx: JobContext) -> dict[str, Any]:  # pragma: no cover - stub
-    """STUB. Uncertainty scores for the active-learning queue ({scores:[{imageId, meanConf, minConf, entropy, nBoxes}]})."""
-    raise NotImplementedError("score images with the YOLO model here")
-
-
-# Only IMPLEMENTED handlers are advertised. Move a stub in here once it works.
+# Only IMPLEMENTED handlers are advertised. `eval.run`, `al.score` and `trace.render_artifacts` are
+# wired by `_enable_dental_handlers()` / `enable_agent_run()` when their prerequisites hold (WP3).
 HANDLERS: dict[str, Callable[[JobContext], dict[str, Any]]] = {
     "system.ping": system_ping,
 }
@@ -166,8 +146,143 @@ def _enable_dental_handlers() -> None:
         return
     HANDLERS.update(dental_handlers.discover())
 
+
+def load_agent_models() -> list[Any]:
+    """The owner's `WORKER_MODELS_FILE`. A malformed file stops the worker instead of serving nothing."""
+    try:
+        from backends.base import load_models_file
+    except ImportError as e:  # pragma: no cover - backends is part of this directory
+        print(f"[worker] model backends unavailable: {e}", flush=True)
+        return []
+    return load_models_file(os.environ.get("WORKER_MODELS_FILE"))
+
+
+def register_models(client: "Client", specs: list[Any]) -> dict[str, Any]:
+    """Register each local model with the app; return {app modelId: spec} for `agent.run`."""
+    models: dict[str, Any] = {}
+    for spec in specs:
+        try:
+            r = client.post("/models/register", spec.registry_body())
+        except ContractError as e:
+            # 422 = this app does not accept the entry (e.g. an older server without stage `test`).
+            # Never advertise agent.run for a model the app cannot address.
+            print(f"[worker] could not register model {spec.model_id!r}: {e}", flush=True)
+            continue
+        models[r["modelId"]] = spec
+        print(f"[worker] model {spec.model_id!r} -> {r['modelId']} ({spec.backend}, stage {spec.app_stage})", flush=True)
+    return models
+
+
+def enable_agent_run(models: dict[str, Any]) -> None:
+    """Wire `agent.run` once at least one model is registered (WP2)."""
+    if not models:
+        print("[worker] not advertising agent.run: no model registered", flush=True)
+        return
+    try:
+        import agent_run as agent_run_module
+        from backends.openai_compat import OpenAICompatBackend, run_loop
+        from backends.torch_hf import TorchHFBackend
+        from dental_handlers import ImageSource
+    except ImportError as e:
+        print(f"[worker] not advertising agent.run: {e}", flush=True)
+        return
+
+    needs_torch = any(spec.backend == "torch_hf" for spec in models.values())
+    torch_backend = TorchHFBackend() if needs_torch else None
+    openai_backend = OpenAICompatBackend() if any(spec.backend == "openai_compat" for spec in models.values()) else None
+
+    def registry_factory() -> Any:
+        from dental_agent.tools.registry import ToolRegistry
+
+        return ToolRegistry.create_default()
+
+    HANDLERS["agent.run"] = agent_run_module.make_agent_run(
+        models=models,
+        torch_backend=torch_backend,
+        openai_backend=openai_backend,
+        load_image=ImageSource(),
+        registry_factory=registry_factory,
+        run_loop=run_loop,
+    )
+
+    # `eval.run` reuses the exact per-image path (WP3): same backend, same cohort switch, same budgets.
+    try:
+        import eval_run as eval_run_module
+    except ImportError as e:
+        print(f"[worker] not advertising eval.run: {e}", flush=True)
+        return
+    HANDLERS["eval.run"] = eval_run_module.make_eval_run(
+        models=models,
+        run_one=agent_run_module.make_run_one(
+            torch_backend=torch_backend,
+            openai_backend=openai_backend,
+            registry_factory=registry_factory,
+            run_loop=run_loop,
+        ),
+        load_image=ImageSource(),
+    )
+
 WORKER_NAME = os.environ.get("WORKER_NAME", f"py-{socket.gethostname()}"[:60])
 RUNTIME = os.environ.get("WORKER_RUNTIME", "local-gpu")  # local-gpu | colab | kaggle | cloud
+
+
+def compat_software() -> dict[str, Any]:
+    """The `software` block sent at registration: provenance + the drift report (ADR-0030).
+
+    Never raises and never gates: a missing or broken checkout just produces a smaller report, so a
+    worker with no VLM-DENTAL still registers (and serves system.ping). `None`/empty values are
+    omitted because the contract types are optional strings/arrays.
+    """
+    software: dict[str, Any] = {"python": sys.version.split()[0]}
+    try:
+        import vlm_compat
+
+        # A broken native dependency upstream can abort the importing process; a child process turns
+        # that into a report instead of killing the worker (ADR-0030).
+        probe = getattr(vlm_compat, "probe_isolated", None) or vlm_compat.probe
+        report = probe()
+    except Exception as e:  # noqa: BLE001 - registration must survive a broken probe
+        software["compatError"] = f"{type(e).__name__}: {e}"
+        return software
+
+    prov = report.get("provenance") or {}
+    packages = report.get("packages") or {}
+    jobs = report.get("jobs") or {}
+
+    def put(key: str, value: Any) -> None:
+        if value not in (None, "", [], {}):
+            software[key] = value
+
+    put("torch", packages.get("torch"))
+    put("vlmDentalCommit", prov.get("commit"))
+    put("vlmDentalBranch", prov.get("branch"))
+    put("vlmDentalDirty", prov.get("dirty"))
+    put("vlmDentalPath", report.get("path"))
+    put("groundingWeights", report.get("groundingWeights"))
+    # Reported even when empty: "probed and found none" is different from "never probed".
+    software["cuda"] = "available" if report.get("cuda") else "unavailable"
+    software["packages"] = packages
+    software["packageErrors"] = report.get("packageErrors") or {}
+    software["jobs"] = {
+        job: {
+            "available": row.get("available", False),
+            "reason": row.get("reason"),
+            "warnings": row.get("warnings") or [],
+        }
+        for job, row in jobs.items()
+    }
+    software["tools"] = report.get("tools") or []
+    software["unknownToApp"] = report.get("unknownToApp") or []
+    software["missingUpstream"] = report.get("missingUpstream") or []
+    software["advertisedJobs"] = report.get("advertisedJobs") or []
+    return software
+
+
+def software_and_signature() -> tuple[dict[str, Any], str]:
+    """Report plus a stable hash, so a changed upstream checkout triggers exactly one re-register."""
+    software = compat_software()
+    digest = hashlib.sha256(json.dumps(software, sort_keys=True, default=str).encode()).hexdigest()
+    return software, digest
 
 
 # --------------------------------------------------------------------------- main loop
@@ -193,11 +308,16 @@ def run_job(client: Client, job: dict[str, Any], cancelled: set[str]) -> None:
             return
         raise
     except Exception as e:  # noqa: BLE001 - every handler failure is reported to the server
-        retryable = not isinstance(e, (NonRetryable, NotImplementedError))
+        # A backend error carries its own retryability (`ModelUnavailable` is worth retrying; a bad
+        # payload is not). Everything else keeps the old rule.
+        retryable = getattr(e, "retryable", None)
+        if retryable is None:
+            retryable = not isinstance(e, (NonRetryable, NotImplementedError))
+        code = getattr(e, "code", "handler_error")
         print(f"[worker] job {short} failed: {e}", flush=True)
         try:
             client.post(f"/jobs/{job['id']}/fail",
-                        {"error": {"code": "handler_error", "message": str(e)[:500], "retryable": retryable}})
+                        {"error": {"code": code, "message": str(e)[:500], "retryable": retryable}})
         except ContractError as fe:
             print(f"[worker] fail() also failed: {fe}", flush=True)
 
@@ -210,16 +330,29 @@ def main() -> int:
         return 2
     max_jobs = int(os.environ["MAX_JOBS"]) if os.environ.get("MAX_JOBS") else None
     _enable_dental_handlers()
+    try:
+        specs = load_agent_models()
+    except (OSError, ValueError) as e:
+        print(f"[worker] fatal: WORKER_MODELS_FILE: {e}", file=sys.stderr)
+        return 2
+    if specs:
+        print(f"[worker] {len(specs)} model(s) configured in {os.environ.get('WORKER_MODELS_FILE')}", flush=True)
 
     client = Client(base, token)
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
 
+    software, software_sig = software_and_signature()
+
     # Register with backoff: the app may still be cold-starting or its DB briefly down.
     for attempt in range(20):
         try:
-            reg = client.register(WORKER_NAME, RUNTIME, list(HANDLERS))
+            if specs and "agent.run" not in HANDLERS:
+                # The app assigns a modelId per entry; `agent.run` is advertised only once at least
+                # one model is addressable, so the app never routes a run this worker cannot serve.
+                enable_agent_run(register_models(client, specs))
+            reg = client.register(WORKER_NAME, RUNTIME, list(HANDLERS), software=software)
             break
         except ContractError as e:
             if e.status in (401, 426):
@@ -252,7 +385,21 @@ def main() -> int:
     threading.Thread(target=heartbeat_loop, daemon=True).start()
 
     processed = 0
+    next_probe = time.monotonic() + COMPAT_REPROBE_S if COMPAT_REPROBE_S > 0 else None
     while not stop.is_set() and (max_jobs is None or processed < max_jobs):
+        if next_probe is not None and time.monotonic() >= next_probe:
+            # ADR-0030: re-probe so a `git pull` in VLM-DENTAL shows up without restarting the
+            # worker. Handlers are fixed at start-up (they are wired imports), so a newly available
+            # job needs a restart; the report is what the app displays meanwhile.
+            next_probe = time.monotonic() + COMPAT_REPROBE_S
+            try:
+                fresh, fresh_sig = software_and_signature()
+                if fresh_sig != software_sig:
+                    client.register(WORKER_NAME, RUNTIME, list(HANDLERS), software=fresh)
+                    software_sig = fresh_sig
+                    print("[worker] upstream report changed; re-registered with fresh provenance", flush=True)
+            except (ContractError, httpx.HTTPError) as e:
+                print(f"[worker] re-probe registration failed: {e}", flush=True)
         try:
             jobs = client.post("/jobs/claim", {"workerId": client.worker_id, "accepts": list(HANDLERS), "max": 1, "waitMs": 10000})["jobs"]
         except ContractError as e:

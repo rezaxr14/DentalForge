@@ -9,7 +9,7 @@
  *   - tests/m6-repos.test.ts         (drizzle, requires Docker Postgres)
  */
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "./pg";
 import {
   annotationSets,
@@ -168,6 +168,36 @@ class ScopedPg implements ScopedRepos {
       .orderBy(asc(images.createdAt));
   }
 
+  async listImagesPage(filter: {
+    datasetId: string;
+    split?: string | null;
+    limit: number;
+    offset: number;
+  }): Promise<{ images: ImageRecord[]; total: number }> {
+    if (!(await this.datasetInOrg(filter.datasetId)).length) return { images: [], total: 0 };
+    const where = [
+      eq(images.datasetId, filter.datasetId),
+      eq(images.orgId, this.orgId),
+      // `split: ""` selects rows with no split; `null`/undefined means "do not filter".
+      filter.split === null || filter.split === undefined
+        ? undefined
+        : filter.split === ""
+          ? isNull(images.split)
+          : eq(images.split, filter.split),
+    ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+    const [rows, counted] = await Promise.all([
+      this.db
+        .select()
+        .from(images)
+        .where(and(...where))
+        .orderBy(asc(images.sourceImageId), asc(images.id))
+        .limit(filter.limit)
+        .offset(filter.offset),
+      this.db.select({ n: count() }).from(images).where(and(...where)),
+    ]);
+    return { images: rows, total: Number(counted[0]?.n ?? 0) };
+  }
+
   async createImage(input: Omit<ImageRecord, "id" | "orgId">): Promise<ImageRecord> {
     if (!(await this.datasetInOrg(input.datasetId)).length) {
       throw new Error("dataset not found in org");
@@ -182,10 +212,15 @@ class ScopedPg implements ScopedRepos {
   async listTraces(filter?: {
     datasetId?: string;
     mode?: TraceRecord["mode"];
+    imageId?: string;
+    researchOnly?: boolean;
   }): Promise<TraceRecord[]> {
     const conds = [eq(traces.orgId, this.orgId)];
     if (filter?.datasetId !== undefined) conds.push(eq(traces.datasetId, filter.datasetId));
     if (filter?.mode !== undefined) conds.push(eq(traces.mode, filter.mode));
+    if (filter?.imageId !== undefined) conds.push(eq(traces.imageId, filter.imageId));
+    // `is distinct from` keeps imported rows (stage NULL) and never drops them on NULL semantics.
+    if (filter?.researchOnly) conds.push(sql`${traces.stage} is distinct from 'test'`);
     return this.db
       .select()
       .from(traces)
@@ -1181,6 +1216,8 @@ class ScopedPg implements ScopedRepos {
           nToolCalls: input.nToolCalls,
           formatOk: input.formatOk,
           verifierReason: input.verifierReason,
+          backend: input.backend ?? null,
+          stage: input.stage ?? null,
           groundTruth: input.groundTruth,
           finalAnswer: input.finalAnswer,
         })
@@ -1234,6 +1271,7 @@ class ScopedPg implements ScopedRepos {
             error: c.error,
             trueBbox: c.trueBbox,
             perturbTier: c.perturbTier,
+            artifactId: c.artifactId ?? null,
           })),
         );
         for (const part of chunks(calls, 500)) {
@@ -1242,6 +1280,15 @@ class ScopedPg implements ScopedRepos {
       }
       return { outcome: "inserted", trace, sameContent: true } as const;
     });
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(traces)
+      .where(and(eq(traces.id, traceId), eq(traces.orgId, this.orgId)))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async listTraceTurns(traceId: string): Promise<TraceTurnRecord[]> {
@@ -1281,6 +1328,7 @@ class ScopedPg implements ScopedRepos {
           error: c.error,
           trueBbox: c.trueBbox,
           perturbTier: c.perturbTier,
+          artifactId: c.artifactId,
         })),
     }));
   }
@@ -1299,6 +1347,8 @@ class ScopedPg implements ScopedRepos {
           provider: input.run.provider,
           model: input.run.model,
           canonicalResize: input.run.canonicalResize,
+          backend: input.run.backend ?? null,
+          stage: input.run.stage ?? null,
           n: 0,
           sourceFile: `api:${input.runKey}`,
           summary: {},

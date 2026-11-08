@@ -6,7 +6,8 @@
  * Header: `X-Contract-Version: 1` required; errors follow RFC 9457 Problem Details.
  */
 import { z } from "zod";
-import { Bbox, Finding } from "./traces";
+import { RUN_KEY_PATTERN } from "./ingest";
+import { Bbox, Finding, PredictedFinding } from "./traces";
 
 export const CONTRACT_VERSION = 1;
 export const CONTRACT_HEADER = "x-contract-version";
@@ -40,6 +41,28 @@ export const RegisterWorkerRequest = z.object({
       torch: z.string().optional(),
       cuda: z.string().optional(),
       vlmDentalCommit: z.string().optional(),
+      // ADR-0030: upstream drift report. Provenance is recorded, never used to gate behaviour; the
+      // job availability rows are what the probe measured on the worker's machine at registration.
+      vlmDentalBranch: z.string().optional(),
+      vlmDentalDirty: z.boolean().optional(),
+      vlmDentalPath: z.string().optional(),
+      packages: z.record(z.string(), z.string().nullable()).optional(),
+      packageErrors: z.record(z.string(), z.string()).optional(),
+      jobs: z
+        .record(
+          z.string(),
+          z.object({
+            available: z.boolean(),
+            reason: z.string().nullable().optional(),
+            warnings: z.array(z.string()).optional(),
+          }),
+        )
+        .optional(),
+      tools: z.array(z.string()).optional(),
+      unknownToApp: z.array(z.string()).optional(),
+      missingUpstream: z.array(z.string()).optional(),
+      groundingWeights: z.string().nullable().optional(),
+      advertisedJobs: z.array(z.string()).optional(),
     })
     .default({}),
   capabilities: z.array(WorkerCapability).default([]),
@@ -213,6 +236,8 @@ export const AgentRunPayload = z.object({
   maxToolCalls: z.number().int().default(50),
   canonicalResize: z.boolean().default(false),
   seed: z.number().int().optional(),
+  /** Sampling temperature per turn. 0 (greedy) is the evaluation default and matches the SFT/GRPO loop. */
+  temperature: z.number().min(0).max(2).default(0),
 });
 
 // 4. eval.run
@@ -221,7 +246,26 @@ export const EvalRunPayload = z.object({
   dataset: z.string(),
   split: z.string().default("test"),
   canonicalResize: z.boolean().default(false),
-  imageIds: z.array(z.number().int()).optional(),
+  /**
+   * App image ids (UUIDs) to evaluate. Integers are the research-repo's own vocabulary and stay
+   * accepted by the schema, but a worker cannot resolve them to pixels: it refuses them with a reason
+   * (ADR-0031 addendum §2). Omitted = evaluate the split via `GET /images`.
+   */
+  imageIds: z.array(z.union([z.string().uuid(), z.number().int()])).max(500).optional(),
+  /** Dataset row whose images make up the run when `imageIds` is omitted. */
+  datasetId: z.string().uuid().optional(),
+  /** Cap when `imageIds` is omitted. The plan's >10-image gate applies: ask the owner first. */
+  limit: z.number().int().min(1).max(500).optional(),
+  /** Cohort the run used; the model that produced the numbers, not a paper arm. */
+  mode: z.enum(["with_tools", "no_tools"]).default("with_tools"),
+  maxTurns: z.number().int().default(30),
+  maxToolCalls: z.number().int().default(50),
+  seed: z.number().int().optional(),
+  temperature: z.number().min(0).max(2).default(0),
+  /** Recorded as `EvalCase.provider`; `local` for a backend this worker runs itself. */
+  provider: z.string().trim().min(1).max(80).default("local"),
+  /** Worker-chosen run identity; `POST /ingest/eval-run` upserts cases under it. Derived when absent. */
+  runKey: z.string().regex(RUN_KEY_PATTERN).optional(),
 });
 export const EvalRunResult = z.object({
   runId: z.string().uuid(),
@@ -262,10 +306,13 @@ export const AlScoreResult = z.object({
 
 // 3b. agent.run result (streams one `turn` event per turn; event data = Turn, see traces.ts)
 export const AgentRunResult = z.object({
-  finalAnswer: z.array(Finding),
+  /** Tolerant class (ADR-0014): a model may put a full FDI code in `tooth_position`; that is kept, not rejected. */
+  finalAnswer: z.array(PredictedFinding),
   nTurns: z.number().int().min(0),
   nToolCalls: z.number().int().min(0),
   formatOk: z.boolean(),
+  /** The trace this run was stored as, when the worker could ingest one (ADR-0031). */
+  traceId: z.string().uuid().optional(),
   rewardComponents: z
     .object({
       accuracy: z.number(),
@@ -275,6 +322,73 @@ export const AgentRunResult = z.object({
     })
     .optional(),
 });
+
+/**
+ * `GET /images/{id}` response (ADR-0031). The download URL and size were always here; a live run
+ * also needs the image's identity and ground truth to post a trace. `groundTruth: null` means the
+ * app does not know it, and the worker must skip ingestion rather than invent a healthy scan.
+ */
+export const ImageMetadataResponse = z.object({
+  url: z.string(),
+  expiresInSeconds: z.number().int().positive(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  imageId: z.string().uuid(),
+  sourceImageId: z.number().int(),
+  datasetId: z.string().uuid(),
+  /** Dataset source (`dentex` | `tufts` | `upload`), the key `/ingest/traces` resolves. */
+  dataset: z.enum(["dentex", "tufts", "upload"]).nullable(),
+  datasetName: z.string().nullable(),
+  split: z.string().nullable(),
+  /** Strict ground truth (`Finding[]`); `[]` is a healthy scan, `null` is unknown. */
+  groundTruth: z.array(Finding).nullable(),
+});
+
+/**
+ * `GET /images` (ADR-0031 addendum §2). Lets `eval.run` enumerate a split without a database.
+ * Ordered by `sourceImageId`; `total` is the unpaged count for the same filter.
+ */
+export const ImageListResponse = z.object({
+  images: z.array(
+    z.object({
+      id: z.string().uuid(),
+      sourceImageId: z.number().int(),
+      split: z.string().nullable(),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    }),
+  ),
+  total: z.number().int().min(0),
+});
+export type ImageListResponseT = z.infer<typeof ImageListResponse>;
+
+/**
+ * `GET /traces/{id}` (ADR-0031 addendum §2): only what re-executing the tool calls needs. Thoughts and
+ * raw model output are deliberately absent — a worker has no use for them and they are the largest part
+ * of a trace.
+ */
+export const WorkerTraceResponse = z.object({
+  traceId: z.string().uuid(),
+  imageId: z.string().uuid(),
+  mode: z.enum(["with_tools", "no_tools"]),
+  turns: z.array(
+    z.object({
+      idx: z.number().int().min(0),
+      toolCalls: z.array(
+        z.object({
+          idx: z.number().int().min(0),
+          toolName: z.string(),
+          args: z.record(z.string(), z.unknown()),
+          ok: z.boolean(),
+          error: z.string().nullable(),
+          /** The artifact this call already produced, when it produced one. */
+          artifactId: z.string().uuid().nullable(),
+        }),
+      ),
+    }),
+  ),
+});
+export type WorkerTraceResponseT = z.infer<typeof WorkerTraceResponse>;
 
 // 7. system.ping — contract-level diagnostic (not in plan §10.2). Lets an operator
 // verify the whole pipe (enqueue → claim → events → complete → SSE) with no GPU.

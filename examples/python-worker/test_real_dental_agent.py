@@ -89,6 +89,25 @@ def test_bad_arguments_fail_the_job_non_retryably(handler):
         run(handler, "zoom_crop", {})  # bbox is required
 
 
-def test_locate_tooth_without_grounding_weights_fails_instead_of_inventing_a_box(handler):
-    with pytest.raises(NonRetryable, match="needs the YOLO grounding weights"):
-        run(handler, "locate_tooth", {"tooth": 38})
+def test_locate_tooth_follows_the_grounding_weights_this_machine_actually_has(handler):
+    """`discover()` must wire the REAL weight state into the guard, not hard-code either answer.
+
+    The refusal itself is unit-tested deterministically in `test_dental_handlers.py`; this test asks
+    the integration question instead: on a machine WITHOUT the weights the tool refuses (never
+    invents a box), and on a machine WITH them it actually runs. Assuming "no weights here" made this
+    test fail on a GPU box, which is the one place the integration matters.
+    """
+    if "yolo.prelabel" not in dh.discover({}):
+        with pytest.raises(NonRetryable, match="needs the YOLO grounding weights"):
+            run(handler, "locate_tooth", {"tooth": 38})
+        return
+
+    try:
+        out, _ = run(handler, "locate_tooth", {"tooth": 38})
+    except NonRetryable as e:
+        # The tool ran and failed on this synthetic panorama: that is the tool error path, NOT the
+        # "weights missing" guard. A real box was never invented either way.
+        assert "needs the YOLO grounding weights" not in str(e)
+        return
+    assert out["kind"] == "data"
+    assert "bbox" in out["data"] or "error" in out["data"]

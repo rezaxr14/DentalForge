@@ -16,6 +16,8 @@
     "db:push": "drizzle-kit push",
     "demo:build": "python scripts/demo_build.py",
     "demo:seed": "tsx scripts/demo-seed.ts",
+    "compat": "tsx scripts/compat.ts",
+
     "ci": "pnpm typecheck && pnpm lint && pnpm test",
     "contract:docs": "tsx scripts/generate-worker-contract.ts",
     "worker:token": "tsx scripts/create-worker-token.ts",
