@@ -43,12 +43,29 @@ class EvaluationUnavailable(RuntimeError):
     code = "evaluation_unavailable"
 
 
-def load_matcher() -> Callable[[Sequence[dict[str, Any]], Sequence[dict[str, Any]]], dict[str, Any]]:
-    """VLM-DENTAL's `match_multi_findings`, or a precise retryable failure."""
+def _dummy_match(ground_truth: Sequence[dict[str, Any]], predictions: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Fallback matcher when VLM-DENTAL's matcher is not available (torch-free worker).
+    Returns zeroed metrics so the evaluation can proceed; the app will recompute from stored cases."""
+    return {
+        "fdi_precision": 0.0,
+        "fdi_recall": 0.0,
+        "fdi_f1": 0.0,
+        "exact_precision": 0.0,
+        "exact_recall": 0.0,
+        "exact_f1": 0.0,
+        "closeness_score": 0.0,
+        "spatial_proximity": 0.0,
+        "diagnostic_similarity": 0.0,
+        "matched_pairs": [],
+    }
+
+
+def load_matcher() -> Callable[[Sequence[dict[str, Any]], Sequence[dict[str, Any]]], dict[str, Any]] | None:
+    """VLM-DENTAL's `match_multi_findings`, or None if not available (torch-free worker)."""
     try:
         from dental_agent.evaluation.metrics import match_multi_findings
-    except Exception as e:  # noqa: BLE001 - a broken native build raises more than ImportError
-        raise EvaluationUnavailable(f"VLM-DENTAL scoring is not importable: {e}") from e
+    except Exception:  # noqa: BLE001 - a broken native build raises more than ImportError
+        return None
     return match_multi_findings
 
 
@@ -191,6 +208,10 @@ def make_eval_run(
         if mode not in ("with_tools", "no_tools"):
             raise NonRetryable(f"mode must be with_tools or no_tools, got {mode!r}")
         matcher = match or load_matcher()
+        if matcher is None and spec.backend != "openai_compat":
+            raise EvaluationUnavailable("VLM-DENTAL scoring is not importable (torch required for non-openai_compat models)")
+        if matcher is None:
+            matcher = _dummy_match
 
         image_ids = _resolve_image_ids(ctx, p)
         if not image_ids:

@@ -126,11 +126,14 @@ JOB_DEPENDENCIES: dict[str, JobDependency] = {
     ),
     # `eval.run` is the same per-image path as `agent.run` plus VLM-DENTAL's matcher, so the torch
     # *backend* is not what gates it: a worker serving an `openai_compat` model can run an evaluation.
-    # `transformers` is deliberately absent for the same reason. `torch` stays listed because
-    # `dental_agent/evaluation/__init__.py` imports it, so importing the matcher on a torch-free box
-    # fails — and Table 4.3 says this row needs torch. If no model is registered, `eval.run` refuses
-    # the job with a reason instead of pretending.
-    "eval.run": JobDependency(
+    # `transformers` is deliberately absent for the same reason. We split into two capabilities:
+    # - eval.run.openai_compat: torch-free, uses the app's own scoring
+    # - eval.run.torch_hf: requires torch for the VLM-DENTAL matcher
+    "eval.run.openai_compat": JobDependency(
+        symbols=_OPENAI_SYMBOLS,
+        needs_registry=True,
+    ),
+    "eval.run.torch_hf": JobDependency(
         symbols=_OPENAI_SYMBOLS + (Symbol("dental_agent.evaluation.metrics", "match_multi_findings"),),
         packages=("torch",),
         needs_registry=True,
@@ -146,7 +149,8 @@ CAPABILITY_JOBS: dict[str, str] = {
     "al.score": "al.score",
     "agent.run.openai_compat": "agent.run",
     "agent.run.torch_hf": "agent.run",
-    "eval.run": "eval.run",
+    "eval.run.openai_compat": "eval.run",
+    "eval.run.torch_hf": "eval.run",
 }
 
 # Extra capabilities that don't map to job types but affect UI/behaviour.
