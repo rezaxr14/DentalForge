@@ -211,7 +211,7 @@ export function AgentClient({ replay }: { replay: ReplayData }) {
           </div>
           <Link
             href={`/traces/${replay.id}`}
-            className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
+            className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-400"
           >
             Full trace →
           </Link>
@@ -343,7 +343,13 @@ export function AgentClient({ replay }: { replay: ReplayData }) {
             {revealed.length} of {total} revealed
           </span>
         </div>
-        <ol className="mt-3 max-h-[34rem] space-y-2 overflow-auto pe-1">
+        <div
+          className="mt-3 max-h-[34rem] overflow-auto rounded pe-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          tabIndex={0}
+          role="region"
+          aria-label="Replay turns"
+        >
+        <ol className="space-y-2">
           {revealed.map((turn, i) => {
             const isCurrent = i === step;
             return (
@@ -432,6 +438,7 @@ export function AgentClient({ replay }: { replay: ReplayData }) {
             );
           })}
         </ol>
+        </div>
         {step < total - 1 && (
           <p className="mt-2 text-[11px] text-zinc-500">
             {total - 1 - step} later turn{total - 1 - step === 1 ? "" : "s"} hidden. Press Play or Next
@@ -720,7 +727,7 @@ export function LiveRunPanel({
           .
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400">{error}</p>}
 
       {worker.workers.length > 0 && (
         <ul className="mt-3 space-y-1.5 text-[11px]">
@@ -824,12 +831,12 @@ export function LiveRunPanel({
             </details>
           )}
           {stream.job?.status === "failed" && (
-            <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-400">
+            <p className="mt-2 text-[11px] text-rose-700 dark:text-rose-400">
               Failed: {JSON.stringify(stream.job.error)}
             </p>
           )}
           {stream.error && !terminal && (
-            <p className="mt-2 text-[10px] text-amber-600 dark:text-amber-400">stream: {stream.error}</p>
+            <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-400">stream: {stream.error}</p>
           )}
           {!terminal && turns.length === 0 && logs.length === 0 && (
             <p className="mt-2 text-[11px] text-zinc-500">

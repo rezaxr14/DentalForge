@@ -339,14 +339,14 @@ def test_discover_advertises_nothing_when_the_research_package_is_absent(monkeyp
 def test_discover_advertises_both_when_weights_are_loaded(monkeypatch: pytest.MonkeyPatch, capsys):
     _fake_dental_agent(monkeypatch, model=object())
     handlers = dh.discover({"YOLO_MODEL_ID": "yolo-a"})
-    assert set(handlers) == {"tool.execute", "yolo.prelabel"}
+    assert set(handlers) == {"tool.execute", "trace.render_artifacts", "yolo.prelabel", "al.score"}
     assert "not advertising" not in capsys.readouterr().out
 
 
 def test_discover_without_weights_advertises_tool_execute_but_not_yolo_and_says_why(monkeypatch: pytest.MonkeyPatch, capsys):
     _fake_dental_agent(monkeypatch, model=None)
     handlers = dh.discover({})
-    assert set(handlers) == {"tool.execute"}
+    assert set(handlers) == {"tool.execute", "trace.render_artifacts"}
     out = capsys.readouterr().out
     assert "not advertising yolo.prelabel: grounding weights not found at data/models/missing/best.pt" in out
     assert "locate_tooth will fail" in out

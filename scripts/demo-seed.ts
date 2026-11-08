@@ -167,6 +167,8 @@ function toParsedTrace(t: BundleTrace): ParsedTraceRow {
         perturbTier: c.perturb_tier ?? null,
       })),
     })),
+    adapterVersion: "trace.v1",
+    extra: {},
   };
 }
 
@@ -194,6 +196,7 @@ function toParsedEval(run: BundleEval): ParsedEval {
       n: cases.length,
       sourceFile: run.sourceFile,
       summary: summarizeEval(cases),
+      adapterVersion: "eval.v1",
     },
     cases,
   };

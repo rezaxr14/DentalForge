@@ -37,7 +37,7 @@ export function AcceptButton({ token }: { token: string }) {
         {pending ? "Accepting…" : "Accept invite"}
       </button>
       {result && !result.ok ? (
-        <p role="alert" className="mt-2 text-sm text-red-600">
+        <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">
           {result.reason === "signed-out"
             ? "Sign in first, then come back to this link."
             : result.reason === "consumed"

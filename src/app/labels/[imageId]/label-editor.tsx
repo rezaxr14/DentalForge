@@ -817,7 +817,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           </p>
         )}
         {jobProblem && (
-          <p role="alert" className="mb-2 text-xs text-red-600">
+          <p role="alert" className="mb-2 text-xs text-red-700 dark:text-red-400">
             {jobProblem}
           </p>
         )}

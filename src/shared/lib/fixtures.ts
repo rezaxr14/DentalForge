@@ -28,6 +28,9 @@ export interface TraceSummary {
   imageHeight: number | null;
   /** Distinct diagnoses in the recorded answer/ground truth (card summary). */
   conditions: string[];
+  /** Live-run provenance (ADR-0031); absent for fixture traces. */
+  backend?: string | null;
+  stage?: string | null;
 }
 
 /** The five committed DENTEX derivatives and their native dimensions. */
@@ -103,6 +106,8 @@ export function listTraces(): TraceSummary[] {
         nFindings: u.ground_truth.length,
         verified: false,
         conditions: diagnosesOf(u.ground_truth),
+        backend: null,
+        stage: null,
       } satisfies TraceSummary;
     }
     const t = VerifiedTrace.parse(data);
@@ -120,6 +125,8 @@ export function listTraces(): TraceSummary[] {
       nFindings: t.final_answer?.length ?? 0,
       verified: true,
       conditions: [...new Set([...diagnosesOf(t.ground_truth), ...diagnosesOf(t.final_answer)])],
+      backend: null,
+      stage: null,
     } satisfies TraceSummary;
   });
 }

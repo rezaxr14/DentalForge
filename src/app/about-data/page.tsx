@@ -184,7 +184,7 @@ export default async function AboutDataPage() {
             <p className="mt-2 text-xs text-zinc-600">
               The project is open source. Issues about data or licensing are welcome.
             </p>
-            <Link href="/status" className="mt-2 inline-block text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+            <Link href="/status" className="mt-2 inline-block text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
               System status →
             </Link>
           </Card>

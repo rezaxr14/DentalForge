@@ -33,6 +33,8 @@ export type TraceBatchSourceT = {
   mode: "with_tools" | "no_tools";
   verified: boolean;
   sourceFile?: string | undefined;
+  backend?: string | undefined;
+  stage?: string | undefined;
 };
 
 /** `null` only if the importer's own parser rejects the trace (the request schema should already have caught it). */
@@ -59,6 +61,8 @@ export function prepareTrace(item: IngestTraceT, source: TraceBatchSourceT, data
     nToolCalls: row.nToolCalls,
     formatOk: row.formatOk,
     verifierReason: row.verifierReason,
+    backend: source.backend ?? null,
+    stage: source.stage ?? null,
     groundTruth: row.groundTruth,
     finalAnswer: row.finalAnswer,
     turns: row.turns,

@@ -27,6 +27,9 @@
 .DS_Store
 *.pem
 
+# worker-local model file (real paths, never committed)
+/examples/python-worker/worker-models.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -45,7 +48,8 @@ yarn-error.log*
 next-env.d.ts
 
 # local-storage adapter output (worker artifacts uploaded in dev/e2e)
-/public/demo-assets/
+
 __pycache__/
 *.pyc
 /perf-results/
+
