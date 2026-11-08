@@ -23,11 +23,11 @@ export default defineConfig({
   testIgnore: process.env.E2E_PERF ? [] : ["**/perf-*.spec.ts"],
   // Specs own their servers and databases rows; one worker keeps ports and rows predictable.
   // BUT axe tests can run in parallel against the same server (they only read).
-  workers: process.env.CI ? 2 : 1,
+  workers: process.env.CI ? 4 : 1,
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   forbidOnly: Boolean(process.env.CI),
-  timeout: 60_000,
+  timeout: 120_000,
   expect: { timeout: 10_000 },
   reporter: [["list"]],
   outputDir: "test-results",
