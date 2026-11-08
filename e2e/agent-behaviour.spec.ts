@@ -66,9 +66,8 @@ test.describe("/agent — cohort compare", () => {
     await page.goto(`${app.base}/agent`);
     await page.waitForLoadState("networkidle");
 
-    // Should show compare card if same case exists in other mode
-    const compareCard = page.locator("text=/compare/i");
-    // May or may not be visible depending on data
+    // Should show compare card if same case exists in other mode (may not be visible depending on data)
+    void page.locator("text=/compare/i");
   });
 });
 
