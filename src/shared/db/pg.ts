@@ -21,12 +21,12 @@ export function getPool(): pg.Pool {
     const sslModeMatch = connectionString.match(/sslmode=([^&]+)/);
     const urlSslMode = sslModeMatch ? sslModeMatch[1] : undefined;
     
-    // In CI, use rejectUnauthorized: false since CI Postgres doesn't have SSL
+    // In CI, disable SSL entirely since CI Postgres doesn't support SSL
     // In production with explicit sslmode, respect the URL setting
     // Otherwise in production, require valid certificates
     let ssl: pg.PoolConfig["ssl"] = false;
     if (isCI) {
-      ssl = { rejectUnauthorized: false };
+      ssl = false;
     } else if (isProd) {
       if (urlSslMode === "require" || urlSslMode === "verify-ca" || urlSslMode === "verify-full") {
         ssl = { rejectUnauthorized: true };
