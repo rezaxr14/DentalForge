@@ -174,8 +174,12 @@ class TorchHFBackend:
     # ------------------------------------------------------------------ running
     def _supports_live_replies(self) -> bool:
         """Check if run_agent supports reply_fn and tool_observer parameters."""
-        from dental_agent.agent.loop import run_agent
+        try:
+            from dental_agent.agent.loop import run_agent
+        except Exception:  # noqa: BLE001 - module not available in test env
+            return False
         import inspect
+
         sig = inspect.signature(run_agent)
         params = sig.parameters
         return "reply_fn" in params and "tool_observer" in params

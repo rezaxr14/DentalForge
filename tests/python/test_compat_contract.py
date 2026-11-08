@@ -40,6 +40,7 @@ if CHECKOUT is None:
 
 # Table 4.3 of VLM_INTEGRATION_IMPLEMENTATION_PLAN.md: capability profile -> torch requirement.
 # `agent.run` has two interchangeable backends, so the probe reports one row per backend.
+# `eval.run` is split into two capabilities: openai_compat (torch-free) and torch_hf (requires torch).
 TABLE_4_3 = {
     "tool.execute": False,
     "trace.render_artifacts": False,
@@ -47,7 +48,8 @@ TABLE_4_3 = {
     "al.score": True,
     "agent.run.openai_compat": False,
     "agent.run.torch_hf": True,
-    "eval.run": True,
+    "eval.run.openai_compat": False,
+    "eval.run.torch_hf": True,
 }
 
 REASON_FORMS = re.compile(
@@ -59,6 +61,7 @@ REASON_FORMS = re.compile(
     r"|grounding weights file not found"
     r"|CUDA is not available"
     r"|ToolRegistry unavailable"
+    r"|dental_agent\.(evaluation\.metrics|agent\.loop): cannot import"
 )
 
 
