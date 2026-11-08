@@ -172,6 +172,15 @@ class TorchHFBackend:
             self._release()
 
     # ------------------------------------------------------------------ running
+    def _supports_live_replies(self) -> bool:
+        """Check if run_agent supports reply_fn and tool_observer parameters."""
+        from dental_agent.agent.loop import run_agent
+        import inspect
+        sig = inspect.signature(run_agent)
+        params = sig.parameters
+        return "reply_fn" in params and "tool_observer" in params
+
+    # ------------------------------------------------------------------ running
     def run(
         self,
         spec: Any,
@@ -214,28 +223,55 @@ class TorchHFBackend:
                     "canonical_resize": canonical_resize,
                     "temperature": temperature,
                 }
+
+                # Detect live replies capability (reply_fn + tool_observer)
+                live_replies = self._supports_live_replies()
+
                 if mode == "no_tools":
                     trajectory = run_agent_no_tools(**kwargs)
+                    turns = list(trajectory.turns)
+                    for turn in turns:
+                        if on_turn is not None:
+                            on_turn(turn)
                 else:
                     registry = self._registry_factory() if self._registry_factory else _default_registry()
-                    trajectory = run_agent(
-                        **kwargs,
-                        registry=registry,
-                        max_tool_calls=max_tool_calls,
-                        max_turns=max_turns,
-                    )
+                    if live_replies:
+                        # Live turn streaming via reply_fn and tool_observer
+                        def reply_fn(turn: dict[str, Any]) -> None:
+                            if on_turn is not None:
+                                on_turn(turn)
 
-        turns = list(trajectory.turns)
-        for turn in turns:
-            if on_turn is not None:
-                on_turn(turn)
-        return RunOutcome(
-            turns=turns,
-            n_tool_calls=trajectory.tool_calls,
-            final_answer=trajectory.final_answer,
-            format_ok=trajectory.format_ok,
-            messages=list(getattr(trajectory, "messages", []) or []),
-        )
+                        def tool_observer(tool_name: str, tool_args: dict[str, Any], result: Any) -> None:
+                            if on_artifact is not None:
+                                pass
+
+                        trajectory = run_agent(
+                            **kwargs,
+                            registry=registry,
+                            max_tool_calls=max_tool_calls,
+                            max_turns=max_turns,
+                            reply_fn=reply_fn,
+                            tool_observer=tool_observer,
+                        )
+                    else:
+                        trajectory = run_agent(
+                            **kwargs,
+                            registry=registry,
+                            max_tool_calls=max_tool_calls,
+                            max_turns=max_turns,
+                        )
+
+                    turns = list(trajectory.turns)
+                    for turn in turns:
+                        if on_turn is not None:
+                            on_turn(turn)
+                return RunOutcome(
+                    turns=turns,
+                    n_tool_calls=trajectory.tool_calls,
+                    final_answer=trajectory.final_answer,
+                    format_ok=trajectory.format_ok,
+                    messages=list(getattr(trajectory, "messages", []) or []),
+                )
 
     def _runners(self) -> tuple[Callable[..., Any], Callable[..., Any]]:
         if self._runner is not None:

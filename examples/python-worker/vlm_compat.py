@@ -149,6 +149,9 @@ CAPABILITY_JOBS: dict[str, str] = {
     "eval.run": "eval.run",
 }
 
+# Extra capabilities that don't map to job types but affect UI/behaviour.
+LIVE_REPLIES_SYMBOL = Symbol("dental_agent.agent.loop", "run_agent", ("image_id", "images_df", "model", "processor", "reply_fn", "tool_observer"))
+
 OPTIONAL_PACKAGES = ("torch", "transformers", "peft", "ultralytics", "bitsandbytes")
 
 
@@ -433,6 +436,10 @@ def probe(path: str | Path | None = None, env: dict[str, str] | None = None) -> 
 
     available = [j for j, r in jobs.items() if r["available"]]
     advertised = list(dict.fromkeys(CAPABILITY_JOBS[j] for j in available))
+
+    # Detect live replies capability (reply_fn + tool_observer on run_agent)
+    live_replies_ok, _ = _check_symbol(LIVE_REPLIES_SYMBOL)
+
     return {
         "path": str(resolved),
         "importable": importable,
@@ -451,6 +458,9 @@ def probe(path: str | Path | None = None, env: dict[str, str] | None = None) -> 
         "unknownToApp": [t for t in tools if t not in APP_TOOLS],
         "missingUpstream": [t for t in APP_TOOLS if t not in tools],
         "groundingWeights": weights,
+        "capabilities": {
+            "liveReplies": live_replies_ok,
+        },
     }
 
 
