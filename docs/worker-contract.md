@@ -47,6 +47,8 @@ home GPU box behind NAT, a Colab/Kaggle session, or a cloud server all attach to
 | POST | `/jobs/{id}/complete` | Complete a job (idempotent for the lease holder) | implemented |
 | POST | `/jobs/{id}/fail` | Fail a job; retryable failures requeue while attempts remain | implemented |
 | GET | `/images/{imageId}` | Short-lived presigned download URL for an image (variant: original) | implemented |
+| GET | `/images` | One page of a dataset's images, ordered by sourceImageId (for eval.run) | implemented |
+| GET | `/traces/{id}` | The tool calls of a stored trace, for trace.render_artifacts | implemented |
 | POST | `/models/register` | Register a model checkpoint (upsert by name+stage; omitted optional fields keep their stored value) | implemented |
 | POST | `/ingest/eval-run` | Ingest one chunk of an evaluation run; the run is identified by runKey; cases are upserted by (run, image_id); n and summary are recomputed from all stored cases | implemented |
 | POST | `/ingest/traces` | Ingest verified traces; deduplicated by identity (dataset, image, cohort, mode); per-item outcomes; the dataset and image must already exist | implemented |
@@ -141,6 +143,95 @@ Request/response bodies are listed under **Schemas** below.
         },
         "vlmDentalCommit": {
           "type": "string"
+        },
+        "vlmDentalBranch": {
+          "type": "string"
+        },
+        "vlmDentalDirty": {
+          "type": "boolean"
+        },
+        "vlmDentalPath": {
+          "type": "string"
+        },
+        "packages": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "packageErrors": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "jobs": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "available"
+            ]
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unknownToApp": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missingUpstream": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "groundingWeights": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "advertisedJobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -642,7 +733,8 @@ Request/response bodies are listed under **Schemas** below.
         "zero_shot",
         "sft",
         "grpo",
-        "yolo"
+        "yolo",
+        "test"
       ]
     },
     "hfPath": {
@@ -702,7 +794,8 @@ Request/response bodies are listed under **Schemas** below.
         "zero_shot",
         "sft",
         "grpo",
-        "yolo"
+        "yolo",
+        "test"
       ]
     }
   },
@@ -712,6 +805,319 @@ Request/response bodies are listed under **Schemas** below.
     "name",
     "kind",
     "stage"
+  ],
+  "additionalProperties": false
+}
+```
+
+### ImageMetadataResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "expiresInSeconds": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "width": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "height": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "imageId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "sourceImageId": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "datasetId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "dataset": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "dentex",
+            "tufts",
+            "upload"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "datasetName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "split": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "groundTruth": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "quadrant": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              },
+              "tooth_position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "diagnosis": {
+                "type": "string"
+              },
+              "raw_diagnosis": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "bbox": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 4,
+                "maxItems": 4
+              }
+            },
+            "required": [
+              "quadrant",
+              "tooth_position",
+              "diagnosis"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "url",
+    "expiresInSeconds",
+    "width",
+    "height",
+    "imageId",
+    "sourceImageId",
+    "datasetId",
+    "dataset",
+    "datasetName",
+    "split",
+    "groundTruth"
+  ],
+  "additionalProperties": false
+}
+```
+
+### ImageListResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "sourceImageId": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "split": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "sourceImageId",
+          "split",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "images",
+    "total"
+  ],
+  "additionalProperties": false
+}
+```
+
+### WorkerTraceResponse
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "traceId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "imageId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "with_tools",
+        "no_tools"
+      ]
+    },
+    "turns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "idx": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "toolCalls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "idx": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "toolName": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "artifactId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "idx",
+                "toolName",
+                "args",
+                "ok",
+                "error",
+                "artifactId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "idx",
+          "toolCalls"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "traceId",
+    "imageId",
+    "mode",
+    "turns"
   ],
   "additionalProperties": false
 }
@@ -924,6 +1330,22 @@ Request/response bodies are listed under **Schemas** below.
     "canonicalResize": {
       "default": false,
       "type": "boolean"
+    },
+    "backend": {
+      "type": "string",
+      "enum": [
+        "torch_hf",
+        "openai_compat"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "base",
+        "sft",
+        "grpo",
+        "test"
+      ]
     },
     "cases": {
       "minItems": 1,
@@ -1421,6 +1843,22 @@ Request/response bodies are listed under **Schemas** below.
           "type": "string",
           "minLength": 1,
           "maxLength": 300
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "torch_hf",
+            "openai_compat"
+          ]
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "base",
+            "sft",
+            "grpo",
+            "test"
+          ]
         }
       },
       "required": [
@@ -1554,8 +1992,8 @@ Request/response bodies are listed under **Schemas** below.
                               },
                               "tooth_position": {
                                 "type": "integer",
-                                "minimum": 1,
-                                "maximum": 8
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
                               },
                               "diagnosis": {
                                 "type": "string"
@@ -1564,9 +2002,16 @@ Request/response bodies are listed under **Schemas** below.
                                 "type": "string"
                               },
                               "confidence": {
-                                "type": "number",
-                                "minimum": 0,
-                                "maximum": 1
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "bbox": {
                                 "type": "array",
@@ -1655,6 +2100,11 @@ Request/response bodies are listed under **Schemas** below.
                           "small",
                           "big"
                         ]
+                      },
+                      "artifact_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
                     "required": [
@@ -1699,8 +2149,8 @@ Request/response bodies are listed under **Schemas** below.
                     },
                     "tooth_position": {
                       "type": "integer",
-                      "minimum": 1,
-                      "maximum": 8
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "diagnosis": {
                       "type": "string"
@@ -1709,9 +2159,16 @@ Request/response bodies are listed under **Schemas** below.
                       "type": "string"
                     },
                     "confidence": {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "bbox": {
                       "type": "array",
@@ -2491,6 +2948,12 @@ Request/response bodies are listed under **Schemas** below.
       "type": "integer",
       "minimum": -9007199254740991,
       "maximum": 9007199254740991
+    },
+    "temperature": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
     }
   },
   "required": [
@@ -2519,8 +2982,8 @@ Request/response bodies are listed under **Schemas** below.
           },
           "tooth_position": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 8
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "diagnosis": {
             "type": "string"
@@ -2529,9 +2992,16 @@ Request/response bodies are listed under **Schemas** below.
             "type": "string"
           },
           "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bbox": {
             "type": "array",
@@ -2574,6 +3044,11 @@ Request/response bodies are listed under **Schemas** below.
     },
     "formatOk": {
       "type": "boolean"
+    },
+    "traceId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
     },
     "rewardComponents": {
       "type": "object",
@@ -2631,12 +3106,73 @@ Request/response bodies are listed under **Schemas** below.
       "type": "boolean"
     },
     "imageIds": {
+      "maxItems": 500,
       "type": "array",
       "items": {
-        "type": "integer",
-        "minimum": -9007199254740991,
-        "maximum": 9007199254740991
+        "anyOf": [
+          {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        ]
       }
+    },
+    "datasetId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "mode": {
+      "default": "with_tools",
+      "type": "string",
+      "enum": [
+        "with_tools",
+        "no_tools"
+      ]
+    },
+    "maxTurns": {
+      "default": 30,
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "maxToolCalls": {
+      "default": 50,
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "temperature": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "provider": {
+      "default": "local",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "runKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$"
     }
   },
   "required": [

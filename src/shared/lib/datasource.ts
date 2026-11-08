@@ -41,6 +41,9 @@ export interface TraceDetail {
   verified: boolean;
   /** Radiograph backing the trace, when the source can resolve one. */
   image: TraceImage | null;
+  /** Live-run provenance (ADR-0031); absent for fixture traces and imported traces. */
+  backend?: string | null;
+  stage?: string | null;
 }
 
 export interface TraceImage {
@@ -210,6 +213,10 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
       formatOk: s.traces.formatOk,
       finalAnswer: s.traces.finalAnswer,
       groundTruth: s.traces.groundTruth,
+
+      backend: s.traces.backend,
+      stage: s.traces.stage,
+
       datasetSource: s.datasets.source,
       sourceImageId: s.images.sourceImageId,
       imageStorageKey: s.images.storageKey,
@@ -245,6 +252,8 @@ async function listTraceRows(db: Db, orgId: string): Promise<TraceListRow[]> {
       formatOk: r.formatOk ?? false,
       nFindings: finalAnswer.length,
       verified: r.verified ?? false,
+      backend: r.backend,
+      stage: r.stage,
       provenance: "postgres" as const,
       imageKey: r.imageStorageKey,
       imageWidth: r.imageWidth,
@@ -275,6 +284,8 @@ async function getTraceRow(
       verifierReason: s.traces.verifierReason,
       groundTruth: s.traces.groundTruth,
       finalAnswer: s.traces.finalAnswer,
+      backend: s.traces.backend,
+      stage: s.traces.stage,
       datasetSource: s.datasets.source,
       sourceImageId: s.images.sourceImageId,
       imageWidth: s.images.width,
@@ -345,6 +356,7 @@ async function getTraceRow(
   };
   const parsed = VerifiedTrace.safeParse(raw);
   if (!parsed.success) return null;
+
   return {
     id,
     trace: parsed.data,
@@ -361,6 +373,8 @@ async function getTraceRow(
           sourceImageId: t.sourceImageId,
         }
       : null,
+    backend: t.backend,
+    stage: t.stage,
   };
 }
 

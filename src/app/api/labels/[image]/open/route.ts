@@ -1,11 +1,28 @@
 import { resolveLabelDeps } from "@/shared/labels/deps";
 import * as h from "@/shared/labels/handlers";
+import { createSecurityGuard } from "@/shared/lib/middleware/security";
 
 export const dynamic = "force-dynamic";
 
+const labelOpenGuard = createSecurityGuard({ key: "labels:open", max: 50, windowMs: 60_000 });
+
 export async function POST(_req: Request, ctx: { params: Promise<{ image: string }> }) {
+  const guard = await labelOpenGuard.check(_req);
+  if (!guard.ok) return guard.response;
   const d = await resolveLabelDeps();
   if (d instanceof Response) return d;
   const { image } = await ctx.params;
-  return h.openSet(d, image);
+  const res = await h.openSet(d, image);
+  Object.entries(securityHeaders()).forEach(([k, v]) => res.headers.set(k, v));
+  res.headers.set("x-ratelimit-remaining", String(guard.rateLimit.remaining));
+  return res;
+}
+
+function securityHeaders(): Record<string, string> {
+  return {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  };
 }

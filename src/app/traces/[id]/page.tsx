@@ -42,10 +42,14 @@ function TraceBody({
   detail,
   resolution,
   toolImages,
+  backend,
+  stage,
 }: {
   detail: TraceDetail;
   resolution: StrategyResolution;
   toolImages: Map<string, ToolImageInfo>;
+  backend?: string | null;
+  stage?: string | null;
 }) {
   const t = detail.trace;
   const finalFindings = t.final_answer ?? [];
@@ -62,6 +66,15 @@ function TraceBody({
 
   return (
     <div className="mt-6 space-y-6">
+      {stage === "test" && (
+        <p
+          className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          data-test-backend
+        >
+          Test backend ({backend ?? "openai_compat"}) — not the research model. This run is excluded
+          from cohort statistics and benchmark tables by default.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Turns" value={t.turns.length} />
         <Stat label="Tool calls" value={toolCalls.length} hint={failedCalls ? `${failedCalls} failed` : "all ok"} />
@@ -85,7 +98,7 @@ function TraceBody({
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Radiograph &amp; findings</h2>
+            <h2 className="text-sm font-semibold">Radiograph & findings</h2>
             <div className="flex flex-wrap gap-1.5">
               <Badge tone="success">ground truth {gt.length}</Badge>
               <Badge tone="warning">prediction boxes {pred.length}</Badge>
@@ -176,99 +189,99 @@ function TraceBody({
               </ul>
             </Card>
           )}
-        </div>
-      </div>
 
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Turn timeline</h2>
-        <p className="mt-1 text-sm text-zinc-600">
-          Every recorded turn, including the tool arguments and any stored render.
-        </p>
-        <ol className="mt-4 space-y-3">
-          {t.turns.map((turn, i) => (
-            <li key={i} className="relative ps-6">
-              <span
-                className="absolute top-3 left-0 flex h-3 w-3 items-center justify-center rounded-full border-2 border-background bg-zinc-300 ring-1 ring-border dark:bg-zinc-600"
-                aria-hidden="true"
-              />
-              {i < t.turns.length - 1 && (
-                <span className="absolute top-6 bottom-[-12px] left-[5px] w-px bg-border" aria-hidden="true" />
-              )}
-              <Card className="p-3">
-                <details
-                  open={
-                    i < 2 ||
-                    Boolean(
-                      turn.tool_calls_this_turn?.some((c) => (c as { artifact_id?: string }).artifact_id),
-                    )
-                  }
-                >
-                  <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-medium">
-                    <span>Turn {turn.turn}</span>
-                    {turn.status && <Badge tone="neutral">{turn.status}</Badge>}
-                    {turn.tool_calls_this_turn && turn.tool_calls_this_turn.length > 0 && (
-                      <Badge tone="violet">{turn.tool_calls_this_turn.length} tool calls</Badge>
-                    )}
-                  </summary>
-                  {turn.tool_calls_this_turn?.map((c, j) => {
-                    const artifactId = (c as { artifact_id?: string }).artifact_id;
-                    const imgInfo = artifactId ? toolImages.get(artifactId) : undefined;
-                    return (
-                      <div key={j} className="mt-2 rounded-lg bg-muted/60 p-2 font-mono text-xs">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold">{c.tool_name}</span>
-                          {c.tool_ok === false && <Badge tone="danger">failed</Badge>}
-                          {c.true_bbox ? <Badge tone="warning">perturb {c.perturb_tier}</Badge> : null}
-                        </div>
-                        <div className="mt-1 break-all text-zinc-600">
-                          {JSON.stringify(c.tool_args)}
-                        </div>
-                        {isImageOutputTool(c.tool_name) &&
-                          (imgInfo ? (
-                            <figure className="mt-2" data-tool-image="artifact">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={imgInfo.url}
-                                alt={`${c.tool_name} output (stored artifact)`}
-                                className="max-h-64 w-auto rounded border border-border"
-                              />
-                              <figcaption className="mt-1 flex items-center gap-1.5 font-sans text-[11px] text-zinc-500">
-                                stored artifact <ProvenanceBadge provenance={imgInfo.provenance} />
-                              </figcaption>
-                            </figure>
-                          ) : (
-                            <div
-                              className="mt-2 rounded border border-dashed border-border bg-card p-2 font-sans text-[11px] text-zinc-500"
-                              data-tool-image="placeholder"
-                            >
-                              No stored render for this call — showing the recorded arguments.
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Turn timeline</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Every recorded turn, including the tool arguments and any stored render.
+            </p>
+            <ol className="mt-4 space-y-3">
+              {t.turns.map((turn, i) => (
+                <li key={i} className="relative ps-6">
+                  <span
+                    className="absolute top-3 left-0 flex h-3 w-3 items-center justify-center rounded-full border-2 border-background bg-zinc-300 ring-1 ring-border dark:bg-zinc-600"
+                    aria-hidden="true"
+                  />
+                  {i < t.turns.length - 1 && (
+                    <span className="absolute top-6 bottom-[-12px] left-[5px] w-px bg-border" aria-hidden="true" />
+                  )}
+                  <Card className="p-3">
+                    <details
+                      open={
+                        i < 2 ||
+                        Boolean(
+                          turn.tool_calls_this_turn?.some((c) => (c as { artifact_id?: string }).artifact_id),
+                        )
+                      }
+                    >
+                      <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-medium">
+                        <span>Turn {turn.turn}</span>
+                        {turn.status && <Badge tone="neutral">{turn.status}</Badge>}
+                        {turn.tool_calls_this_turn && turn.tool_calls_this_turn.length > 0 && (
+                          <Badge tone="violet">{turn.tool_calls_this_turn.length} tool calls</Badge>
+                        )}
+                      </summary>
+                      {turn.tool_calls_this_turn?.map((c, j) => {
+                        const artifactId = (c as { artifact_id?: string }).artifact_id;
+                        const imgInfo = artifactId ? toolImages.get(artifactId) : undefined;
+                        return (
+                          <div key={j} className="mt-2 rounded-lg bg-muted/60 p-2 font-mono text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold">{c.tool_name}</span>
+                              {c.tool_ok === false && <Badge tone="danger">failed</Badge>}
+                              {c.true_bbox ? <Badge tone="warning">perturb {c.perturb_tier}</Badge> : null}
                             </div>
+                            <div className="mt-1 break-all text-zinc-600">
+                              {JSON.stringify(c.tool_args)}
+                            </div>
+                            {isImageOutputTool(c.tool_name) &&
+                              (imgInfo ? (
+                                <figure className="mt-2" data-tool-image="artifact">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={imgInfo.url}
+                                    alt={`${c.tool_name} output (stored artifact)`}
+                                    className="max-h-64 w-auto rounded border border-border"
+                                  />
+                                  <figcaption className="mt-1 flex items-center gap-1.5 font-sans text-[11px] text-zinc-500">
+                                    stored artifact <ProvenanceBadge provenance={imgInfo.provenance} />
+                                  </figcaption>
+                                </figure>
+                              ) : (
+                                <div
+                                  className="mt-2 rounded border border-dashed border-border bg-card p-2 font-sans text-[11px] text-zinc-500"
+                                  data-tool-image="placeholder"
+                                >
+                                  No stored render for this call — showing the recorded arguments.
+                                </div>
+                              ))}
+                          </div>
+                        );
+                      })}
+                      {turn.parsed?.thought && (
+                        <p className="mt-2 border-s-2 border-border ps-3 text-sm text-zinc-700 dark:text-zinc-300">
+                          {turn.parsed.thought.slice(0, 700)}
+                        </p>
+                      )}
+                      {turn.parsed?.final_answer && (
+                        <ul className="mt-2 space-y-1 text-sm">
+                          {turn.parsed.final_answer.map((f, k) => (
+                            <li key={k} className="flex gap-2">
+                              <span className="font-mono text-xs text-zinc-500">
+                                Q{f.quadrant}T{f.tooth_position}
+                              </span>
+                              <span>{f.diagnosis}</span>
+                            </li>
                           ))}
-                      </div>
-                    );
-                  })}
-                  {turn.parsed?.thought && (
-                    <p className="mt-2 border-s-2 border-border ps-3 text-sm text-zinc-700 dark:text-zinc-300">
-                      {turn.parsed.thought.slice(0, 700)}
-                    </p>
-                  )}
-                  {turn.parsed?.final_answer && (
-                    <ul className="mt-2 space-y-1 text-sm">
-                      {turn.parsed.final_answer.map((f, k) => (
-                        <li key={k} className="flex gap-2">
-                          <span className="font-mono text-xs text-zinc-500">
-                            Q{f.quadrant}T{f.tooth_position}
-                          </span>
-                          <span>{f.diagnosis}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </details>
-              </Card>
-            </li>
-          ))}
-        </ol>
+                        </ul>
+                      )}
+                    </details>
+                  </Card>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -289,14 +302,16 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
             <h1 className="text-2xl font-semibold tracking-tight">
               {caseName(detail.trace.dataset, detail.trace.image_id)}
             </h1>
-            <Badge tone={detail.provenance === "postgres" ? "success" : "warning"}>
-              {detail.provenance === "postgres" ? "imported data" : "fixture replay"}
+            <Badge tone={detail.provenance === "postgres" ? "success" : "warning"}
+              title="Recorded training trace: generated by a frontier LLM with ground-truth guidance and cross-family verified. Shows supervision data for SFT, not model performance.">
+              {detail.provenance === "postgres" ? "imported training trace" : "fixture training trace"}
             </Badge>
             <Badge tone={detail.mode === "with_tools" ? "violet" : "neutral"}>
               {detail.mode === "with_tools" ? "with tools" : "no tools"}
             </Badge>
-            <Badge tone={detail.verified ? "success" : "warning"}>
-              {detail.verified ? "verified" : "unverified"}
+            <Badge tone={detail.verified ? "success" : "warning"}
+              title="Recorded training trace: generated by a frontier LLM with ground-truth guidance and cross-family verified. Shows supervision data for SFT, not model performance.">
+              {detail.verified ? "passed trace verification" : "unverified"}
             </Badge>
             <Badge tone="neutral">{detail.cohort}</Badge>
           </div>
@@ -307,7 +322,13 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
       )}
       <Suspense fallback={<p className="mt-6 text-sm">Loading trace…</p>}>
         {detail ? (
-          <TraceBody detail={detail} resolution={resolution} toolImages={toolImages} />
+          <TraceBody
+            detail={detail}
+            resolution={resolution}
+            toolImages={toolImages}
+            backend={detail.backend}
+            stage={detail.stage}
+          />
         ) : (
           <p className="mt-6 text-sm text-zinc-600">Trace not found in the {source.provenance} source.</p>
         )}

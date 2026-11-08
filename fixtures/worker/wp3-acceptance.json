@@ -1,0 +1,385 @@
+{
+  "generatedBy": "examples/python-worker/acceptance_fixtures.py",
+  "jobs": [
+    {
+      "jobType": "al.score",
+      "payload": {
+        "imageIds": [
+          "11111111-1111-4111-8111-111111111111",
+          "22222222-2222-4222-8222-222222222222"
+        ],
+        "modelId": "yolo-wp3",
+        "confThreshold": 0.25
+      },
+      "events": [
+        {
+          "seq": 1,
+          "type": "progress",
+          "data": {
+            "pct": 50,
+            "done": 1,
+            "total": 2,
+            "meanConf": 0.91,
+            "minConf": 0.91,
+            "entropy": 0.0,
+            "nBoxes": 1,
+            "inferenceMs": 12.5
+          }
+        },
+        {
+          "seq": 2,
+          "type": "progress",
+          "data": {
+            "pct": 100,
+            "done": 2,
+            "total": 2,
+            "meanConf": 0.605,
+            "minConf": 0.37,
+            "entropy": 0.888248046847429,
+            "nBoxes": 2,
+            "inferenceMs": 12.5
+          }
+        }
+      ],
+      "result": {
+        "scores": [
+          {
+            "imageId": "11111111-1111-4111-8111-111111111111",
+            "meanConf": 0.91,
+            "minConf": 0.91,
+            "entropy": 0.0,
+            "nBoxes": 1
+          },
+          {
+            "imageId": "22222222-2222-4222-8222-222222222222",
+            "meanConf": 0.605,
+            "minConf": 0.37,
+            "entropy": 0.888248046847429,
+            "nBoxes": 2
+          }
+        ]
+      }
+    },
+    {
+      "jobType": "eval.run",
+      "payload": {
+        "modelId": "app-model",
+        "dataset": "dentex",
+        "split": "val",
+        "imageIds": [
+          "11111111-1111-4111-8111-111111111111",
+          "22222222-2222-4222-8222-222222222222",
+          "33333333-3333-4333-8333-333333333333"
+        ],
+        "runKey": "wp3-acceptance"
+      },
+      "events": [
+        {
+          "seq": 1,
+          "type": "partial",
+          "data": {
+            "image_id": 18,
+            "dataset": "dentex",
+            "split": "val",
+            "provider": "local",
+            "model": "qwen-wp3",
+            "ground_truth": [
+              {
+                "quadrant": 1,
+                "tooth_position": 6,
+                "diagnosis": "Caries"
+              }
+            ],
+            "predictions": [
+              {
+                "quadrant": 1,
+                "tooth_position": 6,
+                "diagnosis": "Caries",
+                "confidence": 0.8
+              }
+            ],
+            "matched_pairs": [
+              {
+                "gt": {
+                  "quadrant": 1,
+                  "tooth_position": 6,
+                  "diagnosis": "Caries"
+                },
+                "pred": {
+                  "quadrant": 1,
+                  "tooth_position": 6,
+                  "diagnosis": "Caries",
+                  "confidence": 0.8
+                },
+                "fdi_match": true,
+                "exact_match": true,
+                "closeness": 1.0,
+                "spatial": 1.0,
+                "diag_sim": 1.0
+              }
+            ],
+            "fdi_precision": 1.0,
+            "fdi_recall": 1.0,
+            "fdi_f1": 1.0,
+            "exact_precision": 1.0,
+            "exact_recall": 1.0,
+            "exact_f1": 1.0,
+            "closeness_score": 1.0,
+            "spatial_proximity": 1.0,
+            "diagnostic_similarity": 1.0,
+            "fdi_correct": true,
+            "quadrant_correct": true,
+            "tooth_position_correct": true,
+            "diagnosis_correct": true,
+            "exact_match": true,
+            "all_exact_match": true,
+            "final_answer": {
+              "quadrant": 1,
+              "tooth_position": 6,
+              "diagnosis": "Caries",
+              "confidence": 0.8
+            },
+            "raw_output": "{\"final_answer\": []}",
+            "format_ok": true,
+            "finish_reason": "final",
+            "confidence": 0.8,
+            "timestamp": 0.0
+          }
+        },
+        {
+          "seq": 2,
+          "type": "progress",
+          "data": {
+            "pct": 33,
+            "done": 1,
+            "total": 3,
+            "evaluated": 1,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        {
+          "seq": 3,
+          "type": "partial",
+          "data": {
+            "image_id": 32,
+            "dataset": "dentex",
+            "split": "val",
+            "provider": "local",
+            "model": "qwen-wp3",
+            "ground_truth": [],
+            "predictions": [],
+            "matched_pairs": [],
+            "fdi_precision": 0.0,
+            "fdi_recall": 0.0,
+            "fdi_f1": 0.0,
+            "exact_precision": 0.0,
+            "exact_recall": 0.0,
+            "exact_f1": 0.0,
+            "closeness_score": 0.0,
+            "spatial_proximity": 0.0,
+            "diagnostic_similarity": 0.0,
+            "fdi_correct": true,
+            "quadrant_correct": true,
+            "tooth_position_correct": true,
+            "diagnosis_correct": true,
+            "exact_match": true,
+            "all_exact_match": true,
+            "final_answer": null,
+            "raw_output": "{\"final_answer\": []}",
+            "format_ok": true,
+            "finish_reason": "final",
+            "confidence": 1.0,
+            "timestamp": 0.0
+          }
+        },
+        {
+          "seq": 4,
+          "type": "progress",
+          "data": {
+            "pct": 67,
+            "done": 2,
+            "total": 3,
+            "evaluated": 2,
+            "skipped": 0,
+            "failed": 0
+          }
+        },
+        {
+          "seq": 5,
+          "type": "log",
+          "data": {
+            "imageId": "33333333-3333-4333-8333-333333333333",
+            "message": "skipped: the app has no ground truth for this image (a case would be a guess)"
+          }
+        }
+      ],
+      "result": {
+        "runId": "44444444-4444-4444-8444-444444444444",
+        "n": 2,
+        "summary": {
+          "fdi_f1": 1.0,
+          "exact_f1": 1.0
+        }
+      }
+    },
+    {
+      "jobType": "trace.render_artifacts",
+      "payload": {
+        "traceId": "66666666-6666-4666-8666-666666666666"
+      },
+      "events": [
+        {
+          "seq": 1,
+          "type": "progress",
+          "data": {
+            "pct": 100,
+            "rendered": 1,
+            "reused": 1,
+            "skippedFailed": 0,
+            "skippedData": 0,
+            "failed": 0,
+            "artifacts": 2
+          }
+        }
+      ],
+      "result": {
+        "artifacts": [
+          {
+            "turnIdx": 0,
+            "callIdx": 0,
+            "artifactId": "55555555-5555-4555-8555-555555555555"
+          },
+          {
+            "turnIdx": 0,
+            "callIdx": 1,
+            "artifactId": "55555555-5555-4555-8555-555555555555"
+          }
+        ]
+      }
+    }
+  ],
+  "ingest": [
+    {
+      "path": "/ingest/eval-run",
+      "body": {
+        "runKey": "wp3-acceptance",
+        "canonicalResize": false,
+        "backend": "openai_compat",
+        "stage": "base",
+        "cases": [
+          {
+            "image_id": 18,
+            "dataset": "dentex",
+            "split": "val",
+            "provider": "local",
+            "model": "qwen-wp3",
+            "ground_truth": [
+              {
+                "quadrant": 1,
+                "tooth_position": 6,
+                "diagnosis": "Caries"
+              }
+            ],
+            "predictions": [
+              {
+                "quadrant": 1,
+                "tooth_position": 6,
+                "diagnosis": "Caries",
+                "confidence": 0.8
+              }
+            ],
+            "matched_pairs": [
+              {
+                "gt": {
+                  "quadrant": 1,
+                  "tooth_position": 6,
+                  "diagnosis": "Caries"
+                },
+                "pred": {
+                  "quadrant": 1,
+                  "tooth_position": 6,
+                  "diagnosis": "Caries",
+                  "confidence": 0.8
+                },
+                "fdi_match": true,
+                "exact_match": true,
+                "closeness": 1.0,
+                "spatial": 1.0,
+                "diag_sim": 1.0
+              }
+            ],
+            "fdi_precision": 1.0,
+            "fdi_recall": 1.0,
+            "fdi_f1": 1.0,
+            "exact_precision": 1.0,
+            "exact_recall": 1.0,
+            "exact_f1": 1.0,
+            "closeness_score": 1.0,
+            "spatial_proximity": 1.0,
+            "diagnostic_similarity": 1.0,
+            "fdi_correct": true,
+            "quadrant_correct": true,
+            "tooth_position_correct": true,
+            "diagnosis_correct": true,
+            "exact_match": true,
+            "all_exact_match": true,
+            "final_answer": {
+              "quadrant": 1,
+              "tooth_position": 6,
+              "diagnosis": "Caries",
+              "confidence": 0.8
+            },
+            "raw_output": "{\"final_answer\": []}",
+            "format_ok": true,
+            "finish_reason": "final",
+            "confidence": 0.8,
+            "timestamp": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "path": "/ingest/eval-run",
+      "body": {
+        "runKey": "wp3-acceptance",
+        "canonicalResize": false,
+        "backend": "openai_compat",
+        "stage": "base",
+        "cases": [
+          {
+            "image_id": 32,
+            "dataset": "dentex",
+            "split": "val",
+            "provider": "local",
+            "model": "qwen-wp3",
+            "ground_truth": [],
+            "predictions": [],
+            "matched_pairs": [],
+            "fdi_precision": 0.0,
+            "fdi_recall": 0.0,
+            "fdi_f1": 0.0,
+            "exact_precision": 0.0,
+            "exact_recall": 0.0,
+            "exact_f1": 0.0,
+            "closeness_score": 0.0,
+            "spatial_proximity": 0.0,
+            "diagnostic_similarity": 0.0,
+            "fdi_correct": true,
+            "quadrant_correct": true,
+            "tooth_position_correct": true,
+            "diagnosis_correct": true,
+            "exact_match": true,
+            "all_exact_match": true,
+            "final_answer": null,
+            "raw_output": "{\"final_answer\": []}",
+            "format_ok": true,
+            "finish_reason": "final",
+            "confidence": 1.0,
+            "timestamp": 0.0
+          }
+        ]
+      }
+    }
+  ]
+}
