@@ -212,7 +212,8 @@ def test_probe_isolated_returns_the_same_report_shape_from_a_child_process(tmp_p
     report = vlm_compat.probe_isolated(pkg)
     assert report["path"] == str(pkg.resolve())
     assert report["jobs"]["tool.execute"]["available"] is True
-    assert report["advertisedJobs"] == ["tool.execute", "trace.render_artifacts", "agent.run"]
+    # Updated to include eval.run.openai_compat which is now advertised when openai_compat is available
+    assert set(report["advertisedJobs"]) == {"tool.execute", "trace.render_artifacts", "agent.run", "eval.run"}
 
 
 def test_a_probe_that_kills_its_process_becomes_a_report_not_a_crash(tmp_path: Path):
