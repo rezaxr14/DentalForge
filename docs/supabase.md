@@ -106,9 +106,22 @@ The deployment lives at **https://dentalforge-app.vercel.app** (Vercel project
 `dentalforge-app`). `/api/health` reports `db: up` and `workerMode: live` when the wiring is
 correct; `/status` shows the same capability ladder in the UI.
 
-`src/shared/db/pg.ts` passes the URL straight to `pg.Pool`. `sslmode=no-verify` encrypts the
-connection without verifying the certificate chain; §2 explains why `require` fails here and what
-the upgrade path is.
+`src/shared/db/pg.ts` asks `src/shared/db/ssl.ts` how to talk to Postgres, **from the URL alone**
+(never from a CI flag, and independent of the `pg` version: `pg` lets a `sslmode` in the URL override
+the `ssl` option, so `sslmode` is removed from the string handed to `pg` and `ssl` is passed
+explicitly):
+
+| URL | Connection |
+|-----|-----------|
+| `sslmode=no-verify` | TLS, certificate **not** verified (what this project uses with the pooler; §2 explains why `require` fails here and what the upgrade path is) |
+| `sslmode=require` / `verify-ca` / `verify-full` | TLS, certificate verified |
+| `sslmode=prefer` / `allow` | TLS, certificate verified (`pg` cannot fall back to plain TCP; a warning is logged) |
+| `sslmode=disable` | no TLS |
+| no `sslmode`, loopback or unix-socket host | no TLS (nothing to verify; this is what smoke, docker and a local demo use) |
+| no `sslmode`, any other host | production: TLS verified; otherwise no TLS |
+
+Tests: `tests/db-ssl.test.ts` (including a production-mode connection with no `CI` variable) and the
+variant C check of `pnpm smoke`.
 
 ## 5. Nothing else is Supabase-specific
 
