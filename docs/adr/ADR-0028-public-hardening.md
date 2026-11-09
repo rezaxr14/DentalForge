@@ -71,29 +71,47 @@ create, invite consume, settings). Worker-token routes are exempt (Bearer auth).
 
 ## Headers and CSP
 
-**Strict CSP** (in `next.config.ts` headers):
+The policy and the other security headers live in **one place**, `src/shared/lib/csp.ts`, used by
+`next.config.ts` (one rule, `/:path*`, which already covers `/api/...`) and by the API fallback in
+`middleware/security.ts`.
 
 ```
 default-src 'self';
-script-src 'self' 'wasm-unsafe-eval';  # only if WP6 needs it
-style-src 'self' 'unsafe-inline';      # Tailwind JIT
-img-src 'self' data: https:;
-font-src 'self' data:;
-connect-src 'self' https://*.vercel.app https://*.supabase.co;  # plus R2 if configured
-worker-src 'self' blob:;
+script-src 'self' 'unsafe-inline';
+style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob:;
+font-src 'self';
+connect-src 'self';
 frame-ancestors 'none';
 base-uri 'self';
 form-action 'self';
+object-src 'none';
 ```
 
-- `wasm-unsafe-eval` only if `onnxruntime-web` requires it (document in ADR-0027)
 - HSTS: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
-- `X-Content-Type-Options: nosniff`
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+- Add `'wasm-unsafe-eval'`, a `worker-src` and a model `connect-src` only when the browser YOLO (ADR-0027) is built and needs them.
 
-**Tests:** axe and strict console unaffected; CSP report-only mode in staging to
-catch violations before enforcing.
+### Amendment 2026-11-09: `script-src 'self'` shipped and broke every page
+
+The first version of this section specified `script-src 'self'` and said "axe and strict console unaffected;
+report-only first". It was enforced without either. The Next.js App Router emits inline bootstrap scripts
+(`self.__next_f.push(...)`), so the browser refused all of them ("Refused to execute inline script"), React threw
+#412 and **no page hydrated** in a production build: static HTML with dead controls (editor, theme toggle, replay
+controls). It was found by the browser suite (the strict console watcher and the hydration specs), not by review.
+
+- **Decision:** keep `'unsafe-inline'` for scripts. A nonce-based policy (`'nonce-...' 'strict-dynamic'`) needs a
+  proxy that forces dynamic rendering for every page; that trade-off is a separate decision, not a quick fix. The
+  rest of the policy stays closed (same origin, no framing, no plugins, no foreign form targets, no `<base>`).
+- zod 4 probes `Function("")` once to decide on JIT compilation; under this policy the probe is a (caught)
+  violation on every page that parses. In the browser zod is configured `jitless` (`src/shared/lib/zod-browser.ts`,
+  applied by `BrowserRuntime` in the root layout); the server keeps the JIT. `'unsafe-eval'` is **not** allowed.
+- **Tests:** `tests/csp.test.ts` (policy text, single definition) and `e2e/security-headers.spec.ts` (six pages: headers,
+  zero `securitypolicyviolation` events, strict console; the editor leaves its connecting phase, which needs
+  hydration; the API response carries the policy once). Negative controls: with `script-src 'self'` 7 of 8 fail;
+  without `BrowserRuntime` `/labels/1` fails with `script-src eval`.
 
 ## Demo org policy
 
