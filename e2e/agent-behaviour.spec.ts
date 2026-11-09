@@ -8,7 +8,13 @@ import { DB_URL, SECRETS, startApp, type RunningApp } from "./support/app";
 let app: RunningApp;
 
 test.beforeAll(async () => {
-  app = await startApp({ ...SECRETS, DATABASE_URL: DB_URL, WORKER_MODE: "off" });
+  app = await startApp({
+    ...SECRETS,
+    DATABASE_URL: DB_URL,
+    WORKER_MODE: "off",
+    // Optional: E2E_DATABASE_URL=<seeded db> E2E_DEMO_ORG_SLUG=demo exercises the seeded-demo branch of these specs.
+    ...(process.env.E2E_DEMO_ORG_SLUG ? { DEMO_ORG_SLUG: process.env.E2E_DEMO_ORG_SLUG } : {}),
+  });
 });
 
 test.afterAll(async () => app.stop());
@@ -47,7 +53,10 @@ test.describe("/agent — replay controls", () => {
     await page.waitForLoadState("networkidle");
 
     // Should show provenance badge with correct text
-    await expect(page.locator("text=/imported training traces/")).toBeVisible();
+    // Each mode must show its own, exact label: a seeded demo database says "imported ...", the empty database CI
+    // starts from honestly says "fixture ...". Never a bare "recorded run".
+    const seeded = Boolean(process.env.E2E_DEMO_ORG_SLUG);
+    await expect(page.getByText(seeded ? /imported training traces/ : /fixture training traces/).first()).toBeVisible();
   });
 
   test("trace picker filters and switches traces", async ({ page }) => {
