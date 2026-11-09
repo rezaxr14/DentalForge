@@ -8,6 +8,7 @@
  */
 
 import { createRateLimiter, isSameOrigin, type RateLimitResult } from "@/shared/lib/rate-limit";
+import { CONTENT_SECURITY_POLICY } from "@/shared/lib/csp";
 
 export interface SecurityOptions {
   /** Rate limit key prefix (e.g., "jobs:create"). */
@@ -123,7 +124,7 @@ export function securityHeaders(): Record<string, string> {
     "x-frame-options": "DENY",
     "referrer-policy": "strict-origin-when-cross-origin",
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
-    // CSP is set globally in next.config.ts; this is a fallback for edge cases
-    "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    // The same policy next.config.ts sends (src/shared/lib/csp.ts), for responses built outside the Next pipeline.
+    "content-security-policy": CONTENT_SECURITY_POLICY,
   };
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { BrowserRuntime } from "@/shared/ui/browser-runtime";
 import { ThemeProvider } from "@/shared/ui/theme-provider";
 import { ThemeToggle } from "@/shared/ui/theme-toggle";
 import { OrgSwitcher } from "@/shared/ui/org-switcher";
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
+        <BrowserRuntime />
         <ThemeProvider>
           <header className="border-b border-border">
             <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-6 py-2">
