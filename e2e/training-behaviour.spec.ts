@@ -7,7 +7,13 @@ import { DB_URL, SECRETS, startApp, type RunningApp } from "./support/app";
 let app: RunningApp;
 
 test.beforeAll(async () => {
-  app = await startApp({ ...SECRETS, DATABASE_URL: DB_URL, WORKER_MODE: "off" });
+  app = await startApp({
+    ...SECRETS,
+    DATABASE_URL: DB_URL,
+    WORKER_MODE: "off",
+    // Optional: E2E_DATABASE_URL=<seeded db> E2E_DEMO_ORG_SLUG=demo exercises the seeded-demo branch of these specs.
+    ...(process.env.E2E_DEMO_ORG_SLUG ? { DEMO_ORG_SLUG: process.env.E2E_DEMO_ORG_SLUG } : {}),
+  });
 });
 
 test.afterAll(async () => app.stop());
@@ -58,15 +64,17 @@ test.describe("/training — model registry", () => {
     await page.goto(`${app.base}/training`);
     await page.waitForLoadState("networkidle");
 
-    // Should show model registry table (the second table on the page, with Model/Stage/Kind/Metrics headers)
-    // First table is experiment matrix, second is model registry
+    // Seeded demo database (E2E_DEMO_ORG_SLUG): the registry table (the second table, after the experiment matrix)
+    // with stage badges. Empty database, what CI starts from: the honest empty state, no table and no made-up rows.
     const modelTable = page.locator("table").nth(1);
-    await expect(modelTable).toBeVisible();
-
-    // Should have stage badges in the model registry table
-    // Use first() to get the first match within the table context (there are multiple rows with zero_shot)
-    await expect(modelTable.locator("text=zero_shot").first()).toBeVisible();
-    await expect(modelTable.locator("text=yolo").first()).toBeVisible();
+    if (process.env.E2E_DEMO_ORG_SLUG) {
+      await expect(modelTable).toBeVisible();
+      await expect(modelTable.locator("text=zero_shot").first()).toBeVisible();
+      await expect(modelTable.locator("text=yolo").first()).toBeVisible();
+    } else {
+      await expect(page.getByText("No models registered")).toBeVisible();
+      await expect(page.locator("table")).toHaveCount(1); // only the experiment matrix
+    }
   });
 });
 
@@ -76,7 +84,7 @@ test.describe("/training — grounding checkpoint", () => {
     await page.waitForLoadState("networkidle");
 
     // Should show grounding checkpoint card - either metrics or honest "not registered" message
-    await expect(page.locator("text=Grounding checkpoint")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Grounding checkpoint" })).toBeVisible();
 
     // Check for either metrics or honest message
     const hasMetrics = await page.locator("text=map50").first().isVisible().catch(() => false);
