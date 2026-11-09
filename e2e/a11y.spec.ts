@@ -37,20 +37,13 @@ for (const theme of ["light", "dark"] as const) {
   test.describe(`axe — ${theme} theme`, () => {
     for (const route of ROUTES) {
       test(`${route} has no WCAG A/AA violations`, async ({ page }) => {
-        await page.goto(app.base + route, { waitUntil: "domcontentloaded" });
-        // Apply theme directly for testing (next-themes SSR cookie not reliable in test env)
-        if (theme === "dark") {
-          await page.evaluate(() => document.documentElement.classList.add("dark"));
-        } else {
-          await page.evaluate(() => document.documentElement.classList.remove("dark"));
-        }
+        await page.addInitScript((t) => window.localStorage.setItem("theme", t), theme);
+        await page.goto(app.base + route);
+        await page.waitForLoadState("networkidle");
         // The theme must really be applied, or the dark run would silently test light.
         await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b)/);
 
-        const { violations } = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-          .exclude("iframe")
-          .analyze();
+        const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
         const report = violations.map(
           (v) => `${v.id} [${v.impact}] x${v.nodes.length}: ${v.help}\n    ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join("\n    ")}`,
         );
@@ -60,11 +53,10 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-test.skip("the theme toggle switches the page and the choice survives a reload", async ({ page }) => {
-  await page.goto(`${app.base}/status`, { waitUntil: "domcontentloaded" });
+test("the theme toggle switches the page and the choice survives a reload", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("theme", "light"));
+  await page.goto(`${app.base}/status`);
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
-  // Theme toggle is hidden until useMounted() returns true; wait for it
-  await page.getByRole("button", { name: "Switch to dark theme" }).waitFor({ state: "visible", timeout: 15_000 });
   await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect(page.getByRole("button", { name: "Switch to light theme" })).toBeVisible();
