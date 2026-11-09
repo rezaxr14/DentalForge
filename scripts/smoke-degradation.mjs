@@ -208,7 +208,22 @@ await variant("A: DB down, WORKER_MODE=off", { ...SECRETS, DATABASE_URL: DEAD_DB
 await variant("B: DB down, WORKER_MODE=live", { ...SECRETS, DATABASE_URL: DEAD_DB, WORKER_MODE: "live" }, { dbUp: false, mode: "live" });
 if (dbUp) await variant("C: DB up, WORKER_MODE=live, no worker", { ...SECRETS, DATABASE_URL: DB_URL, WORKER_MODE: "live" }, { dbUp: true, mode: "live" });
 else console.log(`\n[C] SKIPPED: no Postgres at ${DB_URL.replace(/:[^:@/]*@/, ":***@")}`);
-await variant("D: insecure production config (fails closed, diagnosably)", { WORKER_MODE: "live" }, { misconfigured: true });
+// `next start` loads .env.local/.env.production from the repo root. A developer machine with a
+// complete .env.local would make variant D look "configured" and hide the fail-closed check.
+// Next does not overwrite variables that already exist in process.env, so explicit empty strings
+// keep the deployment shape deterministic on every machine (empty = absent, see env.ts).
+await variant(
+  "D: insecure production config (fails closed, diagnosably)",
+  {
+    WORKER_MODE: "live",
+    DATABASE_URL: "",
+    BETTER_AUTH_SECRET: "",
+    INVITE_SIGNING_SECRET: "",
+    REDIS_URL: "",
+    STORAGE_PROVIDER: "",
+  },
+  { misconfigured: true },
+);
 
 console.log(failures === 0 ? "\nsmoke: all checks passed" : `\nsmoke: ${failures} check(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
