@@ -22,12 +22,11 @@ export default defineConfig({
   // Timing measurements are opt-in (`pnpm perf:editor`): they depend on the machine and must not gate a normal run.
   testIgnore: process.env.E2E_PERF ? [] : ["**/perf-*.spec.ts"],
   // Specs own their servers and databases rows; one worker keeps ports and rows predictable.
-  // BUT axe tests can run in parallel against the same server (they only read).
-  workers: process.env.CI ? 4 : 1,
+  workers: 1,
   fullyParallel: false,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   forbidOnly: Boolean(process.env.CI),
-  timeout: 120_000,
+  timeout: 90_000,
   expect: { timeout: 10_000 },
   reporter: [["list"]],
   outputDir: "test-results",
