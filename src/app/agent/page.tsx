@@ -20,6 +20,9 @@ import {
   type WorkerInfo,
 } from "./agent-client";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 type Finding = {
   quadrant?: number;
   tooth_position?: number;

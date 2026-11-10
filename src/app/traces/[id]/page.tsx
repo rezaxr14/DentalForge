@@ -11,6 +11,9 @@ import { BackLink, PageShell } from "@/shared/ui/page";
 import { Badge, Card, Stat, caseName } from "@/shared/ui/primitives";
 import { Radiograph, type OverlayBox } from "@/shared/ui/radiograph";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 type Finding = {
   quadrant?: number;
   tooth_position?: number;
