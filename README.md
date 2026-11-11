@@ -4,7 +4,10 @@ Research-prototype workbench over real Dental-Agent artifacts (agent traces,
 zero-shot evals, YOLO pre-labels, annotations). **Research prototype, not for
 clinical use.**
 
-Plan status: M0–M4 done, M5 in progress. Decisions: `docs/adr/` (ADR-0001 through ADR-0023).
+Status: every page and worker capability described below is implemented and
+covered by tests. SFT and GRPO training have **not** been run, so `/training`
+shows both as "Not run yet". Decisions are recorded in `docs/adr/`
+(ADR-0001 through ADR-0031).
 
 ## Live demo
 
@@ -13,7 +16,10 @@ Supabase. Start at [`/status`](https://dentalforge-app.vercel.app/status) to
 see the capability ladder (database, worker mode, Redis, storage), then browse
 traces, evals, labels, quality, and rewards. Public artifacts are DENTEX-derived
 only; the Tufts data never leaves local development. Research prototype, not for
-clinical use — the demo database is reset periodically.
+clinical use. No Python worker is connected to the public demo, so live runs
+fall back to replay. A Vercel Cron clears visitor-created annotations and demo
+users nightly (the seeded data stays); `pnpm demo:seed --reset` rebuilds the
+data from the committed bundle.
 
 ## Screenshots
 
@@ -60,7 +66,7 @@ strict console error and horizontal overflow checks (`scripts/capture-screenshot
 
 | Mode | `TRACEFORGE_DATASOURCE` | `WORKER_MODE` | Data | Live runs |
 |------|------------------------|---------------|------|-----------|
-| Demo (production) | `postgres` | `off` | Seeded DENTEX from bundle | ❌ Replay only |
+| Demo (production) | `postgres` | `live` | Seeded DENTEX from bundle | Only with a connected worker — none is, so replay |
 | Local dev (fixture) | *(unset)* | `off` | Fixtures in `fixtures/` | ❌ Replay only |
 | Local dev (postgres) | `postgres` | `off` | Local DB | ❌ Replay only |
 | Live session | `postgres` | `live` | Your org | ✅ Queued jobs |
@@ -76,10 +82,10 @@ The capability ladder at `/status` reflects the active mode in real time.
 | Traces on DENTEX (model outputs, tool renders) | Yes, sanitized | Derived from DENTEX; provider terms must allow publishing |
 | Zero-shot eval runs (8 tracked) | Yes | Already public in VLM-DENTAL; sanitized |
 | Tufts images, traces, evals, weights | **Never** | Terms unverified; guarded by build (fails on `tufts` markers) |
-| YOLO DENTEX-only weights (ONNX) | Yes | AGPL-3.0 (Ultralytics); DENTEX-only training verified in WP0 |
+| YOLO DENTEX-only weights (ONNX) | **No** | Not built: no export script, no `.onnx`, no `onnxruntime` dependency (ADR-0027 stays `proposed`) |
 | Multi-dataset YOLO weights | No | Until Tufts terms confirmed |
 | Base model weights (Qwen, Llama, etc.) | No | Reference model ids only |
-| Secrets, tokens, absolute paths, usernames | Never | Canary test + secret scan in CI |
+| Secrets, tokens, absolute paths, usernames | Never | Canary tests in `tests/python/test_demo_build.py`, run in CI |
 
 The `/about-data` page shows the full notice with citations.
 
@@ -138,8 +144,9 @@ pnpm e2e:worker                         # contract + handler tests with real wor
 
 ## Learn More (TraceForge docs)
 
-- [`VLM_INTEGRATION_IMPLEMENTATION_PLAN.md`](./VLM_INTEGRATION_IMPLEMENTATION_PLAN.md) — work packages WP0–WP12
-- [`docs/adr/`](./docs/adr/) — ADR-0001 through ADR-0023 (schemas, parity, leak-definition fix, worker contract, ingest, etc.)
+- [`docs/adr/`](./docs/adr/) — ADR-0001 through ADR-0031 (schemas, parity, leak-definition fix, worker contract, ingest, demo bundle, hardening, deployment, VLM compatibility)
+- [`docs/verification.md`](./docs/verification.md) — the end-to-end proofs of the worker and VLM-DENTAL connection, with the exact commands and their exit codes
+- [`docs/live-demo.md`](./docs/live-demo.md) — what the deployed demo shows and how to rebuild it
 - Data honesty: directive leak = assistant text matching VLM-DENTAL `LEAK_PATTERNS` (**0 / 5,454**); teacher scaffold in stored user messages is expected setup (5,454 / 5,454) — see ADR-0006.
 
 ## Deploy on Vercel
@@ -147,7 +154,8 @@ pnpm e2e:worker                         # contract + handler tests with real wor
 Production: **https://dentalforge-app.vercel.app** (Vercel project
 `dentalforge-app`), backed by a Supabase Postgres database. Required production
 env: `DATABASE_URL` (Supabase pooler), `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`INVITE_SIGNING_SECRET`, `TRACEFORGE_DATASOURCE=postgres`, `WORKER_MODE=live`.
+`INVITE_SIGNING_SECRET`, `TRACEFORGE_DATASOURCE=postgres`, `DEMO_ORG_SLUG=demo`
+(the anonymous demo reads that org), `WORKER_MODE=live`.
 Secrets must be unique — the app refuses to boot with the public dev/example
 values (see `src/shared/config/env.ts`). See [`docs/supabase.md`](./docs/supabase.md)
 for the database runbook.

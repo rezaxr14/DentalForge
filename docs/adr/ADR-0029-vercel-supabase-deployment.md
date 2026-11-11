@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-11-07
-**Context:** The plan (§9 / WP9) specified Neon for Postgres. The deployed
+**Context:** The original deployment plan specified Neon for Postgres. The deployed
 production uses **Supabase** (managed Postgres) instead. This ADR documents the
 deviation, the rationale, and the operational details.
 

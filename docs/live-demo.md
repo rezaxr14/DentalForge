@@ -98,7 +98,7 @@ The script will:
 > without a worker. Live runs demonstrate the end-to-end connection when a
 > worker is attached.
 
-## Negative control (for WP11 proof)
+## Negative control
 
 Stop LM Studio (`Ctrl+C` in LM Studio) → queue a live run → job fails with
 retryable error "model unavailable" → worker backs off → restart LM Studio →

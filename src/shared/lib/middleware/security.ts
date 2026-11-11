@@ -1,5 +1,5 @@
 /**
- * Security middleware: rate limiting + CSRF + body-size (WP8 hardening).
+ * Security middleware: rate limiting + CSRF + body-size.
  *
  * Usage in a route:
  *   const guard = createSecurityGuard({ max: 60, windowMs: 60_000 });

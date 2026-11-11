@@ -3,7 +3,7 @@
 Date: 2026-10-11 · Status: accepted
 
 ## Context
-While verifying `ingest/eval-run` on the owner's real files, the owner's local agent reported (the author of this ADR has not seen the data)
+While verifying `ingest/eval-run` on the owner's real files, a verification run on the owner's machine reported (the author of this ADR has not seen the data)
 that **12 of 49 lines** of `zero_shot_dentex_test_transformers_Qwen--Qwen3.5-9B.jsonl` fail `EvalCase`:
 a prediction's `tooth_position` holds a whole FDI code (18, 28, 36 … 48) although `Finding` caps it at 8, and some `confidence` values are `null`
 where the schema wanted a number or nothing. The two paths then disagreed: the **importer skipped the 12 lines silently** (n=37, so every mean in the
@@ -43,7 +43,7 @@ confidence range and quadrant are still enforced; skipped lines are counted, num
 untouched. Mutation-checked: 9 changes (predictions validated strictly again, lenient ground truth, lenient matched `gt`, uncounted invalid lines, string echo, per-issue counting, replace without
 the org filter, replace without the API-run guard, stale detection off) each fail the tests.
 
-## Verified on the owner's real data (reported by the owner's local agent, 2026-10-12)
+## Verified on the owner's real data (reported from the owner's machine, 2026-10-12)
 `pnpm diagnose:data`: **all 20 real files validate**, including the 12 Qwen3.5-9B lines that failed before, so the two reported causes were the whole story. `pnpm import:local --replace-evals` exited 0 and
 the Qwen file imported `49 lines, 49 valid` (it had been 37). Not re-run by the author of this ADR.
 

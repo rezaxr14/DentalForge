@@ -45,7 +45,7 @@ survived at first (the cross-tenant re-read) and led to the tests above. `pnpm e
 the 409 and checks in Postgres that the stored summary equals the mean of the stored rows. Migrations `0000`→`0004` apply on a scratch database
 and `drizzle-kit generate` shows no drift.
 
-## Verified later on the owner's real data (reported by the owner's local agent, 2026-10-11)
+## Verified later on the owner's real data (reported from the owner's machine, 2026-10-11)
 Postgres 17 and the real VLM-DENTAL `data/evaluations` (8 files). Not re-run by the author of this ADR. Reported: no repeated `image_id`
 in any file; one real 50-case run ingests in one chunk with a stored summary equal to the mean computed from the file (float32, 1e-6);
 a 993,422-character chunk of real cases is accepted, the whole 1.77 MB file in one request is a 413 with no run written, and the remainder
