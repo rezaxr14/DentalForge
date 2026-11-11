@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-11-07
-**Context:** WP5 adds the Training Hub page (`/training`) with a pipeline view
+**Context:** The Training Hub page (`/training`) has a pipeline view
 (Data → SFT → GRPO → Evaluation). Stages show "Done" only when real records
 exist in the database; otherwise "Not run today". No target numbers in cells.
 This ADR defines the minimal schema and ingest endpoint so the data flows when

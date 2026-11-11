@@ -335,7 +335,7 @@ async function main() {
         check("locate_tooth without grounding weights fails the job instead of inventing a box", noGround?.status === "failed" && /grounding weights/.test(JSON.stringify(noGround)), JSON.stringify(noGround));
         check("  …and it is not retried: one attempt, although more were allowed", noGround?.attempts === 1 && noGround.maxAttempts > 1, JSON.stringify(noGround));
       }
-      // WP3: `trace.render_artifacts` re-executes a stored trace's tool calls. The trace goes in
+      // `trace.render_artifacts` re-executes a stored trace's tool calls. The trace goes in
       // through the real worker API, so this also exercises `GET /traces/{id}` and `GET /images/{id}`
       // from the worker's side, not just the handlers.
       const ing = await api("/api/worker/v1/ingest/traces", {

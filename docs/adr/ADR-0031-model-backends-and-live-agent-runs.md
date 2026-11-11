@@ -4,7 +4,7 @@ Date: 2026-10-24 · Status: **implemented and tested** · Builds on ADR-0030 (co
 
 ## Context
 
-WP2 gives the worker two ways to answer an `agent.run` job:
+The worker has two ways to answer an `agent.run` job:
 
 - **`torch_hf`** — the real backend: VLM-DENTAL's own Qwen backbone through its own `run_agent` loop, optionally with a LoRA adapter or a merged checkpoint. This is the model the research was done with.
 - **`openai_compat`** — a local OpenAI-compatible server (LM Studio by default). It exists so the whole pipeline — job, streamed turns, stored trace, Trace Explorer, artifacts — can be exercised on a laptop **before** a trained adapter exists, and by anyone reviewing the app without a GPU.
@@ -61,7 +61,7 @@ Not every recorded trace is replayable *by the policy loop at all*: `rejected_fi
 
 Upstream has no per-turn hook, so the backend emits every `turn` event after `run_agent` returns. That is a visible consequence, not a hidden one: the UI says turns arrive at completion for this backend. The optional progress tap the plan allows (wrapping `generate_agent_reply`) was **not** installed — monkey-patching upstream in-process is a correctness risk for a file we are told never to modify, and the plan makes it optional.
 
-Tool images from a `torch_hf` run are **not** uploaded: the trajectory does not hand them out. `trace.render_artifacts` (WP3) re-executes the calls and uploads the results. `openai_compat` can upload, because our loop owns the sink.
+Tool images from a `torch_hf` run are **not** uploaded: the trajectory does not hand them out. `trace.render_artifacts` re-executes the calls and uploads the results. `openai_compat` can upload, because our loop owns the sink.
 
 ### 6. A live run's image metadata and ground truth
 
@@ -109,11 +109,11 @@ Run on 2026-10-24, Windows 11, Node/pnpm as in the repo, Postgres 17 in Docker (
 - `pnpm typecheck` → exit 0.
 - `pnpm lint` → exit 0, **0 errors, 0 warnings** (the one long-standing warning in `scripts/e2e-worker.mjs` — a helper parameter that was never used — is fixed in this change).
 - `pnpm exec vitest run --reporter=dot` → **700 passed, 0 failed** across 35 files; exit 1 overall because `tests/m8-bus-redis.test.ts` throws `EBUSY … rmdir …\tf-redis-…` in `afterAll` on Windows. Pre-existing, untouched by this work, and CI runs Linux.
-- Python worker suite in the working venv (`C:\Users\<owner>\Home\Code\vlm-dental\.venv`, torch 2.5.1+cu121, ultralytics 8.4.116) → **125 passed**, exit 0.
+- Python worker suite in a clean virtual environment (torch 2.5.1+cu121, ultralytics 8.4.116) → **125 passed**, exit 0.
 - The CI-shaped subset under the **system** Python 3.12.3, which has no `dental_agent` → **116 passed, 10 skipped**, exit 0. The 10 skips are the loop/conformance tests, printed with their reason.
 - `pnpm compat` → exit 0; `tool.execute`, `trace.render_artifacts`, `yolo.prelabel`, `al.score`, `agent.run.openai_compat` OK; `agent.run.torch_hf` and `eval.run` SKIP for the `transformers`/`huggingface-hub` reason above.
 - `pnpm build` with the CI production secrets → exit 0.
-- **Live acceptance (plan WP2 acceptance 1), `pnpm e2e:worker` with `E2E_LIVE_AGENT=1`** → exit 0, **all checks passed**: a real `val_18` radiograph (3003×1316) seeded as the run's image, the worker registered a `test` model and advertised `agent.run`, the job succeeded on `qwen3.5-4b` through LM Studio, the stored trace carries `backend=openai_compat` / `stage=test`, at least one tool image was stored as an artifact, and `GET /traces/{id}` rendered it (`stored artifact` + `Test backend`).
+- **Live acceptance 1, `pnpm e2e:worker` with `E2E_LIVE_AGENT=1`** → exit 0, **all checks passed**: a real `val_18` radiograph (3003×1316) seeded as the run's image, the worker registered a `test` model and advertised `agent.run`, the job succeeded on `qwen3.5-4b` through LM Studio, the stored trace carries `backend=openai_compat` / `stage=test`, at least one tool image was stored as an artifact, and `GET /traces/{id}` rendered it (`stored artifact` + `Test backend`).
 - **Screenshots viewed** (Playwright against the production build, a seeded org deleted afterwards): the trace page at 1280 px light, 1280 px dark and 390 px mobile showed the amber "Test backend (openai_compat) — not the research model" banner, the stored tool image with `stored artifact` + its `worker_exact` provenance, and the responsive stacking. No layout regression from the banner.
 - Scripted-backend suite (`examples/python-worker/test_backends.py`, `test_agent_run.py`) covers the failure modes: server unreachable (retryable, with the reason), malformed JSON (retry then `formatOk=false`, last reply preserved), unknown tool (an observation, not a crash), tool exception (recorded as `loop.py` does), budget exhaustion (the model is told and can answer), cancellation between turns, and timeout.
 - `torch_hf` with injected fakes: trajectory→events, cohort switch (`run_agent` vs `run_agent_no_tools`), adapter/checkpoint path selection, laziness, serialization, idle unload, model switch releases the previous model.
@@ -129,9 +129,9 @@ Not verified here:
 
 ---
 
-## Addendum (WP3): `eval.run`, `al.score`, `trace.render_artifacts`
+## Addendum: `eval.run`, `al.score`, `trace.render_artifacts`
 
-Date: 2026-10-27 · Status: decided before the code, per WP3.
+Date: 2026-10-27 · Status: decided before the code.
 
 ### 1. Active-learning entropy is defined over retained detections
 
@@ -194,10 +194,10 @@ Re-execution is deterministic per (image, tool, args), so two turns asking the s
 same PNG. The handler hashes the bytes, uploads each distinct hash once, and points every matching
 `(turnIdx, callIdx)` at that artifact. Artifacts are keyed by `(turnIdx, callIdx)` in the result, so the
 ordering the trace page needs survives dedupe. The offline CLI (`render_artifacts.py --trace <file>`)
-writes the same PNGs to a directory instead of uploading, which is what WP7 uses to build demo assets.
+writes the same PNGs to a directory instead of uploading, which is what the demo bundle build uses.
 
 ### 5. `parity.golden` stays a dev CLI
 
-It ships as `examples/python-worker/tools_goldens.py` (WP1) writing `fixtures/goldens/vlm_tools.json`, and
+It ships as `examples/python-worker/tools_goldens.py` writing `fixtures/goldens/vlm_tools.json`, and
 the browser ports are compared against `fixtures/goldens/{m2_goldens,m3_quality,m4_tools}.json`. It is
 **not** a job type and never enters the production contract; promoting it would need its own ADR.

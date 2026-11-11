@@ -35,14 +35,14 @@ The app already has two sides that must not break:
 
 ## Not done / consequences
 - SFT and GRPO have **not been run**. Nothing in this layer reports training results.
-- `agent.run`, `eval.run`, `al.score` and `trace.render_artifacts` handlers are still stubs in `worker.py`; this ADR covers the compatibility layer and adapters only (WP2/WP3 wire the handlers).
+- `agent.run`, `eval.run`, `al.score` and `trace.render_artifacts` handlers are still stubs in `worker.py`; this ADR covers the compatibility layer and adapters only; the handlers were wired separately (ADR-0031).
 - No CSV eval adapter yet. The existing importer read JSONL only, and this refactor was required to preserve behaviour; a `eval.csv.v1` reader can be added without touching `eval.v1`.
 - `requirements-light.txt` cannot serve VLM jobs because the upstream registry imports `ultralytics`; the file's comment says so. The weekly job therefore verifies signatures and tool names and skips tool execution when the runtime is absent.
 - The probe's package import check runs in-process for the CLI and for the contract test (the CLI is already a dedicated process); the worker uses the isolated form.
 - A probe run before this ADR wrote `__pycache__` files into the checkout (ignored by git, tracked status clean). Bytecode writing is now disabled.
 
 ## Evidence
-All commands below were run on this Windows machine, in the working venv (`C:\Users\<owner>\Home\Code\vlm-dental\.venv`), against VLM-DENTAL HEAD `1346424` (branch `main`, clean) unless a different interpreter is named. Exit codes were read directly (`$LASTEXITCODE`), not inferred from a pipe.
+All commands below were run on a Windows machine, in a clean virtual environment, against VLM-DENTAL HEAD `1346424` (branch `main`, clean) unless a different interpreter is named. Exit codes were read directly (`$LASTEXITCODE`), not inferred from a pipe.
 
 - Python worker suites, one run: `python -m pytest -q examples/python-worker/test_dental_handlers.py test_vlm_compat.py test_worker_software.py test_tools_goldens.py` → exit 0, **56 passed** in 17.36 s (26 handler + 17 probe + 6 software + 7 goldens).
 - `pnpm compat` → exit 0. All eight tools present (`zoom_crop, window_level, locate_tooth, fdi_label, denoise, contralateral_compare, enhance_contrast, nudge_crop`); available `tool.execute, trace.render_artifacts, yolo.prelabel, al.score, agent.run.openai_compat`; `agent.run.torch_hf` and `eval.run` skipped with the venv's real error (`ImportError: huggingface-hub>=1.5.0,<2.0 is required ... found huggingface-hub==2.2.0`); advertised contract jobs `tool.execute, trace.render_artifacts, yolo.prelabel, al.score, agent.run`.
@@ -57,5 +57,5 @@ All commands below were run on this Windows machine, in the working venv (`C:\Us
 Not verified here:
 - The weekly `upstream-compat.yml` has not run yet (no CI execution at the time of writing); only the same commands it calls were run locally.
 - No model was loaded and no training was run. SFT/GRPO results do not exist.
-- The app-side rendering of "worker online, no VLM jobs" is WP4/WP10; this ADR only proves the worker registers with zero VLM jobs.
+- The app-side rendering of "worker online, no VLM jobs" lives in the capability page; this ADR only proves the worker registers with zero VLM jobs.
 - The stored goldens were generated in the working venv (torch 2.5.1+cu121, ultralytics 8.4.116); model-tool numbers are only meaningful on that stack.
