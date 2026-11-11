@@ -76,8 +76,14 @@ jobs:
           examples/python-worker/test_vlm_compat.py
           examples/python-worker/test_worker_software.py
           examples/python-worker/test_tools_goldens.py
+          tests/python/test_demo_build.py
           tests/python/test_compat_contract.py
           tests/python/test_protocol_conformance.py
+      # Public-safety guarantee: two seeds leave exactly one row per bundle item.
+      - name: demo seed is idempotent
+        run: pnpm exec vitest run tests/demo-seed-idempotent.test.ts
+        env:
+          DEMO_SEED_IDEMPOTENCY: "1"
       - run: pnpm smoke
       # The worker pipeline runs twice: default DB-polling mode (no Redis in the app's config) ...
       - name: e2e:worker (polling mode)
