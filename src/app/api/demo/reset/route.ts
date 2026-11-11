@@ -1,68 +1,121 @@
-import { resolveUserDeps } from "@/shared/jobs/deps";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { getPgDb } from "@/shared/db/pg";
 import * as s from "@/shared/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
 import { createSecurityGuard } from "@/shared/lib/middleware/security";
 
 export const dynamic = "force-dynamic";
 
-const cronSecret = process.env.CRON_SECRET;
 const demoResetGuard = createSecurityGuard({ key: "demo:reset", max: 5, windowMs: 24 * 60 * 60 * 1000 });
 
-export async function POST(req: Request) {
+const RETRY_AFTER_S = 30;
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function unavailable(): Response {
+  return new Response(JSON.stringify({ error: "Database unavailable" }), {
+    status: 503,
+    headers: { "content-type": "application/json", "retry-after": String(RETRY_AFTER_S) },
+  });
+}
+
+/**
+ * `POST /api/demo/reset` — Vercel Cron, once a day.
+ *
+ * Vercel sends `Authorization: Bearer $CRON_SECRET` for a cron job when
+ * `CRON_SECRET` is set. A missing secret is a misconfiguration, so the route
+ * fails closed (401) rather than running unauthenticated.
+ *
+ * The route removes what visitors created in the demo org (annotation sets,
+ * annotations, review tasks and decisions, predictions, queue scores, agreement
+ * stats, exports, audit rows, invites, worker tokens, and the demo-only users)
+ * and keeps the seeded rows: datasets, images, traces, eval runs and cases,
+ * models and artifacts. Running it twice is a no-op. It does not re-seed; the
+ * committed bundle is re-applied with `pnpm demo:seed --reset` when the data
+ * itself changes.
+ */
+export async function POST(req: Request): Promise<Response> {
+  const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
-  if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
-  }
+  if (!secret || auth !== `Bearer ${secret}`) return json({ error: "Unauthorized" }, 401);
 
   const guard = await demoResetGuard.check(req);
   if (!guard.ok) return guard.response;
 
-  const d = await resolveUserDeps();
-  if (d instanceof Response) return d;
-  if (!d.actor) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
+  const slug = process.env.DEMO_ORG_SLUG ?? "demo";
   const db = getPgDb();
-  const orgId = d.actor.orgId;
 
   try {
-    const traces = await db.select({ id: s.traces.id }).from(s.traces).where(eq(s.traces.orgId, orgId));
-    const traceIds = traces.map((t) => t.id);
-    const images = await db.select({ id: s.images.id }).from(s.images).where(eq(s.images.orgId, orgId));
-    const imageIds = images.map((i) => i.id);
-    const evalRuns = await db.select({ id: s.evalRuns.id }).from(s.evalRuns).where(eq(s.evalRuns.orgId, orgId));
-    const evalRunIds = evalRuns.map((e) => e.id);
+    const org = (
+      await db.select({ id: s.organizations.id }).from(s.organizations).where(eq(s.organizations.slug, slug)).limit(1)
+    )[0];
+    if (!org) return json({ ok: true, slug, skipped: "no demo org" });
+    const orgId = org.id;
 
-    if (traceIds.length) {
-      await db.delete(s.toolCalls).where(and(eq(s.toolCalls.orgId, orgId), inArray(s.toolCalls.turnId, traceIds)));
-      await db.delete(s.traceTurns).where(and(eq(s.traceTurns.orgId, orgId), inArray(s.traceTurns.traceId, traceIds)));
-      await db.delete(s.traces).where(and(eq(s.traces.orgId, orgId), inArray(s.traces.id, traceIds)));
-    }
-    if (evalRunIds.length) {
-      await db.delete(s.evalCases).where(and(eq(s.evalCases.orgId, orgId), inArray(s.evalCases.runId, evalRunIds)));
-      await db.delete(s.evalRuns).where(and(eq(s.evalRuns.orgId, orgId), inArray(s.evalRuns.id, evalRunIds)));
-    }
-    if (imageIds.length) {
-      await db.delete(s.images).where(and(eq(s.images.orgId, orgId), inArray(s.images.id, imageIds)));
-    }
+    const members = await db
+      .select({ userId: s.memberships.userId })
+      .from(s.memberships)
+      .where(eq(s.memberships.organizationId, orgId));
+    const memberIds = members.map((m) => m.userId);
+    const elsewhere = memberIds.length
+      ? await db
+          .select({ userId: s.memberships.userId })
+          .from(s.memberships)
+          .where(and(inArray(s.memberships.userId, memberIds), ne(s.memberships.organizationId, orgId)))
+      : [];
+    const elsewhereIds = new Set(elsewhere.map((m) => m.userId));
+    const demoOnlyUsers = memberIds.filter((id) => !elsewhereIds.has(id));
 
-    return new Response(
-      JSON.stringify({ ok: true, deleted: { traces: traceIds.length, evalRuns: evalRunIds.length, images: imageIds.length } }),
-      { status: 200, headers: { "content-type": "application/json" } }
+    const deleted: Record<string, number> = {};
+    const count = async (run: Promise<unknown[]>): Promise<number> => (await run).length;
+
+    deleted.reviewDecisions = await count(
+      db.delete(s.reviewDecisions).where(eq(s.reviewDecisions.orgId, orgId)).returning({ id: s.reviewDecisions.id }),
     );
+    deleted.reviewTasks = await count(
+      db.delete(s.reviewTasks).where(eq(s.reviewTasks.orgId, orgId)).returning({ id: s.reviewTasks.id }),
+    );
+    deleted.annotations = await count(
+      db.delete(s.annotations).where(eq(s.annotations.orgId, orgId)).returning({ id: s.annotations.id }),
+    );
+    deleted.annotationSets = await count(
+      db.delete(s.annotationSets).where(eq(s.annotationSets.orgId, orgId)).returning({ id: s.annotationSets.id }),
+    );
+    deleted.predictions = await count(
+      db.delete(s.predictions).where(eq(s.predictions.orgId, orgId)).returning({ id: s.predictions.id }),
+    );
+    deleted.queueScores = await count(
+      db.delete(s.queueScores).where(eq(s.queueScores.orgId, orgId)).returning({ id: s.queueScores.id }),
+    );
+    deleted.agreementStats = await count(
+      db.delete(s.agreementStats).where(eq(s.agreementStats.orgId, orgId)).returning({ id: s.agreementStats.id }),
+    );
+    deleted.datasetExports = await count(
+      db.delete(s.datasetExports).where(eq(s.datasetExports.orgId, orgId)).returning({ id: s.datasetExports.id }),
+    );
+    deleted.auditLog = await count(
+      db.delete(s.auditLog).where(eq(s.auditLog.orgId, orgId)).returning({ id: s.auditLog.id }),
+    );
+    deleted.invites = await count(
+      db.delete(s.invites).where(eq(s.invites.organizationId, orgId)).returning({ id: s.invites.id }),
+    );
+    deleted.workerTokens = await count(
+      db.delete(s.workerTokens).where(eq(s.workerTokens.orgId, orgId)).returning({ id: s.workerTokens.id }),
+    );
+    deleted.users = demoOnlyUsers.length
+      ? await count(db.delete(s.users).where(inArray(s.users.id, demoOnlyUsers)).returning({ id: s.users.id }))
+      : 0;
+    deleted.memberships = await count(
+      db.delete(s.memberships).where(eq(s.memberships.organizationId, orgId)).returning({ id: s.memberships.id }),
+    );
+
+    return json({ ok: true, slug, deleted });
   } catch (e) {
     console.error("[demo:reset]", e);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+    return unavailable();
   }
 }

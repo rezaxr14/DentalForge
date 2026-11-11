@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-11-07
-**Context:** WP8 hardens the app for a public deployment. The primitives exist in
+**Context:** This hardens the app for a public deployment. The primitives exist in
 code; this ADR documents the wiring, tests, and acceptance.
 
 ## Rate limiting (`src/shared/lib/rate-limit.ts`)
@@ -122,10 +122,19 @@ controls). It was found by the browser suite (the strict console watcher and the
 
 ### Nightly reset (`/api/demo/reset`)
 
-Vercel Cron calls `/api/demo/reset` guarded by `CRON_SECRET` (header
-`x-cron-secret: <value>`). Deletes non-seed annotation sets and users of the
-demo org, keeps seeded data (images, traces, evals, models). Idempotent.
-Tested: call twice, second call is no-op; seed data unchanged.
+`vercel.json` schedules `POST /api/demo/reset` at 03:00 UTC. Vercel sends
+`Authorization: Bearer $CRON_SECRET` for a cron job when `CRON_SECRET` is set;
+the route fails closed (401) when the secret is missing or wrong, and also
+answers 429 through the standard rate-limit guard.
+
+The route deletes what visitors created in the demo org — annotation sets,
+annotations, review tasks and decisions, predictions, queue scores, agreement
+stats, dataset exports, audit rows, invites, worker tokens, and the users whose
+only membership is the demo org — and keeps the seeded rows (datasets, images,
+traces, eval runs and cases, models, artifacts). A second run deletes nothing.
+It does not re-seed; `pnpm demo:seed --reset` re-applies the committed bundle
+when the data itself changes. Tested in `tests/demo-reset.test.ts` (auth
+negative, seeded rows survive, second run is a no-op).
 
 ## Worker tokens (ADR-0010)
 
@@ -136,17 +145,21 @@ Tested: call twice, second call is no-op; seed data unchanged.
 
 ## Hygiene
 
-- `pnpm audit` result recorded in the PR
-- Secret scan in CI (`trufflehog` or `git-secrets`)
+- `pnpm audit` and a secret scan are **not** wired into CI. The only automated
+  leak guard is the demo-bundle test suite (`tests/python/test_demo_build.py`),
+  which scans `demo/` and `public/demo-assets/` for key patterns, personal paths
+  and Tufts markers. A repository-wide secret scan is still open work.
 
 ## Acceptance
 
 - All wired routes return 429 with `Retry-After` on burst
-- R2 adapter contract tests pass against MinIO
+- R2 adapter: **not implemented**; live-worker artifact upload works only with
+  the local filesystem adapter, which is ephemeral on Vercel
 - DB failure mid-handler → 503 + `Retry-After` (regression test)
 - Body-size enforcement → 413 on oversize streaming payload
 - CSRF → 403 on cross-origin mutating request
 - CSP headers present; axe + strict console pass
-- `/api/demo/reset` with valid `CRON_SECRET` resets demo org; invalid secret → 401
+- `/api/demo/reset` with valid `CRON_SECRET` clears visitor rows and keeps the
+  seeded data; invalid secret → 401 (`tests/demo-reset.test.ts`)
 - Worker token scope negative tests pass
-- `pnpm audit` and secret scan recorded in PR
+- `pnpm audit` and a repository-wide secret scan: **not done**
