@@ -590,6 +590,33 @@ async function main() {
       counts.rows[0].traces === 1 && counts.rows[0].turns === fixture.turns.length && counts.rows[0].calls === wantCalls,
       JSON.stringify({ got: counts.rows[0], wantTurns: fixture.turns.length, wantCalls }),
     );
+
+    // ---- round trip: import -> Postgres -> export, deep-equal ----
+    // The worker read endpoint is the export side a render/eval job consumes. Compare the whole
+    // turn/tool-call payload the fixture sent with what the endpoint returns: a lossy store (dropped
+    // args, reordered calls, a dropped failure flag) fails here, not in a screenshot.
+    const back = await fetch(`${BASE}/api/worker/v1/traces/${traceId}`, {
+      headers: { "x-contract-version": "1", authorization: `Bearer ${token}` },
+    });
+    const backJson = await back.json().catch(() => null);
+    const wantTurns = fixture.turns.map((t) => ({
+      idx: t.turn,
+      toolCalls: (t.tool_calls_this_turn ?? []).map((c, j) => ({
+        idx: j,
+        toolName: c.tool_name,
+        args: c.tool_args ?? {},
+        ok: c.tool_ok,
+        error: null,
+        artifactId: null,
+      })),
+    }));
+    check(
+      "the stored trace round-trips through GET /traces/{id} deep-equal",
+      back.status === 200 &&
+        backJson?.traceId === traceId &&
+        JSON.stringify(backJson?.turns) === JSON.stringify(wantTurns),
+      JSON.stringify({ status: back.status, got: backJson?.turns, want: wantTurns }).slice(0, 1_200),
+    );
   } finally {
     await tp.end();
   }
