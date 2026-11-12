@@ -14,6 +14,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   EvalCase,
+  UnverifiedTraceWrapper,
   VerifiedTrace,
   type EvalCaseT,
   type VerifiedTraceT,
@@ -119,8 +120,33 @@ export function fixtureSource(): DataSource {
         return Promise.resolve(null);
       }
       const parsed = VerifiedTrace.safeParse(raw);
-      if (!parsed.success) return Promise.resolve(null);
-      const t = parsed.data;
+      let t: VerifiedTraceT;
+      if (parsed.success) {
+        t = parsed.data;
+      } else {
+        // The unverified fixture is a `generation_failed` wrapper with no
+        // trajectory. Listing it but returning null made the list link to a
+        // dead "Trace not found" page, so represent the failure honestly: the
+        // ground truth is real, and there is no recorded answer.
+        const wrapper = UnverifiedTraceWrapper.safeParse(raw);
+        if (!wrapper.success) return Promise.resolve(null);
+        const w = wrapper.data;
+        t = {
+          image_id: w.image_id,
+          image_path: w.image_path,
+          dataset: "dentex",
+          ground_truth: w.ground_truth,
+          turns: [],
+          tool_calls: [],
+          final_answer: null,
+          messages: [],
+          format_ok: false,
+          verifier_reason:
+            w.status === "generation_failed"
+              ? "generation failed: no final answer was produced"
+              : "unverified: no verified trajectory was recorded",
+        };
+      }
       if (t.dataset.toLowerCase() !== "dentex") return Promise.resolve(null);
       const summary = listFixtureTraces().find((r) => r.id === id);
       // The committed fixtures ship five DENTEX derivatives under public/labels.
