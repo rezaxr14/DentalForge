@@ -20,6 +20,7 @@
 
     "ci": "pnpm typecheck && pnpm lint && pnpm test",
     "contract:docs": "tsx scripts/generate-worker-contract.ts",
+    "contract:validate": "tsx scripts/contract-validate.ts",
     "worker:token": "tsx scripts/create-worker-token.ts",
     "mock-worker": "tsx examples/mock-worker/index.ts",
     "smoke": "node scripts/smoke-degradation.mjs",
