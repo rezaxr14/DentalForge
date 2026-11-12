@@ -61,7 +61,7 @@ test.describe("/about-data — provenance", () => {
   });
 });
 
-test.describe("/about-data — honest status", () => {
+test.describe("/about-data - honest status", () => {
   test("does not claim SFT/GRPO are done", async ({ page }) => {
     await page.goto(`${app.base}/about-data`);
     await page.waitForLoadState("networkidle");
@@ -69,5 +69,14 @@ test.describe("/about-data — honest status", () => {
     const text = await page.textContent("body");
     expect(text).not.toMatch(/SFT.*done/i);
     expect(text).not.toMatch(/GRPO.*done/i);
+  });
+
+  test("says the traces are teacher-generated SFT data, not model performance", async ({ page }) => {
+    await page.goto(`${app.base}/about-data`);
+    await page.waitForLoadState("networkidle");
+
+    const text = await page.textContent("body");
+    expect(text).toMatch(/teacher-generated SFT training traces/i);
+    expect(text).toMatch(/performance numbers appear only on/i);
   });
 });

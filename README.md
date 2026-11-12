@@ -9,6 +9,11 @@ covered by tests. SFT and GRPO training have **not** been run, so `/training`
 shows both as "Not run yet". Decisions are recorded in `docs/adr/`
 (ADR-0001 through ADR-0031).
 
+**What the traces are.** The 38 demo traces are teacher-generated SFT training
+data: a frontier LLM produced them in a tool loop with ground-truth guidance,
+and a different model family verified the format. They are supervision data, not
+a trained model's performance; model numbers appear only on `/evals`.
+
 ## Live demo
 
 **https://dentalforge-app.vercel.app** — Next.js app on Vercel, Postgres on
