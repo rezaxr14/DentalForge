@@ -17,5 +17,432 @@
     "dentex": "CC-BY-NC-SA-4.0",
     "ultralytics": "AGPL-3.0"
   },
-  "bundleBytes": 1976447
+  "bundleBytes": 1976447,
+  "toolVersions": {
+    "python": "3.12.3",
+    "pillow": "12.3.0"
+  },
+  "assetBytesTotal": 5008645,
+  "assets": [
+    {
+      "path": "demo-assets/artifacts/255_turn10_i2.jpg",
+      "bytes": 12974,
+      "sha256": "9840b6f045af11fee513476ce887efda8f4142b5d8780eace4c135f258d50c04"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn11_i0.jpg",
+      "bytes": 9700,
+      "sha256": "3ffba6e9f7e91fc90feef324f0c38dba205ee9c2bcd976492cc21f8af2732679"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn11_i1.jpg",
+      "bytes": 12021,
+      "sha256": "119e6877d5aeaecce0d5162441dd35f7fddd46b5668268396ec39c9dccf1379a"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn11_i2.jpg",
+      "bytes": 16664,
+      "sha256": "7bd18ffce8dea0f065b977400b116767e176ab2f1e038fd29afe18b9af8a8319"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn12_i0.jpg",
+      "bytes": 7749,
+      "sha256": "5871da7f18961270d0a91e76f2ee613907bc360fd029e0e67d46124653966caf"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn12_i1.jpg",
+      "bytes": 3731,
+      "sha256": "078953373347d535b38c7ecf02271e4cbed431974d6196f3bb30fa08c2a2dd2a"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn12_i2.jpg",
+      "bytes": 7710,
+      "sha256": "2daeb720a79dc9d561fec6b484f01b9469dfa60a5d8ebe6249234180cb6d7fe1"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn13_i0.jpg",
+      "bytes": 19629,
+      "sha256": "774a812d529bcfe6ae728466c09b0c4b37ab03d6d0b7ccaf63ceb98c2044a423"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn13_i1.jpg",
+      "bytes": 5883,
+      "sha256": "a1f424a850d17d3cb76fb5865d313edff03d4d47abecaf460064fca7c26f93a2"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn13_i2.jpg",
+      "bytes": 8738,
+      "sha256": "8f61207094ce95eaf9b9308459be415cdc21d9c0616259c84352c7cd039d77ad"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn14_i0.jpg",
+      "bytes": 23199,
+      "sha256": "6e239bb2bce145deb8eec97f6097afbb114bd040cae9e9ad136f70670815429e"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn14_i1.jpg",
+      "bytes": 17142,
+      "sha256": "16c7ceff31219058c168cedf4ef6a17a782f388496edc218ed140abbed5d3e64"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn14_i2.jpg",
+      "bytes": 17744,
+      "sha256": "2a20ee08c2ef11071fc8e4628e5d905eae4274b5cb118f0f290c32c5d87ec76d"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn15_i1.jpg",
+      "bytes": 18625,
+      "sha256": "235dce0fc2538e36ebecc53506ad126e61fc5999102f51f066c1287f0fba6cac"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn17_i0.jpg",
+      "bytes": 17585,
+      "sha256": "7ffd16d49c3b7ed51bfb810be8adcc86524fc91de82a9aea6e2b660d0803d95b"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn17_i1.jpg",
+      "bytes": 773,
+      "sha256": "87adca07a896d7d9cbbc6200c24ae850befbe1de30e32af35852c184af313f6b"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn18_i1.jpg",
+      "bytes": 10270,
+      "sha256": "1bc5b8cab12556d7e751d3d5db8b08ca6b0118b80ad78b7a3aada7c117cad85d"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn18_i2.jpg",
+      "bytes": 7277,
+      "sha256": "e3d1baae8aa873273532b095ab37c0827dcc40c4e18188db30687da12b7deb3a"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn19_i0.jpg",
+      "bytes": 7710,
+      "sha256": "2daeb720a79dc9d561fec6b484f01b9469dfa60a5d8ebe6249234180cb6d7fe1"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn19_i1.jpg",
+      "bytes": 12021,
+      "sha256": "119e6877d5aeaecce0d5162441dd35f7fddd46b5668268396ec39c9dccf1379a"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn20_i0.jpg",
+      "bytes": 7856,
+      "sha256": "96cec57bbddbadb0e01e992b6a7bb47d78a7939453cab01e96bf7c0a2422383b"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn20_i1.jpg",
+      "bytes": 13106,
+      "sha256": "3ac10de03c10f4a9f1c6856d3cf24e317162102c8f39b4131b59fd9269466845"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn22_i0.jpg",
+      "bytes": 4758,
+      "sha256": "017ebd85036bcd02d42eb7b56488775764d2ff853f1795a73d9e0fbf03b7460b"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn22_i1.jpg",
+      "bytes": 9523,
+      "sha256": "58db6a319987dc89e5a26c26725f92975e677f99a7f95cd38ac79829f358a0f1"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn23_i0.jpg",
+      "bytes": 5043,
+      "sha256": "44c05574b8ed3070b21c4aec70231f7e3769a0e7fbd6d7b9c4c91e2f699cb039"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn23_i1.jpg",
+      "bytes": 1616,
+      "sha256": "035033647534bca645796b9cdaf5781fb552fd00f07fb7323e82f0e021cb2e09"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn2_i0.jpg",
+      "bytes": 24787,
+      "sha256": "d5e915e87f147ebadc424fcfaf82bff110083ce9bd1b84d6349c79964ad6f4d5"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn4_i0.jpg",
+      "bytes": 13106,
+      "sha256": "3ac10de03c10f4a9f1c6856d3cf24e317162102c8f39b4131b59fd9269466845"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn4_i1.jpg",
+      "bytes": 12942,
+      "sha256": "b8d1c90f3918fbddbd1b64dfa6cb0d8a4bb28f069cfd4292e42ee1af7646366c"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn4_i2.jpg",
+      "bytes": 17968,
+      "sha256": "e342b4d34016236bb94e3aa0188539efaf11732e1b187880a130eaf01c926e68"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn4_i3.jpg",
+      "bytes": 10630,
+      "sha256": "f1179c4ac3c97ea6ebd5d2163ce759131afb1c539a27940abc991d9dee54ee32"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn5_i0.jpg",
+      "bytes": 25143,
+      "sha256": "2c1eacf2b0f2a603c63ad17003bcdd91bd3573a114c04bc86122726e9e827980"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn7_i2.jpg",
+      "bytes": 18428,
+      "sha256": "1f96e31072a7b7e53fe059718b52185358e3b8cbed66dab58bb2216d9932f56b"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn7_i3.jpg",
+      "bytes": 19856,
+      "sha256": "2f954859f89ed004e87ae0ecaf0d1f2190841fa53f0eb052b8fbe95c8ccab859"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn8_i0.jpg",
+      "bytes": 641,
+      "sha256": "48d841a5f812b5be0093d250582536c51eb80e2aee2a94813f8ad11ea72ada57"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn8_i2.jpg",
+      "bytes": 15174,
+      "sha256": "2eb6f456301cfc622eb1bacd8d46d98151508fa1ccf45c28930f3cac8cb1c1ea"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn8_i3.jpg",
+      "bytes": 9273,
+      "sha256": "af6c965e6b0232c55545da85354da01b7f504a2be2ccf9e8dfb41b0a27b6ccf0"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn9_i0.jpg",
+      "bytes": 14578,
+      "sha256": "5c4a9247b7fc2eccfa0541e94bf83f40010c7b4d33673a81c13a90e6d641b647"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn9_i2.jpg",
+      "bytes": 11580,
+      "sha256": "e8f7505c158eab2cb82d6a9407e1f6a4b7b588f83080e815a782f89f42aa3a63"
+    },
+    {
+      "path": "demo-assets/artifacts/255_turn9_i3.jpg",
+      "bytes": 15845,
+      "sha256": "947bc4f6561f89e36f559d504bd52d1c69ecc4ed8a3cb33b7baa14a27c3695f3"
+    },
+    {
+      "path": "demo-assets/images/dentex-1-full.jpg",
+      "bytes": 164029,
+      "sha256": "6ecfcda825c34870df5bf64a10efc61069b145666a772b118b53470f7b1ea2f6"
+    },
+    {
+      "path": "demo-assets/images/dentex-1-thumb.jpg",
+      "bytes": 9116,
+      "sha256": "2ce91edd4c5279d9da3c0d49a9640627207490e86e921e64f70fe22c03ae3d09"
+    },
+    {
+      "path": "demo-assets/images/dentex-100-full.jpg",
+      "bytes": 157689,
+      "sha256": "a92bcb362dd9ef283f00daf53ae447e092cf47129a955e86e17725ed72d3ac1d"
+    },
+    {
+      "path": "demo-assets/images/dentex-100-thumb.jpg",
+      "bytes": 8411,
+      "sha256": "1606c93ce8ede0bd673702fb25b77890dbe930ff0ea3ca013e5ba5bbf789da94"
+    },
+    {
+      "path": "demo-assets/images/dentex-162-full.jpg",
+      "bytes": 138597,
+      "sha256": "c47e2605bcbcd19aad82b0f8f60421ba6203935f3e420ce1976a193850ec55f3"
+    },
+    {
+      "path": "demo-assets/images/dentex-162-thumb.jpg",
+      "bytes": 8595,
+      "sha256": "d889d993e9f2a54ca943fd5d4478808a3446875614012f02245cab2f8fbe5366"
+    },
+    {
+      "path": "demo-assets/images/dentex-2-full.jpg",
+      "bytes": 218044,
+      "sha256": "0e8d6689accf834013ee0c72ac76f8d44c415aaeaf87fd6a31ac5a3451d390b5"
+    },
+    {
+      "path": "demo-assets/images/dentex-2-thumb.jpg",
+      "bytes": 12131,
+      "sha256": "68f30bea4e1864e9b7c60cb5cf59b34fa34bb14661a7187d547058f224abc82d"
+    },
+    {
+      "path": "demo-assets/images/dentex-255-full.jpg",
+      "bytes": 271981,
+      "sha256": "fe6d29302f0ee2c030b8ae95e3174848f96c7d646136585d1c51e81d37a785c2"
+    },
+    {
+      "path": "demo-assets/images/dentex-255-thumb.jpg",
+      "bytes": 12364,
+      "sha256": "662af375221f46d4f7babea42e4b142a5945601194936651e474852df424c7d5"
+    },
+    {
+      "path": "demo-assets/images/dentex-3-full.jpg",
+      "bytes": 170721,
+      "sha256": "d203313d32e3820abdeb6bb45cadd705a2b0390c6675e5faa6857542a5fb3120"
+    },
+    {
+      "path": "demo-assets/images/dentex-3-thumb.jpg",
+      "bytes": 8525,
+      "sha256": "4b8855666c357154ca5464fc5e83ca9a563bef5998be03aa7e8b15fd65e35eba"
+    },
+    {
+      "path": "demo-assets/images/dentex-36-full.jpg",
+      "bytes": 240067,
+      "sha256": "cb00d9b9258ba5a7da086cc33544111fef99b80a66381ee2a289a5a8461b17c3"
+    },
+    {
+      "path": "demo-assets/images/dentex-36-thumb.jpg",
+      "bytes": 11253,
+      "sha256": "4e802764fab49b47f054a8dc0854e8a28d55aa5fabea8a23701593d84880beb1"
+    },
+    {
+      "path": "demo-assets/images/dentex-4-full.jpg",
+      "bytes": 256667,
+      "sha256": "2298fe0dc078a4efb5fed999d915363cba5227d4d582da7086d36e32d2807dba"
+    },
+    {
+      "path": "demo-assets/images/dentex-4-thumb.jpg",
+      "bytes": 12222,
+      "sha256": "77b6c517b99946baba94ec6def28d1573da460bdae0b5c6bb6c638f056522705"
+    },
+    {
+      "path": "demo-assets/images/dentex-401-full.jpg",
+      "bytes": 211589,
+      "sha256": "4622acb51fdeded0045ab8d9488ee20baf4405284739a781f93cce19228e5231"
+    },
+    {
+      "path": "demo-assets/images/dentex-401-thumb.jpg",
+      "bytes": 11423,
+      "sha256": "70e8437eab8e8354ffb0695452bfb9c3a9e56537c0389691ed3d0a2855f36c2d"
+    },
+    {
+      "path": "demo-assets/images/dentex-459-full.jpg",
+      "bytes": 208758,
+      "sha256": "669f2d3cf5de95322a01a5b7f10dcf90eb0dcfbcf452e455566e0c2481337259"
+    },
+    {
+      "path": "demo-assets/images/dentex-459-thumb.jpg",
+      "bytes": 9534,
+      "sha256": "c6b2c2d977aad6b12a8dcea8a7edd67ceefe381b36815842d118789df2670b7c"
+    },
+    {
+      "path": "demo-assets/images/dentex-5-full.jpg",
+      "bytes": 218469,
+      "sha256": "a02e165e38989400581013c4e4630499fb049dada43e7e58f691b009f2f1f849"
+    },
+    {
+      "path": "demo-assets/images/dentex-5-thumb.jpg",
+      "bytes": 12052,
+      "sha256": "f2f405e8aec7d3ef9cce6d6eaf8403ccdec8cad87a7e5c755f10f86f920dfba0"
+    },
+    {
+      "path": "demo-assets/images/dentex-536-full.jpg",
+      "bytes": 223303,
+      "sha256": "bb90b2f16fbe52f1a460f5794baf63951928a3474c9f82d553cf68f2fa5831b8"
+    },
+    {
+      "path": "demo-assets/images/dentex-536-thumb.jpg",
+      "bytes": 12098,
+      "sha256": "bc62775c4b34c543763cee92847ab7d72402f89f94e21180e6e35e92d8b5a89b"
+    },
+    {
+      "path": "demo-assets/images/dentex-546-full.jpg",
+      "bytes": 205539,
+      "sha256": "6d5f83b607388148ba9b1ef75d954677c821552930247ee185685ac5cb092bd3"
+    },
+    {
+      "path": "demo-assets/images/dentex-546-thumb.jpg",
+      "bytes": 11775,
+      "sha256": "9ae75fb95d0712720329ad4f0d2db434e52fe51aa905420d99a22091048af879"
+    },
+    {
+      "path": "demo-assets/images/dentex-6-full.jpg",
+      "bytes": 156356,
+      "sha256": "c06123e5d08ae104c721678208dc16ca7b1e86806b1b67929b7103353487dcfa"
+    },
+    {
+      "path": "demo-assets/images/dentex-6-thumb.jpg",
+      "bytes": 8725,
+      "sha256": "075e8651225b38558fd7215f379cc6ffbae8e908d1d78777aaf5dcc1193e1ce7"
+    },
+    {
+      "path": "demo-assets/images/dentex-639-full.jpg",
+      "bytes": 171801,
+      "sha256": "c30e6c2a9a592789c8089129fe5b485ffb0b17314113479077f69d3881380a9d"
+    },
+    {
+      "path": "demo-assets/images/dentex-639-thumb.jpg",
+      "bytes": 9229,
+      "sha256": "662d823f6ce1f75756c0d0f250e92f58d2681b2f717962d2b07771362470fac4"
+    },
+    {
+      "path": "demo-assets/images/dentex-662-full.jpg",
+      "bytes": 239734,
+      "sha256": "6fffdbe2d7990b1673ad9331603727c0baf7a772e973e7c8e4a733460aced4b3"
+    },
+    {
+      "path": "demo-assets/images/dentex-662-thumb.jpg",
+      "bytes": 11089,
+      "sha256": "02ea1b44edfc2329c4984a9870694a288eaef33844176cc7852885351979b0dd"
+    },
+    {
+      "path": "demo-assets/images/dentex-7-full.jpg",
+      "bytes": 214610,
+      "sha256": "1ee78fd344d721a7ce2cdec2225ed9a6cc44b7af5873c485692e9f31e149527c"
+    },
+    {
+      "path": "demo-assets/images/dentex-7-thumb.jpg",
+      "bytes": 10585,
+      "sha256": "7f18ad6e27c0724d5b9979bbd1dbaf0e251c3ba8570db002ee298575c7ce9751"
+    },
+    {
+      "path": "demo-assets/images/dentex-8-full.jpg",
+      "bytes": 147030,
+      "sha256": "2930b893665433240fcb89c62236626fa4e89cab82bb6ebe9908cc3e15bd472f"
+    },
+    {
+      "path": "demo-assets/images/dentex-8-thumb.jpg",
+      "bytes": 9060,
+      "sha256": "4582ee22b36e1e24452db003d8571ab9e8b657f463cbe57c324e9f77e554962a"
+    },
+    {
+      "path": "demo-assets/images/dentex-9-full.jpg",
+      "bytes": 171287,
+      "sha256": "d5a43eea01961cd3d9c25d4667fb1987a008a679317aeb282974763e6332f9ea"
+    },
+    {
+      "path": "demo-assets/images/dentex-9-thumb.jpg",
+      "bytes": 9750,
+      "sha256": "21538ae7b51c2137481660fa905a516475573fe5fb46b3e01338d06034ac277e"
+    },
+    {
+      "path": "demo-assets/images/val_18-full.jpg",
+      "bytes": 171768,
+      "sha256": "ff72e1ace98775cc472fc499afc1cd162cbefad97787f0d7b6829a5fe41948d5"
+    },
+    {
+      "path": "demo-assets/images/val_18-thumb.jpg",
+      "bytes": 8845,
+      "sha256": "30b629348a5aafda8641ded4d71f2c1709360a51d7f08dc195761f9761e91d72"
+    },
+    {
+      "path": "demo-assets/images/val_32-full.jpg",
+      "bytes": 184911,
+      "sha256": "90060ac7fe35f6111257d44e4877973da564c6b808dfa974543af00ce160743c"
+    },
+    {
+      "path": "demo-assets/images/val_32-thumb.jpg",
+      "bytes": 8752,
+      "sha256": "82c84f6b4155bbb630ba9e4a6c7f40bb9132af655396b2c1d3627c65f3fb549a"
+    },
+    {
+      "path": "demo-assets/images/val_44-full.jpg",
+      "bytes": 152591,
+      "sha256": "ad7cdc506ccb9042320da085e4919f292c2d9489bfba87f647cc308f2bd6ca49"
+    },
+    {
+      "path": "demo-assets/images/val_44-thumb.jpg",
+      "bytes": 8572,
+      "sha256": "669331cbacbfe25eeaf4fe056112a645e85347e7de15e6b831fed63ee3b9edd2"
+    }
+  ]
 }
