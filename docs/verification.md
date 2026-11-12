@@ -87,7 +87,7 @@ $env:PYTHONPATH=(Resolve-Path ..\VLM-DENTAL).Path
 pnpm e2e:worker
 ```
 
-Exit code **0**, "e2e: all checks passed" (64 `ok` checks). The relevant checks:
+Exit code **0**, "e2e: all checks passed" (47 `ok` checks). The relevant checks:
 
 - `ingest/traces inserts the known image and rejects the unknown one (per-item, HTTP 200)`
 - `the trace, its turns and its tool calls are really in Postgres (once, not doubled by the replay)`
