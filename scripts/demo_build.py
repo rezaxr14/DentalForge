@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    import PIL
     from PIL import Image
 except ImportError:  # pragma: no cover
     print("Pillow is required: pip install pillow", file=sys.stderr)
@@ -92,8 +94,10 @@ def scan_for_secrets_and_paths(text: str) -> list[str]:
     for pattern, label in secret_patterns:
         if re.search(pattern, text):
             violations.append(f"secret:{label}")
-    # Windows paths
-    if re.search(r"[A-Za-z]:\\", text):
+    # Windows paths. Require a path segment after the separator and a drive letter that starts a
+    # token, so JSON-escaped newlines ("findings:\n") are not mistaken for a path. A real path in
+    # json.dumps() text has doubled backslashes, so scan the collapsed form too.
+    if re.search(r"(?<![A-Za-z])[A-Za-z]:\\[^\s\\]{2,}", text.replace("\\\\", "\\")):
         violations.append("windows_path")
     # Unix home paths
     if re.search(r"/home/", text):
@@ -172,17 +176,36 @@ def sanitize_trace(rec: dict, source_file: str) -> dict:
     }.items() if v is not None}
 
 
-def check_size_budgets(images: list[dict], bundle_bytes: int) -> list[str]:
-    """Return violations if size budgets are exceeded."""
-    violations = []
+def check_size_budgets(bundle_bytes: int, asset_sizes: list[int]) -> list[str]:
+    """Return violations if the bundle or any asset exceeds its budget."""
+    violations: list[str] = []
     if bundle_bytes > MAX_BUNDLE_SIZE:
         violations.append(f"bundle.json {bundle_bytes} bytes > {MAX_BUNDLE_SIZE}")
-    total_asset_bytes = 0
-    for img in images:
-        if "sha256" in img:  # only check full assets that we wrote
-            # We can't easily get file size here without I/O; the build does it after write.
-            pass
+    for size in asset_sizes:
+        if size > MAX_ASSET_SIZE:
+            violations.append(f"asset {size} bytes > {MAX_ASSET_SIZE}")
+    total = sum(asset_sizes)
+    if total > MAX_TOTAL_ASSETS:
+        violations.append(f"total assets {total} bytes > {MAX_TOTAL_ASSETS}")
     return violations
+
+
+def asset_manifest(assets: Path) -> list[dict[str, Any]]:
+    """sha256 + size for every committed asset, paths relative to `public/`."""
+    rows: list[dict[str, Any]] = []
+    for p in sorted(assets.rglob("*")):
+        if p.is_file():
+            rows.append({
+                "path": p.relative_to(assets.parent).as_posix(),
+                "bytes": p.stat().st_size,
+                "sha256": sha256_file(p),
+            })
+    return rows
+
+
+def tool_versions() -> dict[str, str]:
+    """Record the tools that shaped the bytes, so a rebuild can be compared."""
+    return {"python": platform.python_version(), "pillow": PIL.__version__}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -529,33 +552,15 @@ def main() -> int:
     (OUT / "bundle.json").write_text(bundle_json, encoding="utf-8")
     bundle_bytes = len(bundle_json.encode("utf-8"))
 
-    # Budget checks
-    v = check_size_budgets(images, bundle_bytes)
+    # Budget checks and the per-asset manifest (sha256 + bytes).
+    assets_manifest = asset_manifest(ASSETS)
+    v = check_size_budgets(bundle_bytes, [a["bytes"] for a in assets_manifest])
     if v:
         print(f"FAIL: {v}", file=sys.stderr)
         return 1
 
-    # Scan assets for EXIF and size
-    for asset in IMG_OUT.rglob("*"):
-        if asset.is_file():
-            if asset.stat().st_size > MAX_ASSET_SIZE:
-                print(f"FAIL: asset {asset} > {MAX_ASSET_SIZE} bytes", file=sys.stderr)
-                return 1
-    for asset in ART_OUT.rglob("*"):
-        if asset.is_file():
-            if asset.stat().st_size > MAX_ASSET_SIZE:
-                print(f"FAIL: asset {asset} > {MAX_ASSET_SIZE} bytes", file=sys.stderr)
-                return 1
-    total_asset_size = sum(f.stat().st_size for f in IMG_OUT.rglob("*") if f.is_file()) + \
-                       sum(f.stat().st_size for f in ART_OUT.rglob("*") if f.is_file())
-    if total_asset_size > MAX_TOTAL_ASSETS:
-        print(f"FAIL: total assets {total_asset_size} > {MAX_TOTAL_ASSETS}", file=sys.stderr)
-        return 1
-
-    # Scan asset directory for any Tufts leakage
-    asset_manifest = json.dumps([str(p) for p in IMG_OUT.rglob("*") if p.is_file()] + \
-                                [str(p) for p in ART_OUT.rglob("*") if p.is_file()])
-    violations = scan_for_secrets_and_paths(asset_manifest)
+    # Scan asset paths for any Tufts leakage
+    violations = scan_for_secrets_and_paths(json.dumps([a["path"] for a in assets_manifest]))
     if violations:
         print(f"FAIL: asset paths contain {violations}", file=sys.stderr)
         return 1
@@ -581,6 +586,9 @@ def main() -> int:
             "ultralytics": "AGPL-3.0",
         },
         "bundleBytes": bundle_bytes,
+        "assetBytesTotal": sum(a["bytes"] for a in assets_manifest),
+        "toolVersions": tool_versions(),
+        "assets": assets_manifest,
     }
     (OUT / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
