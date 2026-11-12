@@ -9,7 +9,10 @@ import json
 import os
 import sys
 
-VLM = r"c:/Users/rezax/Home/Code/VLM-DENTAL"
+VLM = os.environ.get(
+    "VLM_DENTAL_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "VLM-DENTAL")),
+)
 sys.path.insert(0, VLM)
 os.chdir(VLM)
 

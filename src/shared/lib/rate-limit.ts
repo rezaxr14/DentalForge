@@ -1,5 +1,5 @@
 /**
- * In-process rate limiter (WP8 hardening primitive).
+ * In-process rate limiter.
  *
  * Sliding window per key. Used as a conservative fallback when Upstash Redis REST
  * is not configured; a single instance limiter is not shared across Vercel
@@ -49,7 +49,7 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
 }
 
 /**
- * CSRF guard for cookie-authenticated mutating routes (WP8).
+ * CSRF guard for cookie-authenticated mutating routes.
  * Returns true when the request's Origin matches the app origin (or is absent
  * for same-origin navigations that send no Origin). Callers return 403 on false.
  */

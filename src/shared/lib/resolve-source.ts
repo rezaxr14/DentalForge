@@ -37,7 +37,7 @@ async function resolveOrgId(): Promise<string | null> {
       if (m) return org.id;
     }
   }
-  // Public demo (WP7): anonymous visitors read the seeded Demo org, which is
+  // Public demo: anonymous visitors read the seeded Demo org, which is
   // DENTEX-only and read-only in practice (every write needs a session).
   const demoSlug = process.env.DEMO_ORG_SLUG;
   if (demoSlug) {
