@@ -14,7 +14,7 @@ licence and survive any relicensing event.**
 - **Source**: `https://github.com/ultralytics/ultralytics`
 - **Licence**: GNU Affero General Public License v3.0 (AGPL-3.0)
 - **Licence Text**: https://www.gnu.org/licenses/agpl-3.0.html
-- **Usage in this project**: YOLOv8m trained exclusively on DENTEX (the "DENTEX-only weights"). The training invocation and `cv_results.json` are recorded in the demo bundle provenance. The ONNX export (when implemented in WP6) will carry the same AGPL-3.0 obligation.
+- **Usage in this project**: YOLOv8m trained exclusively on DENTEX (the "DENTEX-only weights"). The training invocation and `cv_results.json` are recorded in the demo bundle provenance. No ONNX export is published by this repository, so no ONNX artifact carries this obligation today.
 
 ## VLM-DENTAL Upstream
 - **Source**: `https://github.com/rezaxr14/vlm-dental`

@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-11-07
-**Context:** WP7 requires that the demo bundle contains only DENTEX-derived data,
+**Context:** The demo bundle must contain only DENTEX-derived data,
 sanitized of secrets, absolute paths, and provider metadata. The build must fail
 on any Tufts leakage.
 
