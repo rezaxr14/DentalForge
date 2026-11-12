@@ -3,6 +3,9 @@ import { BackLink, PageShell } from "@/shared/ui/page";
 import { Badge, Card, EmptyState, ScoreBar, Stat } from "@/shared/ui/primitives";
 import { EvalDetailSection, EvalMetricsStrip } from "../page";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 function modelLabel(model: string) {
   return model
     .replace(/^accounts\//, "")

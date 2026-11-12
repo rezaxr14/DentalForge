@@ -4,6 +4,9 @@ import { Badge, EmptyState, Stat } from "@/shared/ui/primitives";
 import { PageShell } from "@/shared/ui/page";
 import { TraceCard } from "@/shared/ui/trace-card";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 type Mode = "all" | "with_tools" | "no_tools" | "failing";
 
 const FILTERS: { key: Mode; label: string }[] = [

@@ -5,6 +5,9 @@ import { resolveDataSource } from "@/shared/lib/resolve-source";
 import { PageShell } from "@/shared/ui/page";
 import { Badge, Card, Stat } from "@/shared/ui/primitives";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 type Manifest = {
   vlmDental?: { commit?: string; branch?: string; dirty?: boolean };
   buildDate?: string;
