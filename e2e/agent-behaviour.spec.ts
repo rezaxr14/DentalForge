@@ -59,6 +59,15 @@ test.describe("/agent — replay controls", () => {
     await expect(page.getByText(seeded ? /imported training traces/ : /fixture training traces/).first()).toBeVisible();
   });
 
+  test("says in plain words that the traces are teacher-generated SFT data, not model performance", async ({ page }) => {
+    await page.goto(`${app.base}/agent`);
+    await page.waitForLoadState("networkidle");
+
+    const body = await page.textContent("body");
+    expect(body).toMatch(/teacher-generated SFT training traces/i);
+    expect(body).toMatch(/not this model's performance/i);
+  });
+
   test("trace picker filters and switches traces", async ({ page }) => {
     await page.goto(`${app.base}/agent`);
     await page.waitForLoadState("networkidle");

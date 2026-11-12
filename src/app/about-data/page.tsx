@@ -66,6 +66,10 @@ export default async function AboutDataPage() {
               <li>
                 <strong>Traces.</strong> Recorded multi-turn trajectories with tool calls, verifier outcomes
                 and final answers. Each card states its cohort (with tools / no tools) and verification state.
+                These are teacher-generated SFT training traces: a frontier LLM produced them in a tool loop
+                with ground-truth guidance, and a different model family checked the format. They are
+                supervision data, not a trained model&apos;s performance; performance numbers appear only on
+                <code className="mx-1">/evals</code>.
               </li>
               <li>
                 <strong>Evaluations.</strong> Zero-shot runs over the DENTEX test split, with per-case exact
