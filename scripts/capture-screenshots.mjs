@@ -24,7 +24,7 @@ async function firstLink(page, prefix) {
   return href;
 }
 
-async function shot(name, path, { theme = "light", width = 1440, height = 900, fullPage = true } = {}) {
+async function shot(name, path, { theme = "light", width = 1440, height = 900, fullPage = false } = {}) {
   const context = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: 1,
