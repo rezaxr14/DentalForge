@@ -5,6 +5,9 @@ import { resolveDataSource } from "@/shared/lib/resolve-source";
 import { Badge, Card, ScoreBar, SectionHeading, Stat } from "@/shared/ui/primitives";
 import { PageShell } from "@/shared/ui/page";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 function ProvenanceBadge({ provenance }: { provenance: string }) {
   return (
     <Badge tone={provenance === "postgres" ? "success" : "warning"}>

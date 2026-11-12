@@ -4,6 +4,9 @@ import { PageShell } from "@/shared/ui/page";
 import { Badge, Card, CardLink, Stat } from "@/shared/ui/primitives";
 import { TraceRowLink } from "@/shared/ui/trace-card";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 const modules = [
   {
     href: "/traces",

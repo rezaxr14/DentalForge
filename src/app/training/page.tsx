@@ -6,6 +6,9 @@ import { getPgDb } from "@/shared/db/pg";
 import { DrizzleOrgStore } from "@/shared/db/repositories";
 import { Badge, Card, EmptyState, ScoreBar, Stat } from "@/shared/ui/primitives";
 
+// Reads per-request state (the demo org, seeded rows): never freeze it into HTML at build time.
+export const dynamic = "force-dynamic";
+
 type Model = {
   name: string;
   kind: string;
