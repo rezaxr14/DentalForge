@@ -103,7 +103,9 @@ DIRECT_URL='postgresql://<role>.<ref>:<password>@aws-1-<region>.pooler.supabase.
   `DIRECT_URL` is not read at runtime, so do not set it there.
 
 The deployment lives at **https://dentalforge-app.vercel.app** (Vercel project
-`dentalforge-app`). `/api/health` reports `db: up` and `workerMode: live` when the wiring is
+`dentalforge-app`; releases are manual, so the deployed build can lag this
+repository - see `docs/verification.md` section 10 for the current status).
+`/api/health` reports `db: up` and `workerMode: live` when the wiring is
 correct; `/status` shows the same capability ladder in the UI.
 
 `src/shared/db/pg.ts` asks `src/shared/db/ssl.ts` how to talk to Postgres, **from the URL alone**

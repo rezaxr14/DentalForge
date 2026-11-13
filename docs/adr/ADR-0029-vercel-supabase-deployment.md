@@ -113,7 +113,7 @@ curl -X POST https://dentalforge-app.vercel.app/api/worker/v1/heartbeat \
   -w "%{http_code}" | grep -q "401"
 
 # Strict console + axe on 6 pages (Playwright against the URL)
-pnpm exec playwright test --project=chromium e2e/smoke-prod.spec.ts
+pnpm smoke:prod -- https://dentalforge-app.vercel.app
 ```
 
 ## Production degradation
@@ -125,12 +125,18 @@ Verified manually and in CI preview with wrong `DATABASE_URL`:
 - Database unreachable: `/status` shows `db: "down"`, all pages show honest
   degraded state (no 5xx page, console clean)
 
-## Acceptance
+## Acceptance (checked 2026-11-13)
 
-- Deployed URL: https://dentalforge-app.vercel.app
-- Smoke report attached to PR (all commands exit 0)
-- Screenshots (light, dark, 390px) of Agent replay, Traces, Evals, Editor with
-  browser pre-labelling, Training placeholders
-- Migration action green from empty DB (table count asserted)
-- Preview deployments work read-only against demo DB
-- Degradation states verified
+| Item | Status |
+|------|--------|
+| Deployed URL | live, but an **older build** of this repository: `pnpm smoke:prod` fails 25 checks (`/about-data` 404, demo assets 404, no CSP/security headers). Exact list: `docs/verification.md` section 10 |
+| Smoke report attached to PR, all commands exit 0 | **not achieved yet**; the project is not connected to the Git repository, so releases are manual (`gh api repos/…/hooks` returns `[]`) |
+| Screenshots (light, dark, 390px) of Agent replay, Traces, Evals, Editor with browser pre-labelling, Training placeholders | in `docs/screenshots/` |
+| Migration from an empty database | covered by the `browser` CI job (empty-database run) and the five-shape degradation matrix |
+| Preview deployments read-only against the demo DB | preview configuration documented above; not exercised by a scheduled check |
+| Degradation states verified | `pnpm smoke` (139 checks) and `e2e/degradation.spec.ts` (120 passed) |
+
+The deployment decision itself stands: the database is up and `/api/health`
+answers `{"status":"ok","contractVersion":1,"db":"up","redis":"absent","storage":"local","workerMode":"live"}`.
+What is missing is a release of the current commit, which the owner must run
+(`vercel --prod`) or automate by connecting the Git integration.
