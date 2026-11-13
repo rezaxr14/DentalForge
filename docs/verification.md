@@ -202,6 +202,43 @@ and the temporary copy was deleted. The app side of the same rule is in
 worker only for the features it **declares**, ignores a stale worker (>120 s),
 and falls through browser → replay → heuristic → unavailable in that order.
 
+## 9. Editor timings (opt-in, same machine only)
+
+```powershell
+$env:E2E_DATABASE_URL="postgresql://traceforge:traceforge@localhost:15433/traceforge_e2e"
+pnpm perf:editor
+```
+
+Exit code **0**, **2 passed (44.6 s)**, label `win11`. The spec boots the
+production build (`next start`), signs in a fresh user, seeds 100 or 500 boxes
+through the label API, and drives the real editor. Each number is milliseconds
+from just before a dispatched input to the next painted frame, so it includes
+the harness floor - an empty dispatch with no work at all measured p50 23 ms /
+p95 24 ms on this machine. Raw JSON is written to `perf-results/` (git-ignored).
+
+| Scenario (p50 / p95 ms) | 100 boxes | 500 boxes |
+|---|---|---|
+| drag a box, 80 moves | 39.2 / 41.7 | 38.7 / 48.8 |
+| rubber-band draw, 60 moves | 39.8 / 52.2 | 38.5 / 70.1 |
+| select another box, 20 clicks | 55.5 / 81.9 | 56.1 / 78.8 |
+| keyboard edit, 20 keys | 40.3 / 55.8 | 38.6 / 56.3 |
+| table `<select>`, 10 changes | 57.0 / 90.9 | 71.8 / 73.1 |
+| long animation frames | 1 (171.8 ms, 78 ms blocking) | 1 (159.4 ms, 73 ms blocking) |
+| DOM nodes on the page | 830 | 1229 |
+| page load (saved status visible) | 0.87 s | 0.67 s |
+
+Five times the boxes does not make the drag slower: above 40 boxes the table is
+windowed (the spec asserts `aria-rowcount`) and the overlay only paints what is
+on screen. What grows with the box count is the table path and the tail (p95),
+which is why the numbers are recorded rather than asserted. Headless software
+rendering on one Windows laptop - compare runs on the same machine, do not read
+these as a frame rate.
+
+The first version of this script was `E2E_PERF=1 playwright test ...`, which is
+POSIX shell syntax and failed on Windows (`'E2E_PERF' is not recognized`). It is
+now `scripts/perf-editor.mjs`, which sets the variable and spawns the Playwright
+CLI, so the documented command works on every OS.
+
 ## Not run, and not claimed
 
 - **SFT and GRPO training**: not run. `/training` shows both as "Not run yet";
