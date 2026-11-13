@@ -29,6 +29,9 @@ recorded runs. **No promise of availability.**
 1. **App is deployed and healthy**
    - https://dentalforge-app.vercel.app/api/health → `{"status":"ok","db":"up",...}`
    - `/status` page shows all green (DB, worker off, Redis absent, storage local)
+   - The public URL may lag this repository (releases are manual): before a demo
+     run `pnpm smoke:prod -- <url>` and demo from a local production build if it
+     does not pass.
 
 2. **LM Studio is reachable**
    - `curl http://localhost:1234/v1/models` returns the loaded model

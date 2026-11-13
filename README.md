@@ -16,15 +16,19 @@ a trained model's performance; model numbers appear only on `/evals`.
 
 ## Live demo
 
-**https://dentalforge-app.vercel.app** — Next.js app on Vercel, Postgres on
-Supabase. Start at [`/status`](https://dentalforge-app.vercel.app/status) to
-see the capability ladder (database, worker mode, Redis, storage), then browse
-traces, evals, labels, quality, and rewards. Public artifacts are DENTEX-derived
-only; the Tufts data never leaves local development. Research prototype, not for
-clinical use. No Python worker is connected to the public demo, so live runs
-fall back to replay. A Vercel Cron clears visitor-created annotations and demo
-users nightly (the seeded data stays); `pnpm demo:seed --reset` rebuilds the
-data from the committed bundle.
+There is a Vercel deployment of this app (Next.js on Vercel, Postgres on
+Supabase), but it is an **older build**: it predates `/about-data`, the demo
+assets and the CSP/security headers, and `pnpm smoke:prod` fails 25 checks
+against it. The link is not advertised here until it passes; the exact failures
+and the reason (the project is not connected to this repository, so releases are
+manual) are in [`docs/verification.md`](./docs/verification.md), section 10.
+
+Public artifacts are DENTEX-derived only; the Tufts data never leaves local
+development. Research prototype, not for clinical use. No Python worker is
+connected to the public demo, so live runs fall back to replay. The repository
+configures a daily Vercel Cron that clears visitor-created annotations and demo
+users (the seeded data stays); `pnpm demo:seed --reset` rebuilds the data from
+the committed bundle.
 
 ## Screenshots
 
@@ -156,8 +160,9 @@ pnpm e2e:worker                         # contract + handler tests with real wor
 
 ## Deploy on Vercel
 
-Production: **https://dentalforge-app.vercel.app** (Vercel project
-`dentalforge-app`), backed by a Supabase Postgres database. Required production
+Deployed project: Vercel project `dentalforge-app` (its current build status is
+in [`docs/verification.md`](./docs/verification.md), section 10), backed by a
+Supabase Postgres database. Required production
 env: `DATABASE_URL` (Supabase pooler), `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
 `INVITE_SIGNING_SECRET`, `TRACEFORGE_DATASOURCE=postgres`, `DEMO_ORG_SLUG=demo`
 (the anonymous demo reads that org), `WORKER_MODE=live`.
@@ -165,8 +170,10 @@ Secrets must be unique — the app refuses to boot with the public dev/example
 values (see `src/shared/config/env.ts`). See [`docs/supabase.md`](./docs/supabase.md)
 for the database runbook.
 
-Standard Next.js deploy. Builds are self-hosted (Geist via the `geist`
-package, no Google Fonts fetch). `WORKER_MODE` defaults to `off`; never set
-`HF_TOKEN` on Vercel (local import scripts only). Storage is currently the
-ephemeral local adapter, so uploads do not persist across deploys — configure R2
-before relying on uploads.
+Standard Next.js deploy. The project is **not** connected to this GitHub
+repository (no webhook, no deployment records), so merging to `main` does not
+publish: a release is a manual `vercel --prod` from the commit to ship. Builds
+are self-hosted (Geist via the `geist` package, no Google Fonts fetch).
+`WORKER_MODE` defaults to `off`; never set `HF_TOKEN` on Vercel (local import
+scripts only). Storage is currently the ephemeral local adapter, so uploads do
+not persist across deploys — configure R2 before relying on uploads.
