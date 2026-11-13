@@ -41,12 +41,29 @@ jobs:
 
       # Exit 0 means "the probe ran"; the report itself is the artifact.
       - name: Probe (feature detection, never pinning)
+        id: probe
         run: python examples/python-worker/vlm_compat.py --json > compat-report.json
 
+      # A drift report must not turn the weekly run red (the owner asked for a
+      # quiet Actions tab): the tests still run, the log and the artifact keep
+      # the real output, and a failing run opens or updates the drift issue.
       - name: Contract tests
+        id: contract
+        continue-on-error: true
         run: |
           set -o pipefail
           python -m pytest -q tests/python/test_compat_contract.py tests/python/test_protocol_conformance.py 2>&1 | tee pytest.log
+
+      - name: Summarise the drift report
+        if: always()
+        run: |
+          {
+            echo "## Upstream compatibility"
+            echo ""
+            echo "- Probe: \`${{ steps.probe.outcome }}\`"
+            echo "- Tests: \`${{ steps.contract.outcome }}\`"
+            echo "- A \`failure\` here is a drift report, not a red build; see the issue and the artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the drift report
         if: always()
@@ -60,7 +77,7 @@ jobs:
 
       # One issue, updated in place, so weekly drift does not spam the tracker.
       - name: Open or update the "Upstream drift" issue
-        if: failure()
+        if: steps.contract.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
