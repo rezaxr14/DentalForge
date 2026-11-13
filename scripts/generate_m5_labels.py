@@ -24,7 +24,29 @@ COCO = os.path.join(
 )
 XRAYS = os.path.join(VLM, "data", "dentex", "DENTEX", "training_data",
                      "quadrant-enumeration-disease", "xrays")
-MODEL = os.path.join(VLM, "data", "models", "yolo_cv_best", "weights", "best.pt")
+MODEL = os.path.join(VLM, "data", "models", "dentex_only_fold_0", "weights", "best.pt")
+CV_RESULTS = os.path.join(
+    VLM, "data", "models", "dentex_grounding_tool_cv_best", "cv_results.json",
+)
+
+
+def assert_dentex_only(model_path: str) -> None:
+    """Only the DENTEX-only fold checkpoints may author public pre-labels.
+
+    `data/models/yolo_cv_best` is the DENTEX+Tufts fold (see VLM-DENTAL's
+    docs/YOLO_CV_RESULTS.md); public artifacts must stay DENTEX-derived, so the
+    generator refuses any checkpoint that is not listed as a DENTEX-Only fold.
+    """
+    with open(CV_RESULTS, encoding="utf-8") as fh:
+        cv = json.load(fh)
+    assert cv.get("family") == "DENTEX-Only", f"cv_results family is {cv.get('family')!r}"
+    allowed = {
+        os.path.normcase(os.path.abspath(os.path.join(VLM, f["weight_path"].replace("\\", os.sep))))
+        for f in cv["folds"]
+    }
+    got = os.path.normcase(os.path.abspath(model_path))
+    assert got in allowed, f"{model_path} is not a DENTEX-only fold checkpoint from {CV_RESULTS}"
+
 IMAGE_IDS = [1, 2, 3, 4, 5]
 MAX_W = 1600
 LICENSE = "DENTEX (CC-BY-NC-SA-4.0); redistributed as downscaled derivative for research use"
@@ -124,10 +146,11 @@ def run_yolo(image_id: int, src: str, native_w: int, native_h: int):
             "class_idx": cls,
         })
     boxes.sort(key=lambda b: -b["confidence"])
-    return boxes, "yolo_cv_best"
+    return boxes, "dentex_only_fold_0"
 
 
 print("generating M5 label fixtures...")
+assert_dentex_only(MODEL)
 for iid in IMAGE_IDS:
     meta = images.get(iid)
     assert meta is not None, f"image id {iid} missing from COCO json"
