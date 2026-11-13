@@ -239,38 +239,29 @@ POSIX shell syntax and failed on Windows (`'E2E_PERF' is not recognized`). It is
 now `scripts/perf-editor.mjs`, which sets the variable and spawns the Playwright
 CLI, so the documented command works on every OS.
 
-## 10. The deployed URL does not pass `smoke:prod` yet
+## 10. The deployed URL passes `smoke:prod`
 
 ```powershell
 pnpm smoke:prod -- https://dentalforge-app.vercel.app
 ```
 
-Exit code **1**, `smoke:prod: 25 check(s) FAILED` (2026-11-13). What fails:
+Exit code **0**, `smoke:prod: all checks passed` (69 checks, 2026-11-13) against
+production deployment `dpl_D8g7ESPAUHFfj4ruzK84GukuaYUr` (commit `3eaed0e`, the
+`main` of that day). That covers: every key page and API without a 5xx,
+`/api/labels/status` 200 signed out, worker endpoints rejecting a missing token,
+exactly one CSP header plus `X-Content-Type-Options: nosniff` and
+`X-Frame-Options: DENY` on six pages, three demo images and three tool renders
+loading as non-empty images, a strict console with zero CSP violations, and axe
+with no WCAG A/AA violations on three pages.
 
-- `/about-data` returns **404** (the route exists in this repository), and its
-  missing page logs a console error;
-- six `/demo-assets/*` files (three demo radiographs, three tool renders) return
-  **404** with 0 bytes;
-- every page is missing the CSP header, `X-Content-Type-Options: nosniff` and
-  `X-Frame-Options: DENY` (3 failures × 6 pages).
-
-What passes: the six pages that do exist return 200 with clean consoles, axe
-finds no WCAG A/AA violations, and `/api/health` answers
-`{"status":"ok","contractVersion":1,"db":"up","redis":"absent","storage":"local","workerMode":"live"}` -
-the database and runtime are healthy. The deployment is an **older build of this
-repository**, not a failing `main`.
-
-Why it is older: the repository's `hooks` and `deployments` endpoints both
-return `[]` (checked with `gh api`), so Vercel is **not** connected to the
-GitHub repository - merging to `main` does not deploy. There is no Vercel token
-or CLI on this machine (`.vercel/project.json` only names project
-`dentalforge-app`).
-Updating the URL needs the owner to run `vercel --prod` from this commit, or to
-connect the Git integration; until then the README labels the link as an older
-snapshot and this document does not claim a passing live verification. The same
-script passed against a local `next start` of this checkout (recorded when the
-script was added), so the 25 failures are deployment staleness, not app
-failures.
+Two earlier runs of the same command failed **25 checks** against an older
+deployment (2026-11-13): `/about-data` and six `/demo-assets/*` files were 404
+and no page sent the security headers. The cause was not the app: the Vercel
+project was not linked to the GitHub repository, so `main` had never deployed.
+The project is now linked (`productionBranch: main`), the two missing production
+variables (`CRON_SECRET`, `DEMO_ORG_SLUG`) are set, and a push to `main`
+deploys. Negative control for the cron: `POST /api/demo/reset` without the
+secret and with a wrong secret both return **401**.
 
 ## Not run, and not claimed
 
@@ -281,8 +272,6 @@ failures.
 - **Browser YOLO**: not built. ADR-0027 stays `proposed`, and ONNX sizes are
   unmeasured.
 - **YOLO over a whole split**: not run.
-- **A passing `pnpm smoke:prod` against the deployed URL**: not achieved yet;
-  the URL serves an older build and the run fails 25 checks (section 10).
 - **Phone check of the live site**: not run; it needs the owner.
 - **The 50 MB artifact cap**: enforced in code, not exercised by a test.
 - **Tufts**: never used in a public artifact, the demo bundle, the seed or this

@@ -129,14 +129,14 @@ Verified manually and in CI preview with wrong `DATABASE_URL`:
 
 | Item | Status |
 |------|--------|
-| Deployed URL | live, but an **older build** of this repository: `pnpm smoke:prod` fails 25 checks (`/about-data` 404, demo assets 404, no CSP/security headers). Exact list: `docs/verification.md` section 10 |
-| Smoke report attached to PR, all commands exit 0 | **not achieved yet**; the project is not connected to the Git repository, so releases are manual (`gh api repos/…/hooks` returns `[]`) |
+| Deployed URL | live and current: production deployment `dpl_D8g7ESPAUHFfj4ruzK84GukuaYUr` (commit `3eaed0e`); `/about-data`, the demo assets and the security headers are present |
+| Smoke report attached to PR, all commands exit 0 | **`pnpm smoke:prod` exit 0, 69 checks passed** (2026-11-13); see `docs/verification.md` section 10 |
+| Automatic deploys from `main` | the project is linked to `rezaxr14/DentalForge` with `productionBranch: main`; a push to `main` deploys |
 | Screenshots (light, dark, 390px) of Agent replay, Traces, Evals, Editor with browser pre-labelling, Training placeholders | in `docs/screenshots/` |
 | Migration from an empty database | covered by the `browser` CI job (empty-database run) and the five-shape degradation matrix |
 | Preview deployments read-only against the demo DB | preview configuration documented above; not exercised by a scheduled check |
 | Degradation states verified | `pnpm smoke` (139 checks) and `e2e/degradation.spec.ts` (120 passed) |
 
-The deployment decision itself stands: the database is up and `/api/health`
-answers `{"status":"ok","contractVersion":1,"db":"up","redis":"absent","storage":"local","workerMode":"live"}`.
-What is missing is a release of the current commit, which the owner must run
-(`vercel --prod`) or automate by connecting the Git integration.
+The deployment decision stands. Production runs the current `main`; the cron
+secret and `DEMO_ORG_SLUG` are set in the project, and `/api/demo/reset`
+rejects a missing or wrong secret with 401.
