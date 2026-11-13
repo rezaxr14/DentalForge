@@ -27,7 +27,7 @@
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "e2e:worker": "node scripts/e2e-worker.mjs",
     "e2e:browser": "playwright test",
-    "perf:editor": "E2E_PERF=1 playwright test e2e/perf-editor.spec.ts"
+    "perf:editor": "node scripts/perf-editor.mjs"
   },
   "dependencies": {
     "@redis/client": "6.2.1",
