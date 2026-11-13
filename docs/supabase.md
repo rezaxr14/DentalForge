@@ -103,8 +103,8 @@ DIRECT_URL='postgresql://<role>.<ref>:<password>@aws-1-<region>.pooler.supabase.
   `DIRECT_URL` is not read at runtime, so do not set it there.
 
 The deployment lives at **https://dentalforge-app.vercel.app** (Vercel project
-`dentalforge-app`; releases are manual, so the deployed build can lag this
-repository - see `docs/verification.md` section 10 for the current status).
+`dentalforge-app`, linked to this repository with `main` as the production
+branch, so a push to `main` deploys).
 `/api/health` reports `db: up` and `workerMode: live` when the wiring is
 correct; `/status` shows the same capability ladder in the UI.
 
