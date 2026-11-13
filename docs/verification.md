@@ -239,6 +239,39 @@ POSIX shell syntax and failed on Windows (`'E2E_PERF' is not recognized`). It is
 now `scripts/perf-editor.mjs`, which sets the variable and spawns the Playwright
 CLI, so the documented command works on every OS.
 
+## 10. The deployed URL does not pass `smoke:prod` yet
+
+```powershell
+pnpm smoke:prod -- https://dentalforge-app.vercel.app
+```
+
+Exit code **1**, `smoke:prod: 25 check(s) FAILED` (2026-11-13). What fails:
+
+- `/about-data` returns **404** (the route exists in this repository), and its
+  missing page logs a console error;
+- six `/demo-assets/*` files (three demo radiographs, three tool renders) return
+  **404** with 0 bytes;
+- every page is missing the CSP header, `X-Content-Type-Options: nosniff` and
+  `X-Frame-Options: DENY` (3 failures × 6 pages).
+
+What passes: the six pages that do exist return 200 with clean consoles, axe
+finds no WCAG A/AA violations, and `/api/health` answers
+`{"status":"ok","contractVersion":1,"db":"up","redis":"absent","storage":"local","workerMode":"live"}` -
+the database and runtime are healthy. The deployment is an **older build of this
+repository**, not a failing `main`.
+
+Why it is older: `gh api repos/rezaxr14/DentalForge/hooks` returns `[]` and
+`gh api repos/rezaxr14/DentalForge/deployments` returns `[]`, so Vercel is
+**not** connected to the GitHub repository - merging to `main` does not deploy.
+There is no Vercel token or CLI on this machine (`.vercel/project.json` only
+names project `dentalforge-app`).
+Updating the URL needs the owner to run `vercel --prod` from this commit, or to
+connect the Git integration; until then the README labels the link as an older
+snapshot and this document does not claim a passing live verification. The same
+script passed against a local `next start` of this checkout (recorded when the
+script was added), so the 25 failures are deployment staleness, not app
+failures.
+
 ## Not run, and not claimed
 
 - **SFT and GRPO training**: not run. `/training` shows both as "Not run yet";
@@ -248,10 +281,8 @@ CLI, so the documented command works on every OS.
 - **Browser YOLO**: not built. ADR-0027 stays `proposed`, and ONNX sizes are
   unmeasured.
 - **YOLO over a whole split**: not run.
-- **`pnpm smoke:prod` against the deployed URL**: the script passes against a
-  local production build, but the current Vercel deployment is stale (it
-  predates `/about-data` and the demo assets). It will be recorded here after
-  the stack deploys and the URL passes.
+- **A passing `pnpm smoke:prod` against the deployed URL**: not achieved yet;
+  the URL serves an older build and the run fails 25 checks (section 10).
 - **Phone check of the live site**: not run; it needs the owner.
 - **The 50 MB artifact cap**: enforced in code, not exercised by a test.
 - **Tufts**: never used in a public artifact, the demo bundle, the seed or this
