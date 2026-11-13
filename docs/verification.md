@@ -232,7 +232,7 @@ windowed (the spec asserts `aria-rowcount`) and the overlay only paints what is
 on screen. What grows with the box count is the table path and the tail (p95),
 which is why the numbers are recorded rather than asserted. Headless software
 rendering on one Windows laptop - compare runs on the same machine, do not read
-these as a frame rate.
+them as a frame-rate measurement.
 
 The first version of this script was `E2E_PERF=1 playwright test ...`, which is
 POSIX shell syntax and failed on Windows (`'E2E_PERF' is not recognized`). It is

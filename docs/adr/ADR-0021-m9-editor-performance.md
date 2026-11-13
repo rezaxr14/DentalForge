@@ -38,6 +38,12 @@ A hypothesis that did **not** hold: `contain: layout` on the image area did not 
 
 Wall times are not a frame rate: headless Chromium has no GPU and its idle floor alone varied between 25 and 146 ms across runs of the same build. The work counters are the comparable numbers.
 
+Re-measured on **Windows 11** (2026-11-13, the same harness, label `win11`): 500
+boxes gave p50 38.7 ms / p95 48.8 ms per drag move, 1,229 DOM nodes, one 159 ms
+long animation frame (73 ms blocking) and 0.67 s from navigation to the saved
+status. That is the same shape as the "after" column above; the exact table and
+caveats are in `docs/verification.md` section 9.
+
 ## The budget (a CI gate: `e2e/labels-budget.spec.ts`)
 With 500 boxes: script < 6 ms and layout < 5 ms per pointer move of a drag; script < 40 ms and layout < 10 ms per keypress that edits a box; fewer than 3,000 DOM nodes. The ceilings are 5–10× what the editor measures (0.6–0.8 / ~0.7 / ~10.5 / ~0.75 / ~1,400) and 10–70× below what it was; three runs of the unmodified editor were stable.
 Each fix was reverted in turn and the gate failed for the right number: no windowing (keypress layout 12 ms), a React render per drag move (script 11.7 ms), the full JSON in the DOM (keypress layout 36 ms).
@@ -46,4 +52,4 @@ Each fix was reverted in turn and the gate failed for the right number: no windo
 ## Consequences
 - During a drag the sidebar's coordinates, the table's x/y/w/h, the JSON and the agreement panel show the box as it was at the start and update on release (the box itself and the handles move live).
 - The table of a large set scrolls inside a box (≈10 rows high) instead of growing the page.
-- Not measured: a real GPU, a phone, Windows; the 500-box ceiling is the server's, not the editor's.
+- Not measured: a real GPU, a phone; the 500-box ceiling is the server's, not the editor's. (Windows 11 was measured later; see the paragraph above.)
