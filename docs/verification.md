@@ -260,11 +260,11 @@ finds no WCAG A/AA violations, and `/api/health` answers
 the database and runtime are healthy. The deployment is an **older build of this
 repository**, not a failing `main`.
 
-Why it is older: `gh api repos/rezaxr14/DentalForge/hooks` returns `[]` and
-`gh api repos/rezaxr14/DentalForge/deployments` returns `[]`, so Vercel is
-**not** connected to the GitHub repository - merging to `main` does not deploy.
-There is no Vercel token or CLI on this machine (`.vercel/project.json` only
-names project `dentalforge-app`).
+Why it is older: the repository's `hooks` and `deployments` endpoints both
+return `[]` (checked with `gh api`), so Vercel is **not** connected to the
+GitHub repository - merging to `main` does not deploy. There is no Vercel token
+or CLI on this machine (`.vercel/project.json` only names project
+`dentalforge-app`).
 Updating the URL needs the owner to run `vercel --prod` from this commit, or to
 connect the Git integration; until then the README labels the link as an older
 snapshot and this document does not claim a passing live verification. The same
