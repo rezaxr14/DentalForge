@@ -24,7 +24,11 @@ traces, evals, labels, quality, and rewards. The deployment is verified with
 headers, CSP, strict console, axe). Public artifacts are DENTEX-derived only;
 the Tufts data never leaves local development. Research prototype, not for
 clinical use. No Python worker is connected to the public demo, so live runs
-fall back to replay. A Vercel Cron clears visitor-created annotations and demo
+fall back to replay. The label editor can still pre-label on your own machine:
+the button in `/labels/1` downloads the DENTEX-only YOLOv8m ONNX graph (49.5 MB,
+cached after the first click) and runs it in a Web Worker — about 4.7 s per
+image on a laptop, marked `browser_approx` and never presented as a worker
+result. A Vercel Cron clears visitor-created annotations and demo
 users nightly (the seeded data stays); `pnpm demo:seed --reset` rebuilds the
 data from the committed bundle.
 
@@ -89,7 +93,7 @@ The capability ladder at `/status` reflects the active mode in real time.
 | Traces on DENTEX (model outputs, tool renders) | Yes, sanitized | Derived from DENTEX; provider terms must allow publishing |
 | Zero-shot eval runs (8 tracked) | Yes | Already public in VLM-DENTAL; sanitized |
 | Tufts images, traces, evals, weights | **Never** | Terms unverified; guarded by build (fails on `tufts` markers) |
-| YOLO DENTEX-only weights (ONNX) | **No** | Not built: no export script, no `.onnx`, no `onnxruntime` dependency (ADR-0027 stays `proposed`) |
+| YOLO DENTEX-only weights (ONNX) | Yes, served from this site | 49.5 MiB fp16 export of the DENTEX-only fold-0 checkpoint (`public/models/yolo/`); AGPL-3.0 weights + DENTEX non-commercial terms - research use only (ADR-0027) |
 | Multi-dataset YOLO weights | No | Until Tufts terms confirmed |
 | Base model weights (Qwen, Llama, etc.) | No | Reference model ids only |
 | Secrets, tokens, absolute paths, usernames | Never | Canary tests in `tests/python/test_demo_build.py`, run in CI |

@@ -39,6 +39,8 @@ import {
   CapabilityGate, ProvenanceBadge, contextFor, resolveStrategy, useWorkerSnapshot,
 } from "@/features/capability";
 import { useJobStream } from "@/features/jobs";
+import { BrowserYolo, browserYoloBlocker, browserYoloSupported } from "@/shared/domain/yolo/client";
+import { YOLO_MODEL, YOLO_MODEL_MB } from "@/shared/domain/yolo/model";
 import { isServerView, type LocalReason } from "@/shared/labels/sync-engine";
 import {
   applyDecision, demoAuthorId, ensureSet, getRole, saveAnnotations, setRole,
@@ -55,6 +57,13 @@ const STATUS_TONE: Record<AnnotationStatus, string> = {
 
 
 const JSON_SHOWN = 25;
+
+/** Button text while the in-browser run is in flight (ADR-0027 progress feedback). */
+const BROWSER_PHASE_LABEL: Record<"init" | "decode" | "infer", string> = {
+  init: "Loading model (first run downloads it)…",
+  decode: "Decoding radiograph…",
+  infer: "Running YOLOv8m…",
+};
 
 /** Ids of boxes drawn in the browser: time-based, plus the position so two boxes in one millisecond cannot collide. */
 const newBoxId = (index: number): string => `ann_${Date.now().toString(36)}_${index}`;
@@ -99,6 +108,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobProblem, setJobProblem] = useState<string | null>(null);
   const [appliedJobId, setAppliedJobId] = useState<string | null>(null);
+  // Browser tier: onnxruntime-web in a Web Worker (ADR-0027).
+  const [browserPhase, setBrowserPhase] = useState<"init" | "decode" | "infer" | null>(null);
+  const [browserProblem, setBrowserProblem] = useState<string | null>(null);
+  const yoloRef = useRef<BrowserYolo | null>(null);
 
   // Capability ladder (plan §9.2): worker (`yolo.prelabel`) → stored
   // predictions (replay) → disabled with reason (+ queue for later when
@@ -106,12 +119,16 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   // never claiming a worker we have not seen.
   const snap = useWorkerSnapshot();
   const hasPredictions = (fixture.predictions?.length ?? 0) > 0;
+  // The browser rung is advertised only when this browser can actually run it: the ladder must not offer a 50 MB
+  // download that then fails on a missing OffscreenCanvas. `snap` is null during SSR and on the first client render,
+  // so the server HTML and the first hydration pass never disagree.
+  const browserReady = useMemo(() => browserYoloSupported(), []);
   const capCtx = useMemo(
     () =>
       snap
-        ? contextFor("yolo.prelabel", snap, { hasReplay: hasPredictions })
+        ? contextFor("yolo.prelabel", snap, { hasReplay: hasPredictions, browserSupported: browserReady })
         : { hasReplay: hasPredictions, dbAvailable: false },
-    [snap, hasPredictions],
+    [snap, hasPredictions, browserReady],
   );
   const capability = useMemo(() => resolveStrategy("yolo.prelabel", capCtx), [capCtx]);
   const stream = useJobStream(jobId);
@@ -557,6 +574,63 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
     setMsg(`Imported pre-labels (provenance: import_replay); review them before submitting.`);
   };
 
+  /**
+   * Browser tier (ADR-0027): run the DENTEX-only YOLOv8m ONNX graph in a Web
+   * Worker on this machine. Provenance is `browser_approx` - the boxes come from
+   * a quantised export, so they are close to the worker's but not identical, and
+   * every box records the ONNX model id.
+   */
+  const suggestInBrowser = async (): Promise<void> => {
+    setBrowserProblem(null);
+    if (!canEdit) return;
+    const blocker = browserYoloBlocker();
+    if (blocker) {
+      setBrowserProblem(blocker);
+      return;
+    }
+    if (!yoloRef.current) yoloRef.current = new BrowserYolo();
+    setBrowserPhase("init");
+    try {
+      const result = await yoloRef.current.run({
+        imageUrl: fixture.image_path,
+        width: fixture.width,
+        height: fixture.height,
+        confidenceThreshold: YOLO_MODEL.confidenceThreshold,
+        iouThreshold: YOLO_MODEL.iouThreshold,
+        onProgress: (phase) => setBrowserPhase(phase),
+      });
+      if (result.boxes.length === 0) {
+        setMsg("The browser model found no boxes above 0.25 confidence on this image.");
+        return;
+      }
+      const added = predictionsToAnnotations(
+        result.boxes.map((b) => ({
+          bbox: b.bbox,
+          fdi_quadrant: b.fdiQuadrant,
+          fdi_position: b.fdiPosition,
+          confidence: b.confidence,
+        })),
+        {
+          imageId: fixture.id,
+          width: fixture.width,
+          height: fixture.height,
+          modelId: YOLO_MODEL.id,
+          startIdx: nextIndex(annotations),
+          ...(sv ? { authorId: sv.viewer.userId } : {}),
+        },
+      );
+      setHist((h) => H.createMany(h, added, "Run in browser"));
+      setMsg(
+        `Ran ${YOLO_MODEL.label} in your browser: ${added.length} boxes in ${Math.round(result.inferenceMs)} ms ` +
+          `(provenance: browser_approx); review them before submitting.`,
+      );
+    } catch (error) {
+      setBrowserProblem(error instanceof Error ? error.message : "in-browser inference failed");
+    } finally {
+      setBrowserPhase(null);
+    }
+  };
+
   /** Worker tier: enqueue `yolo.prelabel` now, or "for later" (stays queued until a worker connects). */
   const suggestOnWorker = async (): Promise<void> => {
     setJobProblem(null);
@@ -759,7 +833,21 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
           >
             {(r) => (
               <span className="flex items-center gap-1.5">
-                {r.strategy === "worker" ? (
+                {r.strategy === "browser" ? (
+                  <button
+                    type="button"
+                    onClick={() => void suggestInBrowser()}
+                    disabled={!canEdit || browserPhase !== null}
+                    title={`${r.reason} Downloads ${YOLO_MODEL_MB} MB once, then runs offline in a Web Worker.`}
+                    className="rounded border border-sky-500 bg-sky-50 px-2 py-1 text-sky-800 disabled:opacity-40"
+                    data-suggest="browser"
+                    data-browser-phase={browserPhase ?? "idle"}
+                  >
+                    {browserPhase
+                      ? BROWSER_PHASE_LABEL[browserPhase]
+                      : `Run in my browser (about ${YOLO_MODEL_MB} MB)`}
+                  </button>
+                ) : r.strategy === "worker" ? (
                   <button
                     type="button"
                     onClick={() => void suggestOnWorker()}
@@ -809,6 +897,11 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         <p className="mb-2 text-xs text-zinc-500" data-capability-reason>
           {capability.reason}
         </p>
+        {browserProblem && (
+          <p className="mb-2 text-xs text-red-700" role="status" data-browser-problem>
+            {browserProblem}
+          </p>
+        )}
         {jobId && (
           <p className="mb-2 text-xs text-zinc-600" aria-live="polite">
             Job <span className="font-mono">{jobId.slice(0, 8)}</span> — <strong>{stream.status}</strong>

@@ -120,11 +120,27 @@ for (const v of VARIANTS) {
       if (v.workerMode === "off") await expect(page.getByText("Worker integration is off")).toBeVisible();
     });
 
-    test("LabelForge shows the replay fallback honestly when no worker is attached", async ({ page }) => {
+    test("LabelForge offers the browser rung, and still replays when the browser cannot run it", async ({ page }) => {
       await page.goto(`${app.base}/labels/1`);
-      await expect(page.getByText("Worker offline; showing precomputed results from stored artifacts.")).toBeVisible();
-      await expect(page.getByText("import_replay").first()).toBeVisible();
-      await expect(page.getByRole("button", { name: /Suggest boxes/ })).toBeVisible();
+      // This Chromium has Worker + WebAssembly + OffscreenCanvas, so with no
+      // worker attached the honest rung is the in-browser ONNX run (ADR-0027),
+      // not replay - and the badge must say so.
+      await expect(page.locator('[data-provenance="browser_approx"]')).toBeVisible();
+      await expect(page.getByText(/Runs in this browser: DENTEX-only YOLOv8m/)).toBeVisible();
+      await expect(page.locator('[data-suggest="browser"]')).toBeVisible();
+
+      // A browser that cannot decode off-thread has no browser rung: the ladder
+      // must fall back to the stored predictions and say why.
+      const blocked = await page.context().newPage();
+      await blocked.addInitScript(() => {
+        Object.defineProperty(window, "Worker", { value: undefined, configurable: true });
+        Object.defineProperty(window, "OffscreenCanvas", { value: undefined, configurable: true });
+      });
+      await blocked.goto(`${app.base}/labels/1`);
+      await expect(blocked.getByText("Worker offline; showing precomputed results from stored artifacts.")).toBeVisible();
+      await expect(blocked.locator('[data-provenance="import_replay"]').first()).toBeVisible();
+      await expect(blocked.getByRole("button", { name: /Suggest boxes/ })).toBeVisible();
+      await blocked.close();
     });
 
     test("Tool Lab explains how each tool runs right now", async ({ page }) => {

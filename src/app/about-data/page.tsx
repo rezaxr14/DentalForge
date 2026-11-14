@@ -81,7 +81,12 @@ export default async function AboutDataPage() {
               </li>
               <li>
                 <strong>Grounding checkpoint.</strong> The advertised YOLO family was trained on DENTEX only.
-                The multi-dataset checkpoint is not used or redistributed.
+                The multi-dataset checkpoint is not used or redistributed. The browser pre-label tier serves
+                the DENTEX-only fold-0 export:{" "}
+                <a className="underline" href="/models/yolo/NOTICE.md">
+                  an ONNX fp16 graph, 49.5 MB
+                </a>
+                , downloaded only when you press the button in the label editor.
               </li>
             </ul>
           </Card>
@@ -90,7 +95,10 @@ export default async function AboutDataPage() {
             <h2 className="text-lg font-semibold tracking-tight">What is not included</h2>
             <ul className="mt-3 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
               <li>Tufts radiographs, Tufts-derived traces, evaluations or weights.</li>
-              <li>Base model weights. Model identifiers are referenced; weights are not redistributed.</li>
+              <li>
+                Language-model weights. Model identifiers are referenced; the LLM weights are not
+                redistributed. The only weights served are the 49.5 MB DENTEX-only YOLO ONNX graph.
+              </li>
               <li>Provider keys, request ids, absolute paths and usernames — the bundle build is allow-list based.</li>
               <li>SFT or GRPO results. Those stages have not been run yet, and no target numbers are shown.</li>
             </ul>
@@ -126,7 +134,13 @@ export default async function AboutDataPage() {
                 <h3 className="font-medium">Ultralytics YOLO — AGPL-3.0</h3>
                 <p className="mt-1 text-xs text-zinc-600">
                   The grounding tool uses the Ultralytics implementation. The DENTEX-only checkpoint family
-                  is referenced for research; weights are not served from this site.
+                  is referenced for research, and its fold-0 ONNX export is served from this site for the
+                  in-browser pre-label tier under AGPL-3.0 — research use only, not for clinical use. The
+                  corresponding source and export recipe are named in{" "}
+                  <a className="underline" href="/models/yolo/NOTICE.md">
+                    the model notice
+                  </a>
+                  .
                 </p>
               </div>
             </div>

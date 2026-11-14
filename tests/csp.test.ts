@@ -28,10 +28,20 @@ describe("Content-Security-Policy", () => {
 
   it("never opens scripts to the network or to eval, and has no wildcard source anywhere", () => {
     const script = directives.get("script-src")!;
-    for (const bad of ["*", "http:", "https:", "data:", "blob:", "'unsafe-eval'", "'wasm-unsafe-eval'"]) {
+    for (const bad of ["*", "http:", "https:", "data:", "blob:", "'unsafe-eval'"]) {
       expect(script, bad).not.toContain(bad);
     }
     expect(CSP_DIRECTIVES.some((d) => /(^|\s)\*(\s|$)/.test(d))).toBe(false);
+  });
+
+  it("allows WebAssembly compilation for the browser YOLO, and nothing wider than that", () => {
+    // onnxruntime-web compiles the ONNX graph with WebAssembly.instantiate; without this token Chromium refuses it
+    // and the browser pre-label tier dies after a 50 MB download. ADR-0027.
+    const script = directives.get("script-src")!;
+    expect(script).toContain("'wasm-unsafe-eval'");
+    expect(script).not.toContain("'unsafe-eval'");
+    // The worker is same-origin, so it needs no blob: or CDN source.
+    expect(directives.get("worker-src")).toEqual(["'self'"]);
   });
 
   it("has exactly one definition: next.config sends it once for every path, and the API fallback is identical", async () => {

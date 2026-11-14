@@ -49,6 +49,10 @@ next-env.d.ts
 
 # local-storage adapter output (worker artifacts uploaded in dev/e2e)
 
+# onnxruntime-web runtime + bundled worker copied into public/ by the predev/prebuild scripts
+/public/models/yolo/ort/
+/public/models/yolo/worker.js
+
 __pycache__/
 *.pyc
 /perf-results/

@@ -1,4 +1,11 @@
+# pnpm 12 reads build-script approvals from this file (`allowBuilds`), not from
+# the `pnpm` field in package.json. Without an entry here, `pnpm install` exits
+# non-zero with ERR_PNPM_IGNORED_BUILDS as soon as any dependency ships a
+# postinstall script - which is why this file exists at all.
 allowBuilds:
+  # Downloads/validates its platform binary; the worker bundle build needs it.
   esbuild: true
-  sharp: false
-  unrs-resolver: false
+  # Native resolver used by the ESLint import plugin.
+  unrs-resolver: true
+  # onnxruntime-web dependency whose postinstall only prints a donation banner.
+  protobufjs: false
