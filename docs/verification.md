@@ -305,6 +305,13 @@ loss end to end is image resampling (Skia vs PIL), not the export: fp32 and fp16
 score the same in the browser (0.8613 vs 0.8603 min IoU). The browser tier
 therefore claims "same boxes, `browser_approx`", never bit-identical output.
 
+**Production (2026-11-14, `e4ee6b3`).** The deployed site serves the exact
+committed graph: `GET /models/yolo/yolov8m-dentex-fp16-640.onnx` returned
+51,878,944 bytes with SHA-256 `f0fda350…f9e3350` (downloaded and hashed, not just
+a 200). Driving `/labels/1` in Chromium against the live URL produced 32 boxes in
+**4.79 s** with `browser_approx` and zero `securitypolicyviolation` events, and
+`pnpm smoke:prod` passed all 69 checks.
+
 ## Not run, and not claimed
 
 - **SFT and GRPO training**: not run. `/training` shows both as "Not run yet";
