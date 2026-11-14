@@ -14,7 +14,8 @@ licence and survive any relicensing event.**
 - **Source**: `https://github.com/ultralytics/ultralytics`
 - **Licence**: GNU Affero General Public License v3.0 (AGPL-3.0)
 - **Licence Text**: https://www.gnu.org/licenses/agpl-3.0.html
-- **Usage in this project**: YOLOv8m trained exclusively on DENTEX (the "DENTEX-only weights"). The training invocation and `cv_results.json` are recorded in the demo bundle provenance. No ONNX export is published by this repository, so no ONNX artifact carries this obligation today.
+- **Usage in this project**: YOLOv8m trained exclusively on DENTEX (the "DENTEX-only weights"). The training invocation and `cv_results.json` are recorded in the demo bundle provenance.
+- **Redistributed artifact**: `public/models/yolo/yolov8m-dentex-fp16-640.onnx` (49.5 MiB, fp16, opset 17, static 640x640) is an ONNX export of the DENTEX-only fold-0 checkpoint, and the site serves it to browsers. Because it is redistributed, AGPL-3.0 applies: the corresponding source is the upstream VLM-DENTAL repository (checkpoint `data/models/dentex_only_fold_0/weights/best.pt`, training script `scripts/train_grounding_tool.py`) plus the export recipe in `scripts/export_yolo_onnx.py` and ADR-0027. The weights inherit DENTEX's **non-commercial** terms, so this artifact is for research and demonstration only, not for clinical or commercial use.
 
 ## VLM-DENTAL Upstream
 - **Source**: `https://github.com/rezaxr14/vlm-dental`

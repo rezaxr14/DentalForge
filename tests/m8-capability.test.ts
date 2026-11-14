@@ -119,7 +119,9 @@ describe("worker snapshot (derived on read, no stored flag, no cron)", () => {
     const snap = await loadWorkerSnapshot(repos, "live", true);
     const out = Object.fromEntries(FEATURE_KEYS.map((f) => [f, resolveFeature(f, snap).strategy]));
     expect(out).toEqual({
-      "yolo.prelabel": "replay",
+      // Browser YOLO ships (ADR-0027), so with no worker the approximate rung
+      // wins over replay; the fallback below is still asserted explicitly.
+      "yolo.prelabel": "browser",
       // replayReady flipped to false with the trace-viewer placeholder: no
       // stored renders ship in this repo (ADR-0009 deferred list corrected).
       "trace.render_artifacts": "unavailable",
@@ -128,6 +130,8 @@ describe("worker snapshot (derived on read, no stored flag, no cron)", () => {
       "eval.run": "unavailable",
       "al.score": "replay",
     });
+    // A browser that cannot run the ONNX graph still falls through to stored predictions.
+    expect(resolveFeature("yolo.prelabel", snap, { browserSupported: false }).strategy).toBe("replay");
     // The static flags this relies on are the single source of truth for "what exists in this build".
     expect(FEATURES["agent.run"].replayReady).toBe(false);
     expect(FEATURES["trace.render_artifacts"].replayReady).toBe(false);

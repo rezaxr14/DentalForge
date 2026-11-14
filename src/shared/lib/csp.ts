@@ -9,15 +9,19 @@
  * A nonce-based policy needs a proxy that forces dynamic rendering for every page; that is a separate decision.
  *
  * Everything else stays closed: same-origin only, no framing, no plugins, no foreign form targets, no `<base>` tricks.
- * Add `'wasm-unsafe-eval'` here only when the browser YOLO (ADR-0027) actually needs it.
+ * `'wasm-unsafe-eval'` is what the browser YOLO (ADR-0027) needs: onnxruntime-web compiles the model with
+ * `WebAssembly.instantiate`, and without this token Chromium refuses it ("Refused to compile or instantiate
+ * WebAssembly module"). It permits WebAssembly only - `eval` and `new Function` stay blocked, which is why it is
+ * narrower than `'unsafe-eval'`.
  */
 export const CSP_DIRECTIVES = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self'",
+  "worker-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -17,9 +17,9 @@ export interface FeatureInfo {
 export const FEATURES: Record<FeatureKey, FeatureInfo> = {
   "yolo.prelabel": {
     label: "YOLO pre-labeling",
-    browserReady: false,
+    browserReady: true,
     replayReady: true,
-    note: "Replays stored real-YOLO predictions; in-browser ONNX lands with M11.",
+    note: "Runs DENTEX-only YOLOv8m in your browser (ONNX, 49.5 MB, cached); stored predictions replay when it cannot.",
   },
   "trace.render_artifacts": {
     label: "Trace tool images",

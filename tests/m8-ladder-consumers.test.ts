@@ -101,23 +101,34 @@ describe("consumers resolve honestly with the worker off", () => {
     expect(locate.reason).toMatch(/WORKER_MODE=off/);
   });
 
-  it("LabelForge: falls to stored predictions when the worker is off, and says why", () => {
-    const withStored = resolveFeature("yolo.prelabel", off, { hasReplay: true });
+  it("LabelForge: runs in the browser when it can, otherwise stored predictions, and says why", () => {
+    const withBrowser = resolveFeature("yolo.prelabel", off, { hasReplay: true });
+    expect(withBrowser.strategy).toBe("browser");
+    expect(withBrowser.queueable).toBe(false); // WORKER_MODE=off cannot queue
+    expect(withBrowser.reason).toContain("DENTEX-only YOLOv8m");
+
+    // A browser without WebAssembly/OffscreenCanvas falls back to stored predictions.
+    const withStored = resolveFeature("yolo.prelabel", off, { hasReplay: true, browserSupported: false });
     expect(withStored.strategy).toBe("replay");
     expect(withStored.queueable).toBe(false);
 
-    const withoutStored = resolveFeature("yolo.prelabel", off, { hasReplay: false });
+    const withoutStored = resolveFeature("yolo.prelabel", off, { hasReplay: false, browserSupported: false });
     expect(withoutStored.strategy).toBe("unavailable");
     expect(withoutStored.reason).toMatch(/WORKER_MODE=off/);
   });
 
   it("LabelForge: queueable only when the integration is on and a DB can hold the job", () => {
     const live = emptySnapshot("live", true, "signed-out"); // nobody signed in yet
-    const queued = resolveFeature("yolo.prelabel", live, { hasReplay: false });
+    const queued = resolveFeature("yolo.prelabel", live, { hasReplay: false, browserSupported: false });
     expect(queued.strategy).toBe("unavailable");
     expect(queued.queueable).toBe(true); // “queue for later” is offered
-    const noDb = resolveFeature("yolo.prelabel", emptySnapshot("live", false, "db-unavailable"), { hasReplay: false });
+    const noDb = resolveFeature("yolo.prelabel", emptySnapshot("live", false, "db-unavailable"), { hasReplay: false, browserSupported: false });
     expect(noDb.queueable).toBe(false);
+    // The browser rung is approximate, so an exact run can still be queued - and
+    // it must stay queueable for the same reason.
+    const browser = resolveFeature("yolo.prelabel", live, { hasReplay: false });
+    expect(browser.strategy).toBe("browser");
+    expect(browser.queueable).toBe(true);
   });
 
   it("before the snapshot loads, the conservative context never claims a worker or a queue", () => {

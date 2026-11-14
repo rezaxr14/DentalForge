@@ -53,7 +53,10 @@ export function resolveStrategy(feature: FeatureKey, ctx: CapabilityContext = {}
     return done("browser", "Re-rendered in-browser from the native image and recorded tool arguments.");
   }
   if (feature === "yolo.prelabel" && ctx.browserSupported) {
-    return done("browser", "Ran in-browser via onnxruntime-web in a Web Worker (browser approximate).");
+    return done(
+      "browser",
+      "Runs in this browser: DENTEX-only YOLOv8m via onnxruntime-web in a Web Worker (browser approximate).",
+    );
   }
 
   // 3. Replay (precomputed).

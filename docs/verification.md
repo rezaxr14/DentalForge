@@ -157,7 +157,7 @@ $env:E2E_DATABASE_URL="postgresql://traceforge:traceforge@localhost:15433/tracef
 pnpm exec playwright test e2e/degradation.spec.ts --project=chromium
 ```
 
-Exit code **0**, **120 passed (3.4m)**. Every page is checked for console
+Exit code **0**, **120 passed (3.6m)**. Every page is checked for console
 errors, failed same-origin requests, 5xx responses and an error boundary under
 the five shapes (including failing storage). Nothing is filtered or retried.
 
@@ -263,14 +263,57 @@ variables (`CRON_SECRET`, `DEMO_ORG_SLUG`) are set, and a push to `main`
 deploys. Negative control for the cron: `POST /api/demo/reset` without the
 secret and with a wrong secret both return **401**.
 
+## 11. Browser YOLO: pre-labelling with no worker and no database
+
+The editor's third rung is now real: `onnxruntime-web` in a Web Worker, fed by a
+committed ONNX graph (ADR-0027, now `accepted`). Everything below was measured
+on this machine; the full table with per-image rows is in the ADR.
+
+```powershell
+$env:DATABASE_URL="postgresql://traceforge:traceforge@localhost:15433/traceforge"
+pnpm exec vitest run tests/m11-browser-yolo.test.ts
+$env:E2E_DATABASE_URL="postgresql://traceforge:traceforge@localhost:15433/traceforge_e2e"
+pnpm exec playwright test e2e/browser-yolo.spec.ts --project=chromium
+```
+
+- **Unit: 16 passed.** The TypeScript letterbox/decode/NMS reproduces the Python
+  reference decoder on three held-out DENTEX validation images
+  (`fixtures/yolo/val_{18,32,44}.json`, 177–221 candidate anchors each), with no
+  ORT and no 50 MB download in CI.
+- **Browser: 2 passed (32 s).** Real Chromium, `DATABASE_URL` pointing at a dead
+  port and `WORKER_MODE=off`: the ladder offers the browser rung, the click
+  produces 32 boxes on image 1 with `browser_approx` provenance, and a second run
+  is served from Cache Storage (51,878,944 B, no second download). Console and
+  CSP stay clean.
+
+Measured numbers:
+
+| Thing | Value |
+|---|---|
+| Shipped graph | `yolov8m-dentex-fp16-640.onnx`, **51,878,944 B (49.5 MiB)**, SHA-256 `f0fda350…f9e3350` |
+| fp32 export (reference) | 103,697,245 B (98.9 MiB) |
+| int8 dynamic (rejected) | 26,294,123 B (25.1 MiB) — min IoU 0.89–0.92, conf Δ 0.11–0.16, 25 s/image |
+| Conversion parity, fp32 | min IoU **1.0000**, max conf Δ **2e-6** |
+| Conversion parity, fp16 | min IoU **0.982–0.985** (mean 0.992), max conf Δ **0.0020** |
+| End-to-end, Chromium | 32/32 boxes, min IoU **0.860**, mean 0.980, max conf Δ 0.034 |
+| Inference in the browser | **4.7 s** (single-threaded WASM, 8-core laptop) — the 3 s target is missed |
+| Worker bundle | 71.7 KiB, pre-bundled with esbuild; ORT runtime 11.9 MB copied from `node_modules` at build time |
+
+The 4.7 s is the number a user waits after clicking; it is behind a progress
+label and off the main thread, so the editor stays responsive. The residual IoU
+loss end to end is image resampling (Skia vs PIL), not the export: fp32 and fp16
+score the same in the browser (0.8613 vs 0.8603 min IoU). The browser tier
+therefore claims "same boxes, `browser_approx`", never bit-identical output.
+
 ## Not run, and not claimed
 
 - **SFT and GRPO training**: not run. `/training` shows both as "Not run yet";
   there are no training numbers in this repository.
 - **`torch_hf` with a 9B checkpoint**: not run. It needs the owner's explicit
   approval under the heavy-run gate.
-- **Browser YOLO**: not built. ADR-0027 stays `proposed`, and ONNX sizes are
-  unmeasured.
+- **Browser YOLO mAP50 over a split**: not run. Conversion parity is measured per
+  box; the drop in mAP50 for the fp16 graph over the validation split needs a
+  whole-split run, which is behind the heavy-run gate, so it is not claimed.
 - **YOLO over a whole split**: not run.
 - **Phone check of the live site**: not run; it needs the owner.
 - **The 50 MB artifact cap**: enforced in code, not exercised by a test.
