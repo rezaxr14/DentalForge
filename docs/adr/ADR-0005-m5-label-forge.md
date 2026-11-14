@@ -44,13 +44,23 @@ space for data, one scale factor for display.
 Plan §9's YOLO pre-label ladder: worker `yolo.prelabel` → browser ONNX →
 **stored `predictions` rows** → disabled. We cannot run a worker or ship model
 weights in the browser tier, so M5 executes the real committed
-`data/models/yolo_cv_best` weights **once at generation time** and commits the
+`data/models/dentex_only_fold_0` weights **once at generation time** and commits the
 resulting boxes (`confidence`, `class_idx` 0–31, FDI-derived quadrant/position)
 in each fixture. Provenance displayed in UI: `import_replay`. This is honest:
 the boxes came from real inference on the real image — not fabricated.
 
-The healthy image (id 3, 0 GT boxes) gets 19 predictions at mean conf 0.376 —
+The healthy image (id 3, 0 GT boxes) gets 23 predictions at mean conf 0.468 —
 a genuine false-positive showcase that feeds the active-learning queue.
+
+**Correction (2026-11-13).** The first generation used
+`data/models/yolo_cv_best`, which VLM-DENTAL's own `docs/YOLO_CV_RESULTS.md`
+identifies as the **DENTEX+Tufts** fold 1 ("officially crowned `yolo_cv_best`").
+Public artifacts must be DENTEX-derived, so the five fixtures were regenerated
+from the DENTEX-only fold-0 checkpoint (`cv_results.json`: family `DENTEX-Only`,
+mean mAP50 0.932), and `scripts/generate_m5_labels.py` now refuses any
+checkpoint that is not one of the DENTEX-only folds. The worker tier still calls
+VLM-DENTAL's own grounding tool, whose default checkpoint is upstream's choice;
+nothing from that tier is committed here.
 
 ### 4. Human annotations persist in localStorage behind a storage adapter
 

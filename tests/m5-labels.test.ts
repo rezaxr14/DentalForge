@@ -77,7 +77,7 @@ describe("M5: label fixtures validate + GT cross-check vs trace fixtures", () =>
   it("predictions are 32-class YOLO FDI boxes", () => {
     for (const id of ids) {
       const f = fixtures[id]!;
-      expect(f.prediction_model).toBe("yolo_cv_best");
+      expect(f.prediction_model).toBe("dentex_only_fold_0");
       for (const p of f.predictions ?? []) {
         expect(p.class_idx).toBeGreaterThanOrEqual(0);
         expect(p.class_idx).toBeLessThanOrEqual(31);

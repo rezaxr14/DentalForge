@@ -568,7 +568,7 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
         headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({
           type: "yolo.prelabel",
-          payload: { imageId, modelId: fixture.prediction_model ?? "yolo_cv_best" },
+          payload: { imageId, modelId: fixture.prediction_model ?? "dentex_only_fold_0" },
         }),
       });
       const body = (await res.json()) as { id?: string; detail?: string; title?: string; code?: string };
