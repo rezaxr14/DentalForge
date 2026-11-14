@@ -1,9 +1,12 @@
-# Dependency updates: minor and patch only, grouped into one PR per ecosystem.
+# Dependency updates: version updates are OFF; security advisories still open
+# PRs (they follow the repository's security settings, not this file).
 #
-# Why: a major bump of Next.js/React/Playwright cannot land unattended, and a
-# stream of one-dependency PRs makes the required checks noisy. Majors are
-# ignored here and stay an explicit owner decision; security advisories are
-# unaffected by this file (they follow the repository's security settings).
+# Why: the minor/patch group still produced a 46-failure browser run (Next 16.4,
+# React 19.3, Playwright 1.65 and axe 4.14 in one batch - new axe rules and
+# console-problem assertions). A red scheduled PR every Monday is worse than no
+# scheduled PR: majors and toolchain minors are owner decisions here, not
+# unattended merges. Re-enable by setting `open-pull-requests-limit` back to a
+# positive number and running the batch by hand first.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -12,7 +15,7 @@ updates:
       interval: weekly
       day: monday
       time: "05:00"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     groups:
       minor-and-patch:
         applies-to: version-updates
@@ -30,7 +33,7 @@ updates:
       interval: weekly
       day: monday
       time: "05:00"
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
     groups:
       actions:
         applies-to: version-updates
