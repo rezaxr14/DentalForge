@@ -113,10 +113,10 @@ export function LabelEditor({ fixture }: { fixture: LabelFixture }) {
   const [browserProblem, setBrowserProblem] = useState<string | null>(null);
   const yoloRef = useRef<BrowserYolo | null>(null);
 
-  // Capability ladder (plan §9.2): worker (`yolo.prelabel`) → stored
-  // predictions (replay) → disabled with reason (+ queue for later when
-  // queueable). Before the snapshot loads we resolve offline-conservatively —
-  // never claiming a worker we have not seen.
+  // Capability ladder (plan §9.2): worker (`yolo.prelabel`) → browser ONNX
+  // (ADR-0027) → stored predictions (replay) → disabled with reason (+ queue
+  // for later when queueable). Before the snapshot loads we resolve
+  // offline-conservatively — never claiming a worker we have not seen.
   const snap = useWorkerSnapshot();
   const hasPredictions = (fixture.predictions?.length ?? 0) > 0;
   // The browser rung is advertised only when this browser can actually run it: the ladder must not offer a 50 MB

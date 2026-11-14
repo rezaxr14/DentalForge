@@ -113,6 +113,25 @@ controls). It was found by the browser suite (the strict console watcher and the
   hydration; the API response carries the policy once). Negative controls: with `script-src 'self'` 7 of 8 fail;
   without `BrowserRuntime` `/labels/1` fails with `script-src eval`.
 
+### Amendment 2026-11-14: browser YOLO needs WebAssembly
+
+The browser pre-label tier (ADR-0027) compiles the ONNX graph with `WebAssembly.instantiate`. Chromium refuses
+that under the policy above ("Refused to compile or instantiate WebAssembly module"), so the policy gained exactly
+two things and nothing else:
+
+```
+script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval';
+worker-src 'self';
+```
+
+- `'wasm-unsafe-eval'` permits WebAssembly compilation only; `eval` and `new Function` remain blocked (zod stays
+  `jitless`). `'unsafe-eval'` is still absent.
+- `worker-src 'self'`: the worker bundle and the ORT runtime are same-origin files under `/models/yolo/`.
+  `connect-src 'self'` is unchanged because the 49.5 MiB model is served from this site, not a CDN.
+- **Tests:** `tests/csp.test.ts` pins both tokens and the absence of `'unsafe-eval'`;
+  `e2e/browser-yolo.spec.ts` downloads, instantiates and runs the graph in a real Chromium with no CSP violation;
+  `e2e/security-headers.spec.ts` still sees zero `securitypolicyviolation` events on six pages.
+
 ## Demo org policy
 
 - Demo invite link grants role `annotator`
